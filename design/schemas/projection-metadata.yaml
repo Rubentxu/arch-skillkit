@@ -1,0 +1,13 @@
+schema_version: 1
+projection_id: ""
+projection_type: ""
+visual_intent: ""
+source:
+  project_id: ""
+  architecture_run: ""
+  code_index_revision: ""
+adapter_version: ""
+status: generated
+manually_modified: false
+stale: false
+artifact_path: ""

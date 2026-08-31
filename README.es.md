@@ -107,6 +107,16 @@ cambia: no se escribe nunca nada dentro del repositorio analizado. Ver el
 [resumen V2](docs/v2/00-v2-summary.md), el [roadmap V2](docs/v2/16-roadmap-v2.md)
 y los ADR-0013…0025.
 
+**V2.2 — Projection Applications** generaliza esa capa: un `VisualIntent`
+(p. ej. `architecture`, `knowledge_map`, `dependency_graph`) se enruta de
+forma determinista al formato adecuado — LikeC4, Arrows, **draw.io**,
+**JSON Canvas** o **GraphML** (consumido por Cytoscape/Gephi/yEd) — mediante
+un contrato común `ProjectionAdapter` con ciclo de vida, detección de
+obsolescencia, protección de ediciones manuales y perfiles de redacción. Las
+aplicaciones son consumidoras; el event log sigue siendo la única fuente de
+verdad. Ver el [resumen V2.2](docs/v2/24-v2.2-summary.md), el
+[roadmap V2.2](docs/v2/37-roadmap-v2.2.md) y los ADR-0026…0031.
+
 ## Estado
 
 **Phase 5 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Entregado hasta ahora, todo como scripts thin-glue probados con BATS en [`tests/`](tests/): workspace XDG externo + registry, run manifest, doctor, el pipeline de scanning determinista (outline con ast-grep, patrones arquitectónicos con Semgrep, metadata de build) con orquestación por repositorio, validación del modelo LikeC4 con plantilla dorada, y proyecciones de grafos Arrows derivadas de la evidencia. Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
@@ -126,6 +136,7 @@ Orden de lectura recomendado:
 9. [Catálogo de UATs](docs/19-uat.md)
 10. [ADRs](docs/adr/README.md)
 11. [Resumen V2 — evolución ActiveGraph](docs/v2/00-v2-summary.md)
+12. [Resumen V2.2 — proyecciones](docs/v2/24-v2.2-summary.md)
 
 El conjunto completo de documentos está listado en el [manifest](MANIFEST.md).
 

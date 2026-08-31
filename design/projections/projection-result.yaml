@@ -1,0 +1,11 @@
+version: 1
+projection: jsoncanvas
+artifact: canvas/billing.canvas
+source:
+  architecture_run: run_123
+  code_index_revision: abc123
+status: generated
+warnings: []
+metrics:
+  nodes: 42
+  edges: 61

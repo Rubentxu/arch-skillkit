@@ -5,9 +5,11 @@
 Construir una vertical slice utilizable antes de ampliar análisis.
 
 > **V1 es baseline/bootstrap.** La evolución activa del producto es la V2
-> (ActiveGraph): ver `docs/v2/16-roadmap-v2.md` y los ADR-0013..0025. Este
-> roadmap V1 no se reescribe; sus fases entregadas son el punto de partida
-> que la V2 reutiliza (scanners, workspace, XDG, toolchain).
+> (ActiveGraph): ver `docs/v2/16-roadmap-v2.md` y los ADR-0013..0025; la capa
+> de proyecciones V2.2 se planifica en `docs/v2/37-roadmap-v2.2.md`
+> (ADR-0026..0031). Este roadmap V1 no se reescribe; sus fases entregadas
+> son el punto de partida que la V2 reutiliza (scanners, workspace, XDG,
+> toolchain).
 
 ---
 

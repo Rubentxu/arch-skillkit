@@ -50,3 +50,10 @@ baseline. For the V2 pipeline and reasoning policy read:
 
 - `references/v2-activegraph-workflow.md`
 - `references/v2-reasoning-policy.md`
+
+V2.2 adds a projection layer (VisualIntent → Projection Router → LikeC4 /
+Arrows / draw.io / JSON Canvas / GraphML). For the projection policy and
+intent examples read:
+
+- `references/v2.2-projection-policy.md`
+- `references/v2.2-visual-intent-examples.md`

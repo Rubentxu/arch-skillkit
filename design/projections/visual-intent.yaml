@@ -1,0 +1,11 @@
+version: 1
+type: knowledge_map
+subject: billing
+audience: engineer
+interaction: exploratory
+detail: medium
+editable: true
+include_evidence: true
+scope:
+  depth: 2
+layout_hint: grouped

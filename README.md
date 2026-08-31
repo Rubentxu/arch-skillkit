@@ -110,6 +110,16 @@ raw source browsing. The golden rule does not change: nothing is ever
 written into the analyzed repository. See the [V2 summary](docs/v2/00-v2-summary.md),
 the [V2 roadmap](docs/v2/16-roadmap-v2.md) and ADR-0013…0025.
 
+**V2.2 — Projection Applications** generalizes that layer: a `VisualIntent`
+(e.g. `architecture`, `knowledge_map`, `dependency_graph`) is routed
+deterministically to the right format — LikeC4, Arrows, **draw.io**,
+**JSON Canvas** or **GraphML** (consumed by Cytoscape/Gephi/yEd) — through a
+common `ProjectionAdapter` contract with lifecycle, staleness detection,
+manual-edit protection and redaction profiles. Applications are consumers;
+the Event Log stays the single source of truth. See the
+[V2.2 summary](docs/v2/24-v2.2-summary.md), the
+[V2.2 roadmap](docs/v2/37-roadmap-v2.2.md) and ADR-0026…0031.
+
 ## Status
 
 **Phase 5 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). Delivered so far, all as thin-glue scripts tested with BATS in [`tests/`](tests/): external XDG workspace + registry, run manifest, doctor, the deterministic scanning pipeline (ast-grep outline, Semgrep architecture patterns, build metadata) with per-repository orchestration, LikeC4 model validation with a golden template, and evidence-derived Arrows graph projections. See the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
@@ -129,6 +139,7 @@ Recommended reading order (the documentation is currently written in Spanish; En
 9. [UAT catalog](docs/19-uat.md)
 10. [Architecture Decision Records](docs/adr/README.md)
 11. [V2 summary — ActiveGraph evolution](docs/v2/00-v2-summary.md)
+12. [V2.2 summary — projection applications](docs/v2/24-v2.2-summary.md)
 
 The full document set is listed in the [manifest](MANIFEST.md).
 

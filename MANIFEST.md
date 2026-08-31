@@ -58,6 +58,12 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/adr/ADR-0023-go-queda-deferido-como-accelerator.md`
 - `docs/adr/ADR-0024-encapsular-activegraph-detrás-del-dominio.md`
 - `docs/adr/ADR-0025-fijar-python-activegraph-como-stack-propio.md`
+- `docs/adr/ADR-0026-introducir-visualintent-y-projection-router.md`
+- `docs/adr/ADR-0027-adoptar-draw-io-como-proyecci-n-t-cnica-general.md`
+- `docs/adr/ADR-0028-adoptar-json-canvas-para-mapas-de-conocimiento.md`
+- `docs/adr/ADR-0029-adoptar-graphml-como-formato-de-intercambio-de-grafos.md`
+- `docs/adr/ADR-0030-mantener-proyecciones-unidireccionales-en-v2-2.md`
+- `docs/adr/ADR-0031-no-construir-ui-propia-para-visualizaci-n.md`
 
 - `docs/v2/00-v2-summary.md`
 - `docs/v2/01-v2-goals-non-goals.md`
@@ -83,6 +89,31 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/v2/21-migration-from-v1.md`
 - `docs/v2/22-activegraph-validation-notes.md`
 - `docs/v2/23-implementation-sequence.md`
+- `docs/v2/24-v2.2-summary.md`
+- `docs/v2/25-projection-architecture.md`
+- `docs/v2/26-visual-intent-spec.md`
+- `docs/v2/27-projection-contract.md`
+- `docs/v2/28-likec4-projection.md`
+- `docs/v2/29-arrows-projection.md`
+- `docs/v2/30-drawio-projection.md`
+- `docs/v2/31-json-canvas-projection.md`
+- `docs/v2/32-graphml-projection.md`
+- `docs/v2/33-application-capability-matrix.md`
+- `docs/v2/34-projection-routing-policy.md`
+- `docs/v2/35-projection-lifecycle.md`
+- `docs/v2/36-projection-security.md`
+- `docs/v2/37-roadmap-v2.2.md`
+- `docs/v2/38-milestones-v2.2.md`
+- `docs/v2/39-uat-v2.2.md`
+- `docs/v2/40-spikes-v2.2.md`
+- `docs/v2/41-backlog-v2.2.md`
+- `docs/v2/42-evolution-rules-v2.2.md`
+- `docs/v2/43-merge-notes-v2.2.md`
+- `docs/v2/CHANGELOG-V2.1.md`
+- `docs/v2/CHANGELOG-V2.2.md`
+- `design/projections/projection-result.yaml`
+- `design/projections/visual-intent.yaml`
+- `design/schemas/projection-metadata.yaml`
 
 - `design/packs/arch-code.md`
 - `design/packs/arch-core.md`
@@ -105,6 +136,8 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/references/scanning.md`
 - `skills/architecture-discovery/references/v2-activegraph-workflow.md`
 - `skills/architecture-discovery/references/v2-reasoning-policy.md`
+- `skills/architecture-discovery/references/v2.2-projection-policy.md`
+- `skills/architecture-discovery/references/v2.2-visual-intent-examples.md`
 - `skills/architecture-discovery/references/workflow.md`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/type.yml`

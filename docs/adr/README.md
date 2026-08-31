@@ -48,5 +48,15 @@ Si cambia:
 - ADR-0024 Encapsular ActiveGraph detrás del dominio
 - ADR-0025 Python + ActiveGraph fijado como stack propio
 
-La especificación V2 completa vive en `docs/v2/`; la V1 se conserva como
+### ADRs V2.2 (projection applications)
+
+- ADR-0026 VisualIntent y Projection Router
+- ADR-0027 draw.io como proyección técnica general
+- ADR-0028 JSON Canvas para mapas de conocimiento
+- ADR-0029 GraphML como formato de intercambio de grafos
+- ADR-0030 Proyecciones unidireccionales en V2.2
+- ADR-0031 No construir UI propia para visualización
+
+La especificación V2 completa vive en `docs/v2/` (núcleo V2.1 en docs
+00–23, capa de proyecciones V2.2 en docs 24–43); la V1 se conserva como
 baseline/bootstrap y no se reescribe.

@@ -10,6 +10,22 @@ fixes.
 
 ### Added
 
+- **V2.2 design package — Projection Applications** (extends the V2
+  projection layer without touching V2.1 decisions; spec docs 24–43 in
+  `docs/v2/` plus the V2.1/V2.2 spec changelogs alongside them):
+  - ADR-0026…0031: VisualIntent + Projection Router, draw.io as the
+    general technical projection, JSON Canvas for knowledge maps, GraphML
+    as the consumer-neutral graph exchange (Cytoscape/Gephi/yEd consume
+    the file — no per-app adapters), one-way projections in V2.2, and no
+    own visualization UI.
+  - `design/projections/` example payloads (visual-intent,
+    projection-result) and `design/schemas/projection-metadata.yaml`
+    (source revision, status, staleness, manual-edit flag).
+  - `design/packs/arch-projections.md` now describes the generic
+    Projection Layer (adapters: likec4, arrows, drawio, jsoncanvas,
+    graphml; router consumes VisualIntent).
+  - Skill references `v2.2-projection-policy.md` and
+    `v2.2-visual-intent-examples.md`, wired into `SKILL.md`.
 - **V2 Phase A (M2-A1…A3) — Python domain core (`python/`)**: the
   `archskillkit` package (requires-python >= 3.11, dependency: ActiveGraph
   >= 1.10) delivers the first three V2 milestones:
