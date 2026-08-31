@@ -49,13 +49,27 @@ class ArchitectureRuleData(BaseModel):
     severity: Confidence = "high"
 
 
+ProposalStatus = Literal["open", "approved", "rejected", "promoted"]
+
+
+class ProposalData(BaseModel):
+    """An architectural proposal living in a forked run (docs/v2/08).
+    Promotion into the main world requires status == approved (UAT2-014)."""
+
+    name: str
+    status: ProposalStatus = "open"
+    rationale: str = ""
+    fork_run: str = ""
+    created_at: str = ""
+
+
 def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] = (),
               description: str = "") -> RelationType:
     return RelationType(name=name, source_types=source, target_types=target,
                         description=description)
 
 
-ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule")
+ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule", "proposal")
 
 ARCH_MODEL_RELATION_TYPES = (
     "exposes", "consumes", "depends_on", "realizes",
@@ -64,13 +78,15 @@ ARCH_MODEL_RELATION_TYPES = (
 
 pack = Pack(
     name="arch_model",
-    version="0.2.0",
-    description="ArchSkillKit architecture elements, rules and relations.",
+    version="0.3.0",
+    description="ArchSkillKit architecture elements, rules, proposals and relations.",
     object_types=(
         ObjectType(name="architecture_element", schema=ArchitectureElementData,
                    description="A curated architectural building block."),
         ObjectType(name="architecture_rule", schema=ArchitectureRuleData,
                    description="A deterministic boundary rule (drift detector input)."),
+        ObjectType(name="proposal", schema=ProposalData,
+                   description="An architectural proposal on a forked run."),
     ),
     relation_types=(
         # Endpoints are typed at the object level ('architecture_element');

@@ -10,6 +10,23 @@ fixes.
 
 ### Added
 
+- **V2 Phase G (M2-G1…G4) — fork/diff of the architecture
+  (`archskillkit.proposals`)**: architectural proposals on independent
+  branches of the project's event log (docs/v2/08):
+  - M2-G1/G2 `world.fork(name)`: branches the world run into
+    `proposal-<name>` with ActiveGraph's native log fork; proposals
+    mutate their fork only — main is untouched (UAT2-012, H2-8);
+    idempotent by name; the `proposal` object carries status
+    open/approved/rejected/promoted (arch-model v0.3.0).
+  - M2-G3 `structural_diff`: compares architecture layers by semantic
+    names (never runtime ids) across every docs/v2/08 dimension —
+    elements and relations added/removed, confidence changed, evidence
+    changed on the same triple, findings new/resolved (UAT2-013, H2-9).
+  - M2-G4 `promote`: applies an approved proposal's diff to the main
+    world; refused without an approved proposal (UAT2-014), refused for
+    rejected ones, idempotent on re-promotion, replay verified after.
+  - CLI: `fork`, `diff`, `promote --approved-by`, `reject-proposal`.
+  - 17 new tests (194 pytest total).
 - **V2 Phase F (M2-F1…F3) — reactive architecture (`world.detect_drift`,
   `world.detect_stale_model`)**: deterministic boundary evaluation
   without an LLM (docs/v2/09, ADR-0022):

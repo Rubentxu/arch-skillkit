@@ -49,15 +49,22 @@ class PromotionError(Exception):
 
 
 class ArchitectureWorld:
-    """One durable run per project; the db lives in the project workspace."""
+    """A project-scoped event-sourced knowledge graph run.
 
-    RUN_ID = "world"
+    The main world lives in run "world"; forks (architectural proposals,
+    docs/v2/08) live in sibling runs of the same activegraph.sqlite —
+    the event log branching keeps main untouched (UAT2-012).
+    """
 
-    def __init__(self, project_id: str, name: str = "", root: str = "", remote: str = ""):
+    DEFAULT_RUN_ID = "world"
+
+    def __init__(self, project_id: str, name: str = "", root: str = "",
+                 remote: str = "", run_id: str = ""):
         self.project_id = project_id
         self.project_name = name or project_id.rsplit("-", 1)[0]
         self.root = root
         self.remote = remote
+        self.run_id = run_id or self.DEFAULT_RUN_ID
         self.workspace = projects_root() / project_id
         self.db_path = self.workspace / "activegraph.sqlite"
         self._runtime: Runtime | None = None
@@ -80,13 +87,13 @@ class ArchitectureWorld:
         for sub in WORKSPACE_SUBDIRS:
             (self.workspace / sub).mkdir(parents=True, exist_ok=True)
         url = f"sqlite:///{self.db_path}"
-        if self.db_path.exists():
+        if self.db_path.exists() and _run_exists(self.db_path, self.run_id):
             # Resume: Runtime.load replays the log and continues the
             # store's id sequence; a fresh Runtime would restart ids and
             # collide with recorded events.
-            runtime = Runtime.load(url, run_id=self.RUN_ID)
+            runtime = Runtime.load(url, run_id=self.run_id)
         else:
-            runtime = Runtime(Graph(run_id=self.RUN_ID), persist_to=url)
+            runtime = Runtime(Graph(run_id=self.run_id), persist_to=url)
         # Schema validation must hold in every session — load every pack.
         runtime.load_pack(pack)
         runtime.load_pack(arch_model_pack)
@@ -304,6 +311,65 @@ class ArchitectureWorld:
         persisted = self.persist_findings(findings)
         return {"findings": findings, "persisted": persisted}
 
+    # ---- fork/diff of the architecture (Phase G, docs/v2/08) -----------
+
+    def fork(self, name: str) -> "ArchitectureWorld":
+        """Branch this world's event log into an independent proposal run
+        `proposal-<name>`. Idempotent by name: an existing fork run is
+        reopened, never re-branched."""
+        from activegraph.store import open_store
+        from activegraph.store.sqlite import SQLiteEventStore
+
+        fork_run_id = f"proposal-{name}"
+        if self.db_path.exists() and _run_exists(self.db_path, fork_run_id):
+            return self._view(fork_run_id)
+        url = f"sqlite:///{self.db_path}"
+        events = list(open_store(url, run_id=self.run_id).iter_events())
+        if events:
+            SQLiteEventStore.fork_run(
+                str(self.db_path), parent_run_id=self.run_id,
+                new_run_id=fork_run_id, at_event_id=events[-1].id,
+                label=name, created_at=_utcnow())
+        return self._view(fork_run_id)
+
+    def _view(self, run_id: str) -> "ArchitectureWorld":
+        return ArchitectureWorld(
+            project_id=self.project_id, name=self.project_name,
+            root=self.root, remote=self.remote, run_id=run_id).open()
+
+    def record_proposal(self, name: str, rationale: str = "") -> str:
+        """Register the proposal paperwork inside the fork (M2-G1).
+        Idempotent by proposal name."""
+        existing = self.find_objects("proposal", name=name)
+        if existing:
+            return existing[0]["id"]
+        return self.graph.add_object("proposal", {
+            "name": name, "status": "open", "rationale": rationale,
+            "fork_run": self.run_id, "created_at": _utcnow(),
+        }).id
+
+    def _proposal(self, name: str) -> dict:
+        proposals = self.find_objects("proposal", name=name)
+        if not proposals:
+            raise PromotionError(f"no proposal named '{name}' in {self.run_id}")
+        return proposals[0]
+
+    def approve_proposal(self, name: str, actor: str) -> None:
+        if not actor:
+            raise PromotionError("approval requires a named approver")
+        proposal = self._proposal(name)
+        if proposal["data"]["status"] == "rejected":
+            raise PromotionError(f"proposal '{name}' was rejected")
+        self.graph.patch_object(proposal["id"], {"status": "approved"},
+                                actor=actor)
+
+    def reject_proposal(self, name: str, actor: str) -> None:
+        if not actor:
+            raise PromotionError("rejection requires a named actor")
+        proposal = self._proposal(name)
+        self.graph.patch_object(proposal["id"], {"status": "rejected"},
+                                actor=actor)
+
     # ---- reads --------------------------------------------------------
 
     def snapshot(self) -> dict:
@@ -324,7 +390,7 @@ class ArchitectureWorld:
         """Prove the log reproduces current state with a fresh projection."""
         live = json.dumps(self.snapshot(), sort_keys=True)
         url = f"sqlite:///{self.db_path}"
-        reloaded = Runtime.load(url, run_id=self.RUN_ID)
+        reloaded = Runtime.load(url, run_id=self.run_id)
         replayed_graph = reloaded.graph
         replayed = json.dumps(
             {"counts": _counts_of(replayed_graph),
@@ -335,7 +401,7 @@ class ArchitectureWorld:
                            for r in sorted(replayed_graph.relations(), key=lambda r: r.id)]},
             sort_keys=True,
         )
-        events = len(list(open_store(url, run_id=self.RUN_ID).iter_events()))
+        events = len(list(open_store(url, run_id=self.run_id).iter_events()))
         ok = live == replayed
         n_objects = len(json.loads(replayed)["objects"])
         n_relations = len(json.loads(replayed)["relations"])
@@ -363,3 +429,12 @@ def _counts_of(graph: Graph) -> dict[str, int]:
     for obj in graph.all_objects():
         counts[obj.type] = counts.get(obj.type, 0) + 1
     return counts
+
+
+def _run_exists(db_path: Path, run_id: str) -> bool:
+    import sqlite3
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM events WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
+    return row is not None

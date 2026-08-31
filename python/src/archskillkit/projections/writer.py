@@ -99,7 +99,7 @@ def project_to_workspace(world: ArchitectureWorld, adapter: ProjectionAdapter,
         subject=world.project_name)
     context = ProjectionContext(
         project_id=world.project_id,
-        architecture_run=world.RUN_ID,
+        architecture_run=world.run_id,
         code_index_revision=revision,
         snapshot=_named_snapshot(world),
         annotations={"artifact": str(artifact)},
@@ -112,7 +112,7 @@ def project_to_workspace(world: ArchitectureWorld, adapter: ProjectionAdapter,
         visual_intent=intent.type,
         source={
             "project_id": world.project_id,
-            "architecture_run": world.RUN_ID,
+            "architecture_run": world.run_id,
             "code_index_revision": revision,
         },
         adapter_version=adapter.version,

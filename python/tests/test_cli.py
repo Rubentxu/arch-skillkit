@@ -282,6 +282,43 @@ class TestDriftCli:
         assert "no Architecture World" in proc.stderr
 
 
+class TestForkCli:
+    def test_fork_diff_reject_flow(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        TestProjectCli._seed_pipeline(repo, tmp_path, env)
+
+        proc = run_cli("fork", "--repo", str(repo), "--name", "async", env=env)
+        assert proc.returncode == 0, proc.stderr
+        assert json.loads(proc.stdout)["run_id"] == "proposal-async"
+
+        proc = run_cli("diff", "--repo", str(repo), "--name", "async", env=env)
+        assert proc.returncode == 0, proc.stderr
+        assert json.loads(proc.stdout)["is_empty"] is True
+
+        proc = run_cli("reject-proposal", "--repo", str(repo),
+                       "--name", "async", "--actor", "architect", env=env)
+        assert proc.returncode == 0, proc.stderr
+
+        # rejected proposals never promote
+        proc = run_cli("promote", "--repo", str(repo), "--name", "async",
+                       "--approved-by", "architect", env=env)
+        assert proc.returncode == 1
+        assert "rejected" in proc.stderr
+
+    def test_fork_requires_world(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        proc = run_cli("fork", "--repo", str(repo), "--name", "x", env=env)
+        assert proc.returncode == 1
+        assert "no Architecture World" in proc.stderr
+
+    def test_diff_unknown_fork_fails_cleanly(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        TestProjectCli._seed_pipeline(repo, tmp_path, env)
+        proc = run_cli("diff", "--repo", str(repo), "--name", "ghost", env=env)
+        assert proc.returncode == 1
+        assert "no fork run" in proc.stderr
+
+
 def _sandbox_env(monkeypatch, tmp_path):
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",
