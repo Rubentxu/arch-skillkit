@@ -50,5 +50,10 @@ jobs:
           mise trust skills/architecture-discovery/runtime/mise.toml
           mise install -C skills/architecture-discovery/runtime
 
+      - name: Install bats-core (pinned)
+        run: |
+          git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core "$HOME/.bats-core"
+          echo "$HOME/.bats-core/bin" >> "$GITHUB_PATH"
+
       - name: Run BATS suite
         run: bats tests/
