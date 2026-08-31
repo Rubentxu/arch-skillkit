@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "origin": "DETECTED",
+  "confidence": "high",
+  "subject": "OrdersController.create",
+  "predicate": "EXPOSES",
+  "object": "POST /orders",
+  "evidence": {
+    "tool": "semgrep",
+    "rule": "architecture.http.endpoint",
+    "file": "src/orders/controller.kt",
+    "start_line": 42,
+    "commit": "0123456789abcdef"
+  }
+}

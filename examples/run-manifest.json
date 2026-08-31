@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "run_id": "20260831T103000Z-example",
+  "project_id": "example-a721bc45",
+  "commit": "0123456789abcdef",
+  "skill_version": "0.1.0",
+  "tools": {
+    "ast-grep": "<pinned>",
+    "semgrep": "<pinned>",
+    "likec4": "<pinned>"
+  },
+  "scanners": [
+    "ast-grep-outline",
+    "semgrep-architecture",
+    "build-metadata"
+  ],
+  "status": "success"
+}

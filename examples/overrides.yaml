@@ -1,0 +1,24 @@
+version: 1
+
+bounded_contexts:
+  orders:
+    paths:
+      - crates/orders/**
+  billing:
+    paths:
+      - crates/billing/**
+
+external_systems:
+  stripe:
+    label: Stripe
+    type: payment-provider
+
+ignore:
+  - target/**
+  - generated/**
+
+declarations:
+  - subject: orders
+    predicate: belongs_to
+    object: commerce
+    confidence: high

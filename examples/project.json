@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "project_id": "example-a721bc45",
+  "root": "/home/user/work/example",
+  "remote": "https://github.com/example/example.git",
+  "branch": "main",
+  "commit": "0123456789abcdef",
+  "workspace": "/home/user/.local/share/arch-skillkit/projects/example-a721bc45"
+}
