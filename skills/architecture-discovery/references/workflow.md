@@ -17,7 +17,7 @@
 
 ## Tooling
 
-Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Steps 3–6 run as one orchestrated scan via `scripts/scan.sh` (single run manifest; see `references/scanning.md`). Verify the environment with `scripts/doctor.sh` before starting.
+Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Steps 3–6 run as one orchestrated scan via `scripts/scan.sh` (single run manifest; see `references/scanning.md`). Step 12 validates the model with `scripts/model-validate.sh` (the pipeline must never finish with an invalid model). Verify the environment with `scripts/doctor.sh` before starting.
 
 ## Roles
 

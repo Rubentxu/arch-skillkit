@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
-# Verify the environment ArchSkillKit needs (M1.2).
-# Required today: git, jq, mise. Pipeline scanners are reported but only
-# fail under --strict (they are needed from Phase 2 onwards).
+# Verify the environment ArchSkillKit needs (M1.2, kept current by later
+# milestones): git/jq/mise plus the pinned pipeline tools are required.
 # Read-only: doctor never creates workspaces or mutates the repository.
 #
-# Usage: doctor.sh [--strict]
+# Usage: doctor.sh
 set -euo pipefail
 SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR=.
 # shellcheck source=lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
-
-strict=0
-if [ "${1:-}" = "--strict" ]; then strict=1; fi
 
 fail=0
 skill_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -35,8 +31,8 @@ check_pipeline() {
   local t scanner_ok
   printf 'scanners:\n'
 
-  # Required since M2.1/M2.2: on PATH or in the skill runtime.
-  for t in ast-grep semgrep; do
+  # Required since M2.x/M4: on PATH or in the skill runtime.
+  for t in ast-grep semgrep likec4; do
     scanner_ok=0
     if command -v "$t" >/dev/null 2>&1; then
       printf '  [ok]      %-10s %s (PATH)\n' "$t" "$(command -v "$t")"
@@ -50,14 +46,6 @@ check_pipeline() {
       fail=1
     fi
   done
-
-  printf 'upcoming scanners (not required yet):\n'
-  if command -v likec4 >/dev/null 2>&1; then
-    printf '  [ok]      %-10s %s\n' "likec4" "$(command -v likec4)"
-  else
-    printf '  [pending] %-10s lands with its own milestone (M4)\n' "likec4"
-    if [ "$strict" -eq 1 ]; then fail=1; fi
-  fi
 }
 
 show_optional_build_tools() {

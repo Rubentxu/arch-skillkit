@@ -51,6 +51,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/SKILL.md`
 - `skills/architecture-discovery/references/discovery.md`
 - `skills/architecture-discovery/references/evidence-policy.md`
+- `skills/architecture-discovery/references/likec4.md`
 - `skills/architecture-discovery/references/modeling-policy.md`
 - `skills/architecture-discovery/references/review.md`
 - `skills/architecture-discovery/references/scanning.md`
@@ -71,9 +72,11 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/runtime/mise.toml`
 - `skills/architecture-discovery/scripts/lib/common.sh`
 - `skills/architecture-discovery/scripts/doctor.sh`
+- `skills/architecture-discovery/scripts/model-validate.sh`
 - `skills/architecture-discovery/scripts/run-manifest.sh`
 - `skills/architecture-discovery/scripts/scan-build.sh`
 - `skills/architecture-discovery/scripts/scan-outline.sh`
 - `skills/architecture-discovery/scripts/scan-patterns.sh`
 - `skills/architecture-discovery/scripts/scan.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`
+- `skills/architecture-discovery/templates/model.c4`

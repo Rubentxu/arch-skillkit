@@ -13,9 +13,9 @@
 - [x] Semgrep rule pack
 - [x] Rust build metadata
 - [x] discovery prompt
-- [ ] modeler prompt
+- [x] modeler prompt
 - [x] reviewer prompt
-- [ ] LikeC4 validation
+- [x] LikeC4 validation
 - [ ] Arrows basic generation
 - [x] repository-clean UAT
 - [x] fixtures

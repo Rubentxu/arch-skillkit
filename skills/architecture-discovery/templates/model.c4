@@ -1,0 +1,56 @@
+// ArchSkillKit model — context and containers for the analyzed project.
+// Managed by the Modeler role (references/likec4.md):
+//   #detected / #inferred / #declared mark the knowledge origin (docs/08)
+//   #confidence-high|medium|low marks confidence
+//   link points at the evidence relative to this workspace
+specification {
+  element actor
+  element system
+  element container
+  element externalSystem
+  element datastore
+  element queue
+
+  tag detected
+  tag inferred
+  tag declared
+  tag confidence-high
+  tag confidence-medium
+  tag confidence-low
+}
+
+model {
+  customer = actor 'Customer'
+
+  target = system 'Analyzed System' {
+    api = container 'API' {
+      #detected #confidence-high
+    }
+    db = datastore 'Database' {
+      #inferred #confidence-medium
+    }
+  }
+
+  likec4 = externalSystem 'LikeC4' {
+    #detected #confidence-high
+  }
+
+  customer -> target 'analyzes the architecture of' {
+    #inferred #confidence-medium
+  }
+  target -> likec4 'validates the model with' {
+    #detected #confidence-high
+    link ../../evidence/raw/ast-grep.jsonl 'evidence'
+  }
+}
+
+views {
+  view context {
+    title 'Context'
+    include *
+  }
+  view containers {
+    title 'Containers'
+    include target
+  }
+}
