@@ -10,6 +10,23 @@ fixes.
 
 ### Added
 
+- **V2 Phase D (M2-D1…D4) — Context Compiler (`archskillkit.context`)**:
+  budgeted ContextPacks instead of whole-graph dumps (docs/v2/06,
+  design/schemas/context-pack.yaml):
+  - M2-D1 `ContextPack` schema (goal/intent/summary, architecture view,
+    code facts, evidence, snippets, uncertainties, budget) matching the
+    design YAML with deterministic summary and intent classification.
+  - M2-D2 budgeted queries: subject resolution narrows the world,
+    expansion is bounded to one relation hop, and node/edge budgets are
+    enforced with edges always referencing kept nodes (UAT2-007).
+  - M2-D3 targeted snippets: source is opened only at Code Index
+    locations (UAT2-008); unreadable sources degrade to uncertainties.
+  - M2-D4 context-read metrics embedded in every pack (elements,
+    relations, symbols, snippets, source_lines, context_reads — the
+    counter the >=50%-fewer-reads target will be measured against).
+  - Compilation is read-only (the world snapshot is untouched) and
+    deterministic for identical inputs.
+  - CLI `context` with budget overrides; 21 new tests (147 total).
 - **V2 Phase C (M2-C1…C4) — Evidence → Architecture
   (`archskillkit.promotion`)**: the deterministic promotion pipeline from
   the Code Index into the Architecture World, i.e. the vertical slice of

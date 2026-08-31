@@ -177,6 +177,47 @@ class TestPromotionCli:
         assert "no code.sqlite" in proc.stderr
 
 
+class TestContextCli:
+    def test_context_pack_via_cli(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        assert run_cli("init", "--repo", str(repo), env=env).returncode == 0
+        astgrep = tmp_path / "outline.json"
+        astgrep.write_text(json.dumps({
+            "ruleId": "outline.kotlin.function", "text": "get_orders",
+            "file": "src/Orders.kt", "language": "Kotlin",
+            "range": {"start": {"line": 4, "column": 0}},
+            "lines": "fun get_orders() {}", "metaVariables": {"single": {}, "multi": {}},
+        }) + "\n")
+        semgrep = tmp_path / "patterns.json"
+        semgrep.write_text(json.dumps({"results": [{
+            "check_id": "spring.endpoint", "path": "src/Orders.kt",
+            "start": {"line": 5, "col": 1}, "end": {"line": 5, "col": 20},
+            "extra": {"message": "endpoint", "metavars": {}, "lines": ""},
+        }]}))
+        assert run_cli("ingest-code", "--repo", str(repo),
+                       "--astgrep", str(astgrep), "--semgrep", str(semgrep),
+                       "--run-id", "r1", env=env).returncode == 0
+        assert run_cli("discover", "--repo", str(repo),
+                       "--run-id", "r1", env=env).returncode == 0
+
+        proc = run_cli("context", "--repo", str(repo),
+                       "--goal", "overview of orders", "--max-nodes", "5", env=env)
+        assert proc.returncode == 0, proc.stderr
+        pack = json.loads(proc.stdout)
+        assert pack["schema_version"] == 1
+        assert len(pack["architecture"]["elements"]) <= 5
+        assert pack["budget"]["max_nodes"] == 5
+        assert pack["metrics"]["context_reads"] == 1
+
+    def test_context_without_world_fails_cleanly(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        assert run_cli("init", "--repo", str(repo), env=env).returncode == 0
+        proc = run_cli("context", "--repo", str(repo),
+                       "--goal", "overview", env=env)
+        assert proc.returncode == 1
+        assert "no code.sqlite" in proc.stderr
+
+
 def _sandbox_env(monkeypatch, tmp_path):
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",

@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from archskillkit.codeindex import CodeIndex, IngestError
+from archskillkit.context import Budget, ContextCompiler
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.promotion import discover, review
@@ -62,6 +63,15 @@ def main(argv: list[str] | None = None) -> int:
                               help="deterministic review of the world")
     p_review.add_argument("--repo", required=True)
 
+    p_ctx = sub.add_parser("context",
+                           help="compile a budgeted ContextPack (Phase D)")
+    p_ctx.add_argument("--repo", required=True)
+    p_ctx.add_argument("--goal", required=True)
+    p_ctx.add_argument("--subject", default=None)
+    p_ctx.add_argument("--max-nodes", type=int, default=None)
+    p_ctx.add_argument("--max-edges", type=int, default=None)
+    p_ctx.add_argument("--max-lines", type=int, default=None)
+
     args = parser.parse_args(argv)
 
     try:
@@ -88,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_discover(world, args.run_id)
     if args.command == "review":
         return _cmd_review(world)
+    if args.command == "context":
+        return _cmd_context(world, args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -238,6 +250,33 @@ def _cmd_review(world: ArchitectureWorld) -> int:
     with world:
         result = review(world)
     print(json.dumps(result, indent=2))
+    return 0
+
+
+def _cmd_context(world: ArchitectureWorld, args: argparse.Namespace) -> int:
+    db = world.workspace / "code.sqlite"
+    if not db.exists():
+        print(f"error: no code.sqlite for {world.project_id} "
+              f"(run: archskillkit discover --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    if not world.db_path.exists():
+        print(f"error: no Architecture World for {world.project_id} "
+              f"(run: archskillkit discover --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    budget = Budget(
+        max_nodes=args.max_nodes or 50,
+        max_edges=args.max_edges or 100,
+        max_source_lines=args.max_lines or 200)
+    index = CodeIndex(db).open()
+    try:
+        with world:
+            pack = ContextCompiler(world, index).compile(
+                goal=args.goal, subject=args.subject, budget=budget)
+    finally:
+        index.close()
+    print(pack.model_dump_json())
     return 0
 
 
