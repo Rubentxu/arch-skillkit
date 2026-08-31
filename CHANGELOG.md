@@ -6,6 +6,17 @@ SemVer (docs/05): MAJOR breaks workspace/evidence/Skill contracts, MINOR
 adds compatible capabilities, PATCH covers compatible rules, prompts and
 fixes.
 
+## [Unreleased]
+
+### Added
+
+- `report.sh`: organized per-project report (`reports/index.md`) with
+  evidence summary, mermaid diagrams derived from the arrows-v1 views
+  (render natively on GitHub), LikeC4 model validation status and the
+  commands to explore the model live (`--serve`).
+- `projects.sh`: registry index listing every registered project with its
+  latest run outcome.
+
 ## [0.1.0] - 2026-08-31
 
 First working vertical slice: from any registered repository to validated

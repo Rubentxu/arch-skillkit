@@ -19,7 +19,7 @@
 - [x] Arrows basic generation
 - [x] repository-clean UAT
 - [x] fixtures
-- [ ] release workflow
+- [x] release workflow
 
 ## Should
 
@@ -52,3 +52,22 @@
 - [ ] graph DB
 - [ ] MCP
 - [ ] UI
+
+## Phase 7 findings backlog (real-world validation, 2026-08-31)
+
+Found running the full vertical on a real framework-free Kotlin repository
+(pipeline-kotlin, 505 .kt files). Feeds the Phase 8 checkpoint.
+
+- [ ] P-1 — concurrency-aware cleanliness assertion (UAT-001 snapshot diff
+      produces false alarms when the user develops during the scan)
+- [ ] P-2 — record tool usage per scanned system, not tool availability
+- [ ] P-3 — static Gradle dependency extraction (no execution) to derive
+      module graphs as scanner evidence instead of targeted reads
+- [ ] P-4 — language pack: framework-less Kotlin outline-only profile
+- [x] P-5 — organized viewing layer: report.sh (mermaid index + model
+      status + live-view commands) and projects.sh (registry index)
+- [ ] P-6 — arrows.app import adapter for arch-skillkit/arrows-v1
+- [ ] P-7 — endpoint labels from route paths (blocked: semgrep OSS gates
+      snippets/metavariables; revisit rule design or agent enrichment)
+- [ ] P-8 — baseline comparison for UAT-012 (agent reads with vs without
+      ArchSkillKit) on a real repository

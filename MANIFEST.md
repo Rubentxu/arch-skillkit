@@ -76,6 +76,8 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/scripts/doctor.sh`
 - `skills/architecture-discovery/scripts/export-arrows.sh`
 - `skills/architecture-discovery/scripts/model-validate.sh`
+- `skills/architecture-discovery/scripts/projects.sh`
+- `skills/architecture-discovery/scripts/report.sh`
 - `skills/architecture-discovery/scripts/run-manifest.sh`
 - `skills/architecture-discovery/scripts/scan-build.sh`
 - `skills/architecture-discovery/scripts/scan-outline.sh`
