@@ -1,0 +1,155 @@
+{
+ "version": "1.175.0",
+ "results": [
+  {
+   "check_id": "actix.endpoint",
+   "path": "rust-hexagonal/src/api.rs",
+   "start": {
+    "line": 4,
+    "col": 1,
+    "offset": 113
+   },
+   "end": {
+    "line": 7,
+    "col": 2,
+    "offset": 228
+   },
+   "extra": {
+    "message": "HTTP endpoint declared with an actix-web attribute macro",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "actix.endpoint",
+   "path": "rust-hexagonal/src/api.rs",
+   "start": {
+    "line": 9,
+    "col": 1,
+    "offset": 230
+   },
+   "end": {
+    "line": 12,
+    "col": 2,
+    "offset": 351
+   },
+   "extra": {
+    "message": "HTTP endpoint declared with an actix-web attribute macro",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "http.client.reqwest",
+   "path": "rust-hexagonal/src/api.rs",
+   "start": {
+    "line": 17,
+    "col": 5,
+    "offset": 475
+   },
+   "end": {
+    "line": 17,
+    "col": 27,
+    "offset": 497
+   },
+   "extra": {
+    "message": "outgoing HTTP client construction with reqwest",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  }
+ ],
+ "errors": [],
+ "paths": {
+  "scanned": [
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/rust-hexagonal/src/api.rs",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/rust-hexagonal/src/domain.rs",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/rust-hexagonal/src/lib.rs"
+  ]
+ },
+ "time": {
+  "rules": [],
+  "rules_parse_time": 0.005736112594604492,
+  "profiling_times": {
+   "config_time": 0.1920170783996582,
+   "core_time": 0.34227919578552246,
+   "ignores_time": 8.797645568847656e-05,
+   "total_time": 0.5435097217559814
+  },
+  "parsing_time": {
+   "total_time": 0.0,
+   "per_file_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "scanning_time": {
+   "total_time": 0.01713418960571289,
+   "per_file_time": {
+    "mean": 0.005711396535237631,
+    "std_dev": 6.116934925002068e-05
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "matching_time": {
+   "total_time": 0.0,
+   "per_file_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_files": []
+  },
+  "tainting_time": {
+   "total_time": 0.0,
+   "per_def_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_defs": []
+  },
+  "fixpoint_timeouts": [],
+  "prefiltering": {
+   "project_level_time": 0.0,
+   "file_level_time": 0.0,
+   "rules_with_project_prefilters_ratio": 0.0,
+   "rules_with_file_prefilters_ratio": 1.0,
+   "rules_selected_ratio": 0.3333333333333333,
+   "rules_matched_ratio": 0.3333333333333333
+  },
+  "targets": [],
+  "total_bytes": 0,
+  "max_memory_bytes": 101086272
+ },
+ "engine_requested": "OSS",
+ "skipped_rules": [],
+ "profiling_results": []
+}

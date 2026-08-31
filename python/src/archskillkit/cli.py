@@ -14,6 +14,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from archskillkit.codeindex import CodeIndex, IngestError
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.world import ArchitectureWorld
@@ -35,6 +36,22 @@ def main(argv: list[str] | None = None) -> int:
     p_obs.add_argument("--payload", required=True,
                        help="JSON file following design/schemas/observation.yaml")
 
+    p_ingest = sub.add_parser("ingest-code",
+                              help="ingest scanner payloads into code.sqlite")
+    p_ingest.add_argument("--repo", required=True)
+    p_ingest.add_argument("--astgrep", help="ast-grep --json=stream NDJSON file")
+    p_ingest.add_argument("--semgrep", help="semgrep --json file")
+    p_ingest.add_argument("--run-id", required=True)
+    p_ingest.add_argument("--scan-root", help="root used to relativize paths"
+                          " (default: the repository root)")
+
+    p_stats = sub.add_parser("index-stats", help="code.sqlite summary as JSON")
+    p_stats.add_argument("--repo", required=True)
+
+    p_search = sub.add_parser("search-code", help="search symbols (FTS prefix)")
+    p_search.add_argument("--repo", required=True)
+    p_search.add_argument("query")
+
     args = parser.parse_args(argv)
 
     try:
@@ -51,6 +68,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_replay_verify(world)
     if args.command == "record-observation":
         return _cmd_record_observation(world, Path(args.payload))
+    if args.command == "ingest-code":
+        return _cmd_ingest_code(world, args)
+    if args.command == "index-stats":
+        return _cmd_index_stats(world)
+    if args.command == "search-code":
+        return _cmd_search_code(world, args.query)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -111,6 +134,66 @@ def _cmd_record_observation(world: ArchitectureWorld, payload: Path) -> int:
     with world:
         obs_id = world.record_observation(observation)
     print(obs_id)
+    return 0
+
+
+def _cmd_ingest_code(world: ArchitectureWorld, args: argparse.Namespace) -> int:
+    if not args.astgrep and not args.semgrep:
+        print("error: provide --astgrep and/or --semgrep payloads",
+              file=sys.stderr)
+        return 2
+    payloads: list[tuple[str, Path]] = []
+    if args.astgrep:
+        payloads.append(("astgrep", Path(args.astgrep)))
+    if args.semgrep:
+        payloads.append(("semgrep", Path(args.semgrep)))
+    for kind, path in payloads:
+        if not path.is_file():
+            print(f"error: {kind} payload not found: {path}", file=sys.stderr)
+            return 2
+
+    scan_root = args.scan_root or world.root
+    totals = {"files": 0, "symbols": 0, "edges": 0, "warnings": []}
+    with CodeIndex(world.workspace / "code.sqlite") as index:
+        try:
+            for kind, path in payloads:
+                report = (
+                    index.ingest_astgrep(path.read_text(), args.run_id, scan_root)
+                    if kind == "astgrep"
+                    else index.ingest_semgrep(path.read_text(), args.run_id, scan_root)
+                )
+                totals["files"] += report.files
+                totals["symbols"] += report.symbols
+                totals["edges"] += report.edges
+                totals["warnings"].extend(report.warnings)
+        except (IngestError, OSError) as exc:
+            print(f"error: ingest failed: {exc}", file=sys.stderr)
+            return 1
+    print(json.dumps(totals))
+    return 0
+
+
+def _cmd_index_stats(world: ArchitectureWorld) -> int:
+    db = world.workspace / "code.sqlite"
+    if not db.exists():
+        print(f"error: no code.sqlite for {world.project_id} "
+              f"(run: archskillkit ingest-code --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    with CodeIndex(db) as index:
+        print(json.dumps(index.stats(), indent=2))
+    return 0
+
+
+def _cmd_search_code(world: ArchitectureWorld, query: str) -> int:
+    db = world.workspace / "code.sqlite"
+    if not db.exists():
+        print(f"error: no code.sqlite for {world.project_id} "
+              f"(run: archskillkit ingest-code --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    with CodeIndex(db) as index:
+        print(json.dumps(index.search_symbol(query), indent=2))
     return 0
 
 

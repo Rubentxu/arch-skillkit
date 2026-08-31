@@ -1,0 +1,203 @@
+{
+ "version": "1.175.0",
+ "results": [
+  {
+   "check_id": "spring.endpoint",
+   "path": "kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "start": {
+    "line": 11,
+    "col": 5,
+    "offset": 234
+   },
+   "end": {
+    "line": 12,
+    "col": 62,
+    "offset": 325
+   },
+   "extra": {
+    "message": "HTTP endpoint declared with a Spring mapping annotation",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "spring.endpoint",
+   "path": "kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "start": {
+    "line": 14,
+    "col": 5,
+    "offset": 331
+   },
+   "end": {
+    "line": 15,
+    "col": 72,
+    "offset": 428
+   },
+   "extra": {
+    "message": "HTTP endpoint declared with a Spring mapping annotation",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "spring.endpoint",
+   "path": "kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "start": {
+    "line": 17,
+    "col": 5,
+    "offset": 434
+   },
+   "end": {
+    "line": 19,
+    "col": 6,
+    "offset": 508
+   },
+   "extra": {
+    "message": "HTTP endpoint declared with a Spring mapping annotation",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "spring.messaging.listener",
+   "path": "kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "start": {
+    "line": 25,
+    "col": 5,
+    "offset": 607
+   },
+   "end": {
+    "line": 27,
+    "col": 6,
+    "offset": 691
+   },
+   "extra": {
+    "message": "messaging consumer declared with a Spring/Kafka listener annotation",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "spring.persistence.repository",
+   "path": "kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "start": {
+    "line": 32,
+    "col": 1,
+    "offset": 762
+   },
+   "end": {
+    "line": 33,
+    "col": 61,
+    "offset": 834
+   },
+   "extra": {
+    "message": "persistence port declared with a Spring repository annotation",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  }
+ ],
+ "errors": [],
+ "paths": {
+  "scanned": [
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/kotlin-spring/build.gradle.kts",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/kotlin-spring/settings.gradle.kts",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/kotlin-spring/src/main/kotlin/demo/Orders.kt",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/kotlin-spring/src/main/kotlin/demo/infra/Http.kt",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/kotlin-spring/src/main/kotlin/demo/infra/Negatives.kt"
+  ]
+ },
+ "time": {
+  "rules": [],
+  "rules_parse_time": 0.0056188106536865234,
+  "profiling_times": {
+   "config_time": 0.18662762641906738,
+   "core_time": 0.342179536819458,
+   "ignores_time": 8.225440979003906e-05,
+   "total_time": 0.5380463600158691
+  },
+  "parsing_time": {
+   "total_time": 0.0,
+   "per_file_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "scanning_time": {
+   "total_time": 0.03473496437072754,
+   "per_file_time": {
+    "mean": 0.006946992874145508,
+    "std_dev": 2.9114641311025483e-05
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "matching_time": {
+   "total_time": 0.0,
+   "per_file_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_files": []
+  },
+  "tainting_time": {
+   "total_time": 0.0,
+   "per_def_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_defs": []
+  },
+  "fixpoint_timeouts": [],
+  "prefiltering": {
+   "project_level_time": 0.0,
+   "file_level_time": 0.0,
+   "rules_with_project_prefilters_ratio": 0.0,
+   "rules_with_file_prefilters_ratio": 1.0,
+   "rules_selected_ratio": 0.3333333333333333,
+   "rules_matched_ratio": 0.3333333333333333
+  },
+  "targets": [],
+  "total_bytes": 0,
+  "max_memory_bytes": 106768896
+ },
+ "engine_requested": "OSS",
+ "skipped_rules": [],
+ "profiling_results": []
+}

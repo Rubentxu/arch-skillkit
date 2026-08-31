@@ -1,0 +1,154 @@
+{
+ "version": "1.175.0",
+ "results": [
+  {
+   "check_id": "express.endpoint",
+   "path": "ts-node/src/app.ts",
+   "start": {
+    "line": 6,
+    "col": 1,
+    "offset": 129
+   },
+   "end": {
+    "line": 6,
+    "col": 48,
+    "offset": 176
+   },
+   "extra": {
+    "message": "HTTP endpoint registered on an express application or router",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "express.endpoint",
+   "path": "ts-node/src/app.ts",
+   "start": {
+    "line": 7,
+    "col": 1,
+    "offset": 178
+   },
+   "end": {
+    "line": 7,
+    "col": 54,
+    "offset": 231
+   },
+   "extra": {
+    "message": "HTTP endpoint registered on an express application or router",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  },
+  {
+   "check_id": "express.endpoint",
+   "path": "ts-node/src/app.ts",
+   "start": {
+    "line": 8,
+    "col": 1,
+    "offset": 233
+   },
+   "end": {
+    "line": 8,
+    "col": 54,
+    "offset": 286
+   },
+   "extra": {
+    "message": "HTTP endpoint registered on an express application or router",
+    "metadata": {},
+    "severity": "INFO",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "validation_state": "NO_VALIDATOR",
+    "engine_kind": "OSS"
+   }
+  }
+ ],
+ "errors": [],
+ "paths": {
+  "scanned": [
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/ts-node/src/app.ts",
+   "/var/home/rubentxu/Proyectos/agentesIA/arch-skillkit/fixtures/ts-node/src/orders.ts"
+  ]
+ },
+ "time": {
+  "rules": [],
+  "rules_parse_time": 0.006573915481567383,
+  "profiling_times": {
+   "config_time": 0.17715239524841309,
+   "core_time": 0.3461894989013672,
+   "ignores_time": 9.083747863769531e-05,
+   "total_time": 0.5326313972473145
+  },
+  "parsing_time": {
+   "total_time": 0.0,
+   "per_file_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "scanning_time": {
+   "total_time": 0.01652812957763672,
+   "per_file_time": {
+    "mean": 0.00826406478881836,
+    "std_dev": 6.564143427567615e-05
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_files": []
+  },
+  "matching_time": {
+   "total_time": 0.0,
+   "per_file_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_files": []
+  },
+  "tainting_time": {
+   "total_time": 0.0,
+   "per_def_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "very_slow_stats": {
+    "time_ratio": 0.0,
+    "count_ratio": 0.0
+   },
+   "very_slow_rules_on_defs": []
+  },
+  "fixpoint_timeouts": [],
+  "prefiltering": {
+   "project_level_time": 0.0,
+   "file_level_time": 0.0,
+   "rules_with_project_prefilters_ratio": 0.0,
+   "rules_with_file_prefilters_ratio": 1.0,
+   "rules_selected_ratio": 0.5,
+   "rules_matched_ratio": 0.5
+  },
+  "targets": [],
+  "total_bytes": 0,
+  "max_memory_bytes": 100505536
+ },
+ "engine_requested": "OSS",
+ "skipped_rules": [],
+ "profiling_results": []
+}

@@ -10,6 +10,29 @@ fixes.
 
 ### Added
 
+- **V2 Phase B (M2-B1…B4) — Code Index (`archskillkit.codeindex`)**: the
+  deterministic, regenerable `code.sqlite` Evidence Graph per project
+  (docs/v2/05):
+  - M2-B1 schema: files / symbols / edges with scan provenance,
+    `scan_run_id` atomic replace per run, schema-version guard, FTS5
+    symbol search (LIKE fallback).
+  - M2-B2 ast-grep ingestion: outline NDJSON → files + symbols (kind
+    from rule id, 1-based lines, paths relativized to the scan root).
+  - M2-B3 Semgrep ingestion: matches → EXPOSES/CONSUMES/USES edges from
+    the containing symbol to typed pseudo-symbols (endpoint, topic,
+    datastore, http_client); container resolution is nearest-declaration
+    within ±2 lines preferring functions; unknown check_ids and orphan
+    matches become warnings, never errors.
+  - M2-B4 query API: `search_symbol` (prefix FTS), `resolve`
+    (id / qualified name / `path::name` / bare unique name with
+    ambiguity candidates), `incoming`/`outgoing`, bounded
+    `neighborhood`, shortest `path`, transitive `impact`.
+  - CLI: `ingest-code`, `index-stats`, `search-code`.
+  - 43 new tests (104 total) against REAL scanner payloads captured from
+    the pinned V1 toolchain (fixtures normalized to a virtual scan
+    root), covering idempotent re-ingest, regenerable determinism,
+    atomic failure, isolation, a 1k-symbol ring scale sanity and
+    repository cleanliness.
 - **V2.2 Phase P0 — projection foundation (`archskillkit.projections`)**:
   `VisualIntent` schema (8 intent types, docs/v2/26), `ProjectionAdapter`
   protocol with `ProjectionContext`/`ProjectionResult` (results always
