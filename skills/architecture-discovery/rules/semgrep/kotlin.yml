@@ -1,0 +1,80 @@
+# Spring architecture markers (high confidence: explicit framework
+# annotations). M2.2 — docs/07 Fase 2.
+#
+# Proven shapes (validated against fixtures):
+#   expression body: fun $F(...): $T = $B
+#   block body:      fun $F(...) { ... }
+# Known limitation (documented false positive): annotation-only patterns are
+# NOT used — semgrep parses bare @Annotation patterns loosely in Kotlin.
+rules:
+  - id: spring.endpoint
+    languages: [kotlin]
+    severity: INFO
+    message: HTTP endpoint declared with a Spring mapping annotation
+    pattern-either:
+      - pattern: |
+          @GetMapping($P)
+          fun $F(...): $T = $B
+      - pattern: |
+          @GetMapping($P)
+          fun $F(...) {
+            ...
+          }
+      - pattern: |
+          @PostMapping($P)
+          fun $F(...): $T = $B
+      - pattern: |
+          @PostMapping($P)
+          fun $F(...) {
+            ...
+          }
+      - pattern: |
+          @PutMapping($P)
+          fun $F(...): $T = $B
+      - pattern: |
+          @PutMapping($P)
+          fun $F(...) {
+            ...
+          }
+      - pattern: |
+          @DeleteMapping($P)
+          fun $F(...): $T = $B
+      - pattern: |
+          @DeleteMapping($P)
+          fun $F(...) {
+            ...
+          }
+      - pattern: |
+          @PatchMapping($P)
+          fun $F(...): $T = $B
+      - pattern: |
+          @PatchMapping($P)
+          fun $F(...) {
+            ...
+          }
+
+  - id: spring.messaging.listener
+    languages: [kotlin]
+    severity: INFO
+    message: messaging consumer declared with a Spring/Kafka listener annotation
+    pattern-either:
+      - pattern: |
+          @KafkaListener(...)
+          fun $F(...) {
+            ...
+          }
+      - pattern: |
+          @KafkaListener(...)
+          fun $F(...): $T = $B
+
+  - id: spring.persistence.repository
+    languages: [kotlin]
+    severity: INFO
+    message: persistence port declared with a Spring repository annotation
+    pattern-either:
+      - pattern: |
+          @Repository
+          interface $I : $T
+      - pattern: |
+          @Repository
+          interface $I

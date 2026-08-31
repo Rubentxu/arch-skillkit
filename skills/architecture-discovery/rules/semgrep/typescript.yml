@@ -1,0 +1,21 @@
+# Express architecture markers (high confidence: explicit app./router.
+# receiver literal). M2.2 — docs/07 Fase 2.
+#
+# Known limitation: endpoints registered on renamed receivers
+# (`const api = express()` then `api.get(...)`) are not detected.
+rules:
+  - id: express.endpoint
+    languages: [typescript]
+    severity: INFO
+    message: HTTP endpoint registered on an express application or router
+    pattern-either:
+      - pattern: app.get($PATH, ...)
+      - pattern: app.post($PATH, ...)
+      - pattern: app.put($PATH, ...)
+      - pattern: app.delete($PATH, ...)
+      - pattern: app.patch($PATH, ...)
+      - pattern: router.get($PATH, ...)
+      - pattern: router.post($PATH, ...)
+      - pattern: router.put($PATH, ...)
+      - pattern: router.delete($PATH, ...)
+      - pattern: router.patch($PATH, ...)

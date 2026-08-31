@@ -9,24 +9,6 @@ setup() {
   make_fixture_repo "$SB/repo" rust-hexagonal
 }
 
-# Creates a git repo from a repo fixture and registers it in the sandbox.
-make_fixture_repo() {
-  local dest="$1" name="$2"
-  mkdir -p "$dest"
-  cp -r "$ROOT/fixtures/$name/." "$dest/"
-  git init -q -b main "$dest"
-  git -C "$dest" add .
-  RANDOM_GIT_COMMITTER_DISABLED=1 \
-    git -C "$dest" -c user.email=fixture@example.com -c user.name=fixture commit -qm "init"
-  run_workspace "$dest" >/dev/null
-}
-
-manifest_of_last_run() {
-  local run_id
-  run_id="$(find "$SB/state/arch-skillkit/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1)"
-  printf '%s' "$SB/state/arch-skillkit/runs/$run_id/manifest.json"
-}
-
 @test "scan: rust outline produces raw evidence with known symbols" {
   run run_scan "$SB/repo"
   [ "$status" -eq 0 ]

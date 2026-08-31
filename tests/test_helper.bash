@@ -52,6 +52,19 @@ run_scan() {
   )
 }
 
+# Runs scan-patterns.sh inside the sandbox; extra args are forwarded.
+run_patterns() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      "$SCRIPTS/scan-patterns.sh" "$@"
+  )
+}
+
 # Runs doctor.sh inside the sandbox. $1: optional PATH for the child process
 # (simulates missing dependencies deterministically). bash is resolved
 # up-front because the child PATH may not contain it.
@@ -79,6 +92,24 @@ fixture_repo() {
     git -C "$1" -c user.email=fixture@example.com -c user.name=fixture commit -qm "init"
   if [ -n "${2:-}" ]; then git -C "$1" remote add origin "$2"; fi
   return 0
+}
+
+# Creates a git repo from a repo fixture (fixtures/<name>) and registers it.
+make_fixture_repo() {
+  local dest="$1" name="$2"
+  mkdir -p "$dest"
+  cp -r "$ROOT/fixtures/$name/." "$dest/"
+  git init -q -b main "$dest"
+  git -C "$dest" add .
+  RANDOM_GIT_COMMITTER_DISABLED=1 \
+    git -C "$dest" -c user.email=fixture@example.com -c user.name=fixture commit -qm "init"
+  run_workspace "$dest" >/dev/null
+}
+
+manifest_of_last_run() {
+  local run_id
+  run_id="$(find "$SB/state/arch-skillkit/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1)"
+  printf '%s' "$SB/state/arch-skillkit/runs/$run_id/manifest.json"
 }
 
 assert_eq() { # <desc> <expected> <actual>

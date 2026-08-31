@@ -17,4 +17,4 @@
 
 ## Tooling
 
-Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Step 5 runs `scripts/scan-outline.sh` (ast-grep outline from the pinned toolchain in `runtime/mise.toml`). Step 6 opens a run with `scripts/run-manifest.sh start` and closes it with `finish --status success|partial|failed`. Verify the environment with `scripts/doctor.sh` before starting.
+Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Step 5 runs `scripts/scan-outline.sh` (ast-grep outline) and `scripts/scan-patterns.sh` (Semgrep architecture markers), both from the pinned toolchain in `runtime/mise.toml`. Step 6 opens a run with `scripts/run-manifest.sh start` and closes it with `finish --status success|partial|failed`. Verify the environment with `scripts/doctor.sh` before starting.

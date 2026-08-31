@@ -10,7 +10,7 @@
 - [x] run manifest
 - [x] mise toolchain
 - [x] ast-grep baseline
-- [ ] Semgrep rule pack
+- [x] Semgrep rule pack
 - [ ] Rust build metadata
 - [ ] discovery prompt
 - [ ] modeler prompt

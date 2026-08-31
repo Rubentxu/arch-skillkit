@@ -1,0 +1,40 @@
+# Actix/reqwest architecture markers (high confidence: explicit attribute
+# macros and reqwest constructor/helper calls). M2.2 — docs/07 Fase 2.
+#
+# Known limitations: only async handlers with a return type; injected
+# reqwest clients (passed as parameters) are not detected, only explicit
+# construction sites.
+rules:
+  - id: actix.endpoint
+    languages: [rust]
+    severity: INFO
+    message: HTTP endpoint declared with an actix-web attribute macro
+    pattern-either:
+      - pattern: |
+          #[get($PATH)]
+          async fn $F(...) -> $T {
+            ...
+          }
+      - pattern: |
+          #[post($PATH)]
+          async fn $F(...) -> $T {
+            ...
+          }
+      - pattern: |
+          #[put($PATH)]
+          async fn $F(...) -> $T {
+            ...
+          }
+      - pattern: |
+          #[delete($PATH)]
+          async fn $F(...) -> $T {
+            ...
+          }
+
+  - id: http.client.reqwest
+    languages: [rust]
+    severity: INFO
+    message: outgoing HTTP client construction with reqwest
+    pattern-either:
+      - pattern: reqwest::Client::new()
+      - pattern: reqwest::get(...)

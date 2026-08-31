@@ -62,9 +62,13 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/rules/ast-grep/typescript/class.yml`
 - `skills/architecture-discovery/rules/ast-grep/typescript/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/typescript/interface.yml`
+- `skills/architecture-discovery/rules/semgrep/kotlin.yml`
+- `skills/architecture-discovery/rules/semgrep/rust.yml`
+- `skills/architecture-discovery/rules/semgrep/typescript.yml`
 - `skills/architecture-discovery/runtime/mise.toml`
 - `skills/architecture-discovery/scripts/lib/common.sh`
 - `skills/architecture-discovery/scripts/doctor.sh`
 - `skills/architecture-discovery/scripts/run-manifest.sh`
 - `skills/architecture-discovery/scripts/scan-outline.sh`
+- `skills/architecture-discovery/scripts/scan-patterns.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`

@@ -5,3 +5,4 @@
 
 [tools]
 "github:ast-grep/ast-grep" = "0.45.2"
+"pipx:semgrep" = "1.175.0"

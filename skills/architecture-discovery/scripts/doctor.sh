@@ -12,7 +12,7 @@ SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 . "$SCRIPT_DIR/lib/common.sh"
 
 strict=0
-[ "${1:-}" = "--strict" ] && strict=1
+if [ "${1:-}" = "--strict" ]; then strict=1; fi
 
 fail=0
 skill_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -32,36 +32,32 @@ check_required() {
 }
 
 check_pipeline() {
-  local t missing scanner_ok
+  local t scanner_ok
   printf 'scanners:\n'
 
-  # ast-grep is required since M2.1: on PATH or in the skill runtime.
-  scanner_ok=0
-  if command -v ast-grep >/dev/null 2>&1; then
-    printf '  [ok]      %-10s %s (PATH)\n' "ast-grep" "$(command -v ast-grep)"
-    scanner_ok=1
-  elif arch_mise "$runtime_dir" ast-grep --version >/dev/null 2>&1; then
-    printf '  [ok]      %-10s %s (skill runtime)\n' "ast-grep" "$(arch_mise "$runtime_dir" ast-grep --version)"
-    scanner_ok=1
-  fi
-  if [ "$scanner_ok" -eq 0 ]; then
-    printf '  [MISSING] %-10s required; install with: mise install -C %s\n' "ast-grep" "$runtime_dir"
-    fail=1
-  fi
-
-  printf 'upcoming scanners (not required yet):\n'
-  for t in semgrep likec4; do
-    missing=1
+  # Required since M2.1/M2.2: on PATH or in the skill runtime.
+  for t in ast-grep semgrep; do
+    scanner_ok=0
     if command -v "$t" >/dev/null 2>&1; then
-      printf '  [ok]      %-10s %s\n' "$t" "$(command -v "$t")"
-      missing=0
-    else
-      printf '  [pending] %-10s lands with its own milestone (M2.2 / M4)\n' "$t"
+      printf '  [ok]      %-10s %s (PATH)\n' "$t" "$(command -v "$t")"
+      scanner_ok=1
+    elif arch_mise "$runtime_dir" "$t" --version >/dev/null 2>&1; then
+      printf '  [ok]      %-10s %s (skill runtime)\n' "$t" "via mise"
+      scanner_ok=1
     fi
-    if [ "$strict" -eq 1 ] && [ "$missing" -eq 1 ]; then
+    if [ "$scanner_ok" -eq 0 ]; then
+      printf '  [MISSING] %-10s required; install with: mise install -C %s\n' "$t" "$runtime_dir"
       fail=1
     fi
   done
+
+  printf 'upcoming scanners (not required yet):\n'
+  if command -v likec4 >/dev/null 2>&1; then
+    printf '  [ok]      %-10s %s\n' "likec4" "$(command -v likec4)"
+  else
+    printf '  [pending] %-10s lands with its own milestone (M4)\n' "likec4"
+    if [ "$strict" -eq 1 ]; then fail=1; fi
+  fi
 }
 
 show_roots() {
