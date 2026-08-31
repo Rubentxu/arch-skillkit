@@ -265,6 +265,23 @@ class TestProjectCli:
         assert "no Architecture World" in proc.stderr
 
 
+class TestDriftCli:
+    def test_drift_report_on_clean_world(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        TestProjectCli._seed_pipeline(repo, tmp_path, env)
+        proc = run_cli("drift", "--repo", str(repo), env=env)
+        assert proc.returncode == 0, proc.stderr
+        report = json.loads(proc.stdout)
+        assert report["drift"]["findings"] == []  # no rules declared yet
+        assert report["stale_model"]["findings"] == []
+
+    def test_drift_without_world_fails_cleanly(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        proc = run_cli("drift", "--repo", str(repo), env=env)
+        assert proc.returncode == 1
+        assert "no Architecture World" in proc.stderr
+
+
 def _sandbox_env(monkeypatch, tmp_path):
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",

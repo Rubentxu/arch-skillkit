@@ -486,6 +486,14 @@ class CodeIndex:
             (scan_run_id,)).fetchall()
         return [dict(r) for r in rows]
 
+    def symbol_locations(self) -> set[tuple[str, int]]:
+        """Every (path, start_line) the current index knows about — the
+        freshness reference for stale-model detection (M2-F3)."""
+        rows = self._db.execute(
+            "SELECT f.path AS path, s.start_line AS start_line FROM symbols s"
+            " JOIN files f ON f.id = s.file_id WHERE s.start_line IS NOT NULL")
+        return {(r["path"], r["start_line"]) for r in rows}
+
     # ---- internals ------------------------------------------------------
 
     def _relpath(self, path: str, scan_root: str | Path) -> str:

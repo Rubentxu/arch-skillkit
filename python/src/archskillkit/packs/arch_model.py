@@ -37,13 +37,25 @@ class ArchitectureElementData(BaseModel):
     summary: str = ""
 
 
+class ArchitectureRuleData(BaseModel):
+    """A structured boundary rule evaluated WITHOUT an LLM (ADR-0022):
+    `source_category -[forbidden_relation]-> target_category` is drift."""
+
+    name: str
+    statement: str
+    forbidden_relation: str
+    source_category: str
+    target_category: str
+    severity: Confidence = "high"
+
+
 def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] = (),
               description: str = "") -> RelationType:
     return RelationType(name=name, source_types=source, target_types=target,
                         description=description)
 
 
-ARCH_MODEL_OBJECT_TYPES = ("architecture_element",)
+ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule")
 
 ARCH_MODEL_RELATION_TYPES = (
     "exposes", "consumes", "depends_on", "realizes",
@@ -52,11 +64,13 @@ ARCH_MODEL_RELATION_TYPES = (
 
 pack = Pack(
     name="arch_model",
-    version="0.1.0",
-    description="ArchSkillKit architecture elements and relations.",
+    version="0.2.0",
+    description="ArchSkillKit architecture elements, rules and relations.",
     object_types=(
         ObjectType(name="architecture_element", schema=ArchitectureElementData,
                    description="A curated architectural building block."),
+        ObjectType(name="architecture_rule", schema=ArchitectureRuleData,
+                   description="A deterministic boundary rule (drift detector input)."),
     ),
     relation_types=(
         # Endpoints are typed at the object level ('architecture_element');

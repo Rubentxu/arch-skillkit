@@ -83,6 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     p_proj.add_argument("--force", action="store_true",
                         help="overwrite a manually modified projection")
 
+    p_drift = sub.add_parser("drift",
+                             help="deterministic drift + stale model detection")
+    p_drift.add_argument("--repo", required=True)
+
     args = parser.parse_args(argv)
 
     try:
@@ -113,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_context(world, args)
     if args.command == "project":
         return _cmd_project(world, args)
+    if args.command == "drift":
+        return _cmd_drift(world)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -311,6 +317,30 @@ def _cmd_project(world: ArchitectureWorld, args: argparse.Namespace) -> int:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
     print(json.dumps({"projections": results}, indent=2))
+    return 0
+
+
+def _cmd_drift(world: ArchitectureWorld) -> int:
+    if not world.db_path.exists():
+        print(f"error: no Architecture World for {world.project_id} "
+              f"(run: archskillkit discover --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    with world:
+        drift = world.detect_drift()
+        db = world.workspace / "code.sqlite"
+        stale = {"findings": [], "persisted": 0}
+        if db.exists():
+            index = CodeIndex(db).open()
+            try:
+                stale = world.detect_stale_model(index)
+            finally:
+                index.close()
+    print(json.dumps({
+        "drift": {"findings": drift["findings"], "persisted": drift["persisted"]},
+        "stale_model": {"findings": stale["findings"],
+                        "persisted": stale["persisted"]},
+    }, indent=2))
     return 0
 
 

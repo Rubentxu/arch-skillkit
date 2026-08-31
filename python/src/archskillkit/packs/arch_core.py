@@ -84,10 +84,10 @@ class ScanRunData(BaseModel):
 
 
 class FindingData(BaseModel):
-    """A deterministic reviewer finding (docs/v2/04, M2-C4)."""
+    """A deterministic reviewer/drift finding (docs/v2/04, M2-C4, M2-F1)."""
 
     kind: Literal["unsupported_claim", "contradiction", "missing_evidence",
-                  "stale_evidence"]
+                  "stale_evidence", "architecture_drift"]
     severity: Confidence = "medium"
     target_id: str = ""
     detail: str = ""

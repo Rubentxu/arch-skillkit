@@ -10,6 +10,23 @@ fixes.
 
 ### Added
 
+- **V2 Phase F (M2-F1…F3) — reactive architecture (`world.detect_drift`,
+  `world.detect_stale_model`)**: deterministic boundary evaluation
+  without an LLM (docs/v2/09, ADR-0022):
+  - M2-F1 drift: structured `architecture_rule` objects
+    (`source_category -[forbidden_relation]-> target_category`) are
+    evaluated against the architecture relations; violations become
+    persisted `architecture_drift` findings with rule traceability.
+  - M2-F2 contradictions: already deterministic since Phase C
+    (evaluate_claims) — unchanged.
+  - M2-F3 stale model: evidence backing the accepted architecture whose
+    (file, line) location disappears from the current Code Index becomes
+    a `stale_evidence` finding (new `CodeIndex.symbol_locations`).
+  - Shared finding persistence with review audit objects and
+    (kind, target) dedup — review() now reuses it.
+  - `arch-model` pack v0.2.0 (architecture_rule); `arch-core` v0.3.0
+    (architecture_drift finding kind). CLI `drift`.
+  - 12 new tests (177 pytest total).
 - **V2 Phase E (M2-E1…E3) + V2.2 P1/P6 slice — world projections on the
   common contract (`archskillkit.projections.adapters` + `writer`)**:
   - M2-E1 LikeC4 projector: the Architecture World renders as a LikeC4

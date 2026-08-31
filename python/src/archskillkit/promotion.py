@@ -295,24 +295,7 @@ def review(world: ArchitectureWorld) -> dict:
                 "detail": f"{rel['kind']} relation without evidence",
             })
 
-    persisted = 0
-    review_id = world.graph.add_object("review", {
-        "reviewed_at": _utcnow(),
-        "summary": ", ".join(sorted({f["kind"] for f in findings})) or "clean",
-        "findings_count": len(findings),
-    }).id
-    for f in findings:
-        existing = world.find_objects("finding", kind=f["kind"],
-                                      target_id=f["target_id"])
-        if existing:
-            continue
-        finding_id = world.graph.add_object("finding", {
-            "kind": f["kind"], "severity": f["severity"],
-            "target_id": f["target_id"], "detail": f["detail"],
-        }).id
-        world.graph.add_relation(finding_id, review_id, "derived_from", {})
-        persisted += 1
-
+    persisted = world.persist_findings(findings)
     return {"findings": findings, "persisted": persisted}
 
 

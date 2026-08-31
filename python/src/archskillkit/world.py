@@ -205,6 +205,105 @@ class ArchitectureWorld:
                             "data": rel.data})
         return out
 
+    # ---- reactive architecture (Phase F: drift + stale model) ----------
+
+    def record_architecture_rule(self, name: str, statement: str,
+                                 forbidden_relation: str,
+                                 source_category: str, target_category: str,
+                                 severity: str = "high") -> str:
+        """Declare a structured boundary rule (ADR-0022): the
+        `source_category -[forbidden_relation]-> target_category` pattern
+        is drift. Idempotent by rule name."""
+        existing = self.find_objects("architecture_rule", name=name)
+        if existing:
+            return existing[0]["id"]
+        return self.graph.add_object("architecture_rule", {
+            "name": name, "statement": statement,
+            "forbidden_relation": forbidden_relation,
+            "source_category": source_category,
+            "target_category": target_category,
+            "severity": severity,
+        }).id
+
+    def persist_findings(self, findings: list[dict]) -> int:
+        """Persist findings as objects linked to a fresh review audit
+        object. Dedup key: (kind, target_id). Returns new findings count."""
+        review_id = self.graph.add_object("review", {
+            "reviewed_at": _utcnow(),
+            "summary": ", ".join(sorted({f["kind"] for f in findings})) or "clean",
+            "findings_count": len(findings),
+        }).id
+        persisted = 0
+        for finding in findings:
+            existing = self.find_objects("finding", kind=finding["kind"],
+                                         target_id=finding["target_id"])
+            if existing:
+                continue
+            finding_id = self.graph.add_object("finding", {
+                "kind": finding["kind"],
+                "severity": finding.get("severity", "medium"),
+                "target_id": finding.get("target_id", ""),
+                "detail": finding.get("detail", ""),
+            }).id
+            self.graph.add_relation(finding_id, review_id, "derived_from", {})
+            persisted += 1
+        return persisted
+
+    def detect_drift(self) -> dict:
+        """Architecture drift (M2-F1): architecture relations matching a
+        declared boundary rule become findings — no LLM involved."""
+        rules = self.find_objects("architecture_rule")
+        findings: list[dict] = []
+        if rules:
+            elements = {o["id"]: o["data"]
+                        for o in self.find_objects("architecture_element")}
+            for rule in rules:
+                data = rule["data"]
+                for rel in self.architecture_relations():
+                    src = elements.get(rel["source"], {})
+                    dst = elements.get(rel["target"], {})
+                    if (rel["kind"] == data["forbidden_relation"]
+                        and src.get("kind") == data["source_category"]
+                        and dst.get("kind") == data["target_category"]):
+                        findings.append({
+                            "kind": "architecture_drift",
+                            "severity": data.get("severity", "high"),
+                            "target_id": rel["id"],
+                            "rule": data["name"],
+                            "detail": (f"[{data['name']}] {data['statement']}: "
+                                       f"{src.get('name')} -{rel['kind']}-> "
+                                       f"{dst.get('name')}"),
+                        })
+        persisted = self.persist_findings(findings)
+        return {"findings": findings, "persisted": persisted}
+
+    def detect_stale_model(self, index) -> dict:
+        """Stale model (M2-F3): evidence backing the accepted architecture
+        whose (file, line) location is absent from the current Code Index."""
+        locations = index.symbol_locations()
+        findings: list[dict] = []
+        checked: set[str] = set()
+        for rel in self.architecture_relations():
+            for ev_id in (rel["data"] or {}).get("evidence_ids", []):
+                if ev_id in checked:
+                    continue
+                checked.add(ev_id)
+                try:
+                    ev = self.get_object(ev_id)["data"]
+                except KeyError:
+                    continue
+                location = (ev.get("file", ""), ev.get("start_line"))
+                if location not in locations:
+                    findings.append({
+                        "kind": "stale_evidence", "severity": "medium",
+                        "target_id": ev_id,
+                        "detail": (f"{ev.get('file')}:{ev.get('start_line')} "
+                                   "is no longer reported by the current "
+                                   "code index"),
+                    })
+        persisted = self.persist_findings(findings)
+        return {"findings": findings, "persisted": persisted}
+
     # ---- reads --------------------------------------------------------
 
     def snapshot(self) -> dict:
