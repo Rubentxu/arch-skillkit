@@ -17,4 +17,11 @@
 
 ## Tooling
 
-Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Step 5 runs `scripts/scan-outline.sh` (ast-grep outline), `scripts/scan-patterns.sh` (Semgrep architecture markers) and `scripts/scan-build.sh` (build-system metadata), all from the pinned toolchain in `runtime/mise.toml` plus per-project build tools. Step 6 opens a run with `scripts/run-manifest.sh start` and closes it with `finish --status success|partial|failed`. Verify the environment with `scripts/doctor.sh` before starting.
+Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Steps 3–6 run as one orchestrated scan via `scripts/scan.sh` (single run manifest; see `references/scanning.md`). Verify the environment with `scripts/doctor.sh` before starting.
+
+## Roles
+
+- Steps 1–6: the Scanner role (`references/scanning.md`).
+- Steps 7–8: the Discovery role (`references/discovery.md`).
+- Steps 9–10 and 12: the Modeler role (`references/modeling-policy.md`).
+- Steps 11, 13 and 14: the Review role (`references/review.md`).

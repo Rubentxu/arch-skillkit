@@ -78,6 +78,19 @@ run_build() {
   )
 }
 
+# Runs scan.sh (the Scanner-role orchestrator) inside the sandbox.
+run_scan_all() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      "$SCRIPTS/scan.sh" "$@"
+  )
+}
+
 # Runs scan-build.sh with a PATH stripped of build tools (cargo/npm/gradle
 # live in ~/.cargo/bin and asdf shims) while git/jq/mise remain available.
 run_build_restricted() {

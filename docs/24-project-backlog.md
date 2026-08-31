@@ -12,9 +12,9 @@
 - [x] ast-grep baseline
 - [x] Semgrep rule pack
 - [x] Rust build metadata
-- [ ] discovery prompt
+- [x] discovery prompt
 - [ ] modeler prompt
-- [ ] reviewer prompt
+- [x] reviewer prompt
 - [ ] LikeC4 validation
 - [ ] Arrows basic generation
 - [x] repository-clean UAT

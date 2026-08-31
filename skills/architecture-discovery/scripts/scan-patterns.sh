@@ -13,7 +13,7 @@ SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 
 usage() {
   cat <<'EOF'
-Usage: scan-patterns.sh [--repo <path>]
+Usage: scan-patterns.sh [--repo <path>] [--run-id <id>]
 
 Runs the Semgrep architecture rule pack over the registered repository and
 writes evidence/raw/semgrep.json plus provenance to the project workspace.
@@ -22,11 +22,17 @@ EOF
 }
 
 repo_arg=""
+run_id_arg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
       [ $# -ge 2 ] || { printf 'error: --repo needs a value\n' >&2; exit 2; }
       repo_arg="$2"
+      shift 2
+      ;;
+    --run-id)
+      [ $# -ge 2 ] || { printf 'error: --run-id needs a value\n' >&2; exit 2; }
+      run_id_arg="$2"
       shift 2
       ;;
     -h | --help)
@@ -59,7 +65,12 @@ runtime_dir="$skill_dir/runtime"
 rules_dir="$skill_dir/rules/semgrep"
 evidence_dir="$workspace/evidence/raw"
 
-run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+if [ -n "$run_id_arg" ]; then
+  # Orchestrated mode: the caller owns the run manifest lifecycle.
+  run_id="$run_id_arg"
+else
+  run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+fi
 commit="$(git -C "$root" rev-parse HEAD)"
 
 semgrep() {
@@ -74,7 +85,9 @@ if semgrep scan --config "$rules_dir" --json --metrics=off --quiet \
 else
   mv "$tmp_evidence" "$evidence_dir/semgrep.json" 2>/dev/null || true
   printf 'error: semgrep scan failed; see %s\n' "$evidence_dir/semgrep.stderr.log" >&2
-  "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status failed
+  if [ -z "$run_id_arg" ]; then
+    "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status failed
+  fi
   exit 1
 fi
 
@@ -113,6 +126,8 @@ if [ "$n_results" = "0" ]; then
   printf 'warning: no architectural patterns matched for %s (no supported frameworks?)\n' "$root" >&2
 fi
 
-"$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+if [ -z "$run_id_arg" ]; then
+  "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+fi
 printf 'scan-patterns: %s\nrun_id: %s\nevidence: %s\nmatches: %s\n' \
   "$scan_status" "$run_id" "$evidence_dir/semgrep.json" "$n_results"

@@ -15,7 +15,7 @@ SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 
 usage() {
   cat <<'EOF'
-Usage: scan-build.sh [--repo <path>]
+Usage: scan-build.sh [--repo <path>] [--run-id <id>]
 
 Collects build-system metadata for the registered repository into
 evidence/raw/build/. Opens and closes its own run manifest entry; the run
@@ -24,11 +24,17 @@ EOF
 }
 
 repo_arg=""
+run_id_arg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
       [ $# -ge 2 ] || { printf 'error: --repo needs a value\n' >&2; exit 2; }
       repo_arg="$2"
+      shift 2
+      ;;
+    --run-id)
+      [ $# -ge 2 ] || { printf 'error: --run-id needs a value\n' >&2; exit 2; }
+      run_id_arg="$2"
       shift 2
       ;;
     -h | --help)
@@ -56,7 +62,12 @@ if [ -z "$pid" ]; then
 fi
 workspace="$(registry_get_field "$pid" workspace)"
 
-run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+if [ -n "$run_id_arg" ]; then
+  # Orchestrated mode: the caller owns the run manifest lifecycle.
+  run_id="$run_id_arg"
+else
+  run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+fi
 commit="$(git -C "$root" rev-parse HEAD)"
 evidence_dir="$workspace/evidence/raw/build"
 mkdir -p "$evidence_dir"
@@ -167,5 +178,7 @@ if command -v cargo >/dev/null 2>&1; then
 fi
 "$SCRIPT_DIR/run-manifest.sh" record "$run_id" "${record_args[@]}"
 
-"$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+if [ -z "$run_id_arg" ]; then
+  "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+fi
 printf 'scan-build: %s\nrun_id: %s\nevidence: %s\n' "$scan_status" "$run_id" "$evidence_dir"

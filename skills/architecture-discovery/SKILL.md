@@ -25,6 +25,12 @@ description: >
 
 Read `references/workflow.md`.
 
+## Roles
+
+- Scanner — run the deterministic pipeline: read `references/scanning.md`.
+- Discovery — interpret evidence into an inventory: read `references/discovery.md`.
+- Review — audit claims, evidence and repository cleanliness: read `references/review.md`.
+
 ## Architecture policy
 
 Read `references/modeling-policy.md`.

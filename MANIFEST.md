@@ -49,8 +49,11 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `examples/project.json`
 - `examples/run-manifest.json`
 - `skills/architecture-discovery/SKILL.md`
+- `skills/architecture-discovery/references/discovery.md`
 - `skills/architecture-discovery/references/evidence-policy.md`
 - `skills/architecture-discovery/references/modeling-policy.md`
+- `skills/architecture-discovery/references/review.md`
+- `skills/architecture-discovery/references/scanning.md`
 - `skills/architecture-discovery/references/workflow.md`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/type.yml`
@@ -72,4 +75,5 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/scripts/scan-build.sh`
 - `skills/architecture-discovery/scripts/scan-outline.sh`
 - `skills/architecture-discovery/scripts/scan-patterns.sh`
+- `skills/architecture-discovery/scripts/scan.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`

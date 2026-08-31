@@ -13,7 +13,7 @@ SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 
 usage() {
   cat <<'EOF'
-Usage: scan-outline.sh [--repo <path>]
+Usage: scan-outline.sh [--repo <path>] [--run-id <id>]
 
 Runs the ast-grep structural outline over the registered repository and
 writes evidence/raw/ast-grep.jsonl plus provenance to the project workspace.
@@ -22,11 +22,17 @@ EOF
 }
 
 repo_arg=""
+run_id_arg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
       [ $# -ge 2 ] || { printf 'error: --repo needs a value\n' >&2; exit 2; }
       repo_arg="$2"
+      shift 2
+      ;;
+    --run-id)
+      [ $# -ge 2 ] || { printf 'error: --run-id needs a value\n' >&2; exit 2; }
+      run_id_arg="$2"
       shift 2
       ;;
     -h | --help)
@@ -59,7 +65,12 @@ runtime_dir="$skill_dir/runtime"
 rules_dir="$skill_dir/rules/ast-grep"
 evidence_dir="$workspace/evidence/raw"
 
-run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+if [ -n "$run_id_arg" ]; then
+  # Orchestrated mode: the caller owns the run manifest lifecycle.
+  run_id="$run_id_arg"
+else
+  run_id="$("$SCRIPT_DIR/run-manifest.sh" start --repo "$root")"
+fi
 commit="$(git -C "$root" rev-parse HEAD)"
 
 ast_grep() {
@@ -73,7 +84,9 @@ if ast_grep scan -c "$rules_dir/sgconfig.yml" --json=stream "$root" >"$tmp_evide
 else
   mv "$tmp_evidence" "$evidence_dir/ast-grep.jsonl" 2>/dev/null || true
   printf 'error: ast-grep scan failed; see %s\n' "$evidence_dir/ast-grep.stderr.log" >&2
-  "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status failed
+  if [ -z "$run_id_arg" ]; then
+    "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status failed
+  fi
   exit 1
 fi
 
@@ -109,5 +122,7 @@ if [ ! -s "$evidence_dir/ast-grep.jsonl" ]; then
   printf 'warning: no structural outline matches for %s (no supported sources?)\n' "$root" >&2
 fi
 
-"$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+if [ -z "$run_id_arg" ]; then
+  "$SCRIPT_DIR/run-manifest.sh" finish "$run_id" --status "$scan_status"
+fi
 printf 'scan-outline: %s\nrun_id: %s\nevidence: %s\n' "$scan_status" "$run_id" "$evidence_dir/ast-grep.jsonl"
