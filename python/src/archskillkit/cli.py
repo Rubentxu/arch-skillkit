@@ -19,6 +19,9 @@ from archskillkit.context import Budget, ContextCompiler
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.promotion import discover, review
+from archskillkit.projections.adapters.arrows import ArrowsAdapter
+from archskillkit.projections.adapters.likec4 import LikeC4Adapter
+from archskillkit.projections.writer import ProjectionError, project_to_workspace
 from archskillkit.world import ArchitectureWorld
 
 
@@ -72,6 +75,14 @@ def main(argv: list[str] | None = None) -> int:
     p_ctx.add_argument("--max-edges", type=int, default=None)
     p_ctx.add_argument("--max-lines", type=int, default=None)
 
+    p_proj = sub.add_parser("project",
+                            help="project the world to LikeC4/Arrows artifacts")
+    p_proj.add_argument("--repo", required=True)
+    p_proj.add_argument("--format", choices=["likec4", "arrows", "both"],
+                        default="both")
+    p_proj.add_argument("--force", action="store_true",
+                        help="overwrite a manually modified projection")
+
     args = parser.parse_args(argv)
 
     try:
@@ -100,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_review(world)
     if args.command == "context":
         return _cmd_context(world, args)
+    if args.command == "project":
+        return _cmd_project(world, args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -277,6 +290,27 @@ def _cmd_context(world: ArchitectureWorld, args: argparse.Namespace) -> int:
     finally:
         index.close()
     print(pack.model_dump_json())
+    return 0
+
+
+def _cmd_project(world: ArchitectureWorld, args: argparse.Namespace) -> int:
+    if not world.db_path.exists():
+        print(f"error: no Architecture World for {world.project_id} "
+              f"(run: archskillkit discover --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    adapters = {"likec4": LikeC4Adapter(), "arrows": ArrowsAdapter()}
+    targets = list(adapters) if args.format == "both" else [args.format]
+    results = []
+    with world:
+        for fmt in targets:
+            try:
+                results.append(project_to_workspace(
+                    world, adapters[fmt], force=args.force))
+            except ProjectionError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+    print(json.dumps({"projections": results}, indent=2))
     return 0
 
 

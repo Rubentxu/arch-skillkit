@@ -18,7 +18,8 @@ Format = Literal[
 
 
 class ProjectionContext(BaseModel):
-    """References, not duplicated state (docs/v2/27)."""
+    """References, not duplicated state (docs/v2/27). `snapshot` carries
+    the projected subgraph for adapters that render from a world view."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -28,6 +29,7 @@ class ProjectionContext(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     decisions: list[str] = Field(default_factory=list)
     annotations: dict[str, Any] = Field(default_factory=dict)
+    snapshot: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProjectionMetrics(BaseModel):

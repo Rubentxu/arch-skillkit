@@ -218,6 +218,53 @@ class TestContextCli:
         assert "no code.sqlite" in proc.stderr
 
 
+class TestProjectCli:
+    @staticmethod
+    def _seed_pipeline(repo, tmp_path, env):
+        assert run_cli("init", "--repo", str(repo), env=env).returncode == 0
+        astgrep = tmp_path / "outline.json"
+        astgrep.write_text(json.dumps({
+            "ruleId": "outline.kotlin.function", "text": "get_orders",
+            "file": "src/Orders.kt", "language": "Kotlin",
+            "range": {"start": {"line": 4, "column": 0}},
+            "lines": "fun get_orders() {}", "metaVariables": {"single": {}, "multi": {}},
+        }) + "\n")
+        semgrep = tmp_path / "patterns.json"
+        semgrep.write_text(json.dumps({"results": [{
+            "check_id": "spring.endpoint", "path": "src/Orders.kt",
+            "start": {"line": 5, "col": 1}, "end": {"line": 5, "col": 20},
+            "extra": {"message": "endpoint", "metavars": {}, "lines": ""},
+        }]}))
+        assert run_cli("ingest-code", "--repo", str(repo),
+                       "--astgrep", str(astgrep), "--semgrep", str(semgrep),
+                       "--run-id", "r1", env=env).returncode == 0
+        assert run_cli("discover", "--repo", str(repo),
+                       "--run-id", "r1", env=env).returncode == 0
+
+    def test_project_generates_both_artifacts(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        self._seed_pipeline(repo, tmp_path, env)
+        proc = run_cli("project", "--repo", str(repo), env=env)
+        assert proc.returncode == 0, proc.stderr
+        out = json.loads(proc.stdout)
+        formats = {p["format"] for p in out["projections"]}
+        assert formats == {"likec4", "arrows"}
+        for projection in out["projections"]:
+            assert Path(projection["path"]).is_file()
+            assert Path(projection["path"] + ".meta.json").is_file()
+        model = Path(out["projections"][0]["path"])
+        arrows = Path(out["projections"][1]["path"])
+        assert "specification {" in model.read_text()
+        assert json.loads(arrows.read_text())["schema"] == "arch-skillkit/arrows-v1"
+
+    def test_project_without_world_fails_cleanly(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        # no init: the repo has no Architecture World yet
+        proc = run_cli("project", "--repo", str(repo), env=env)
+        assert proc.returncode == 1
+        assert "no Architecture World" in proc.stderr
+
+
 def _sandbox_env(monkeypatch, tmp_path):
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",

@@ -10,6 +10,25 @@ fixes.
 
 ### Added
 
+- **V2 Phase E (M2-E1…E3) + V2.2 P1/P6 slice — world projections on the
+  common contract (`archskillkit.projections.adapters` + `writer`)**:
+  - M2-E1 LikeC4 projector: the Architecture World renders as a LikeC4
+    model mirroring the V1 golden template (validates by construction —
+    proven with the pinned likec4 in a BATS seam test); deterministic
+    and byte-identical on regeneration (UAT2-009).
+  - M2-E2 Arrows projector: world → `arch-skillkit/arrows-v1` document
+    with endpoint integrity, regeneration-equivalent (UAT2-010).
+  - Both adapters implement the Phase P0 `ProjectionAdapter` contract
+    and route through the deterministic router (V2.2 P-H3 normalization);
+    artifacts land in the existing `likec4/` and `arrows/` workspace
+    directories with a metadata sidecar carrying the source revision.
+  - Lifecycle slice (V2.2 P6): staleness detection against the world
+    content hash and manual-edit protection — modified projections are
+    not silently overwritten (UAT-P12) unless `--force`.
+  - M2-E3 consistency: adapter metrics must match the projected snapshot;
+    mismatches surface as result warnings.
+  - CLI `project` (--format likec4|arrows|both, --force); 18 new tests
+    (165 pytest total, 66 BATS).
 - **V2 Phase D (M2-D1…D4) — Context Compiler (`archskillkit.context`)**:
   budgeted ContextPacks instead of whole-graph dumps (docs/v2/06,
   design/schemas/context-pack.yaml):

@@ -70,3 +70,43 @@ JSON
   assert_rc "replay rc" 1 "$status"
   assert_output_contains "actionable error" "no Architecture World" "$output"
 }
+
+v2_pipeline_pid() {
+  SCRIPTS="$SCRIPTS" REPO="$SB/repo" bash -c '
+    source "$SCRIPTS/lib/common.sh"
+    root="$(repo_root "$REPO")"
+    remote="$(repo_remote "$root")"
+    compute_project_id "$root" "$remote"
+  '
+}
+
+@test "v2: LikeC4 projection of the world validates with the pinned likec4" {
+  fixture_repo "$SB/repo" "https://github.com/rubentxu/fixture.git"
+  run run_world init --repo "$SB/repo"
+  assert_rc "init rc" 0 "$status"
+
+  local outline="$SB/outline.json" patterns="$SB/patterns.json"
+  cat >"$outline" <<'JSON'
+{"ruleId":"outline.kotlin.function","text":"get_orders","file":"src/Orders.kt","language":"Kotlin","range":{"start":{"line":4,"column":0}},"lines":"fun get_orders() {}","metaVariables":{"single":{},"multi":{}}}
+JSON
+  cat >"$patterns" <<'JSON'
+{"results":[{"check_id":"spring.endpoint","path":"src/Orders.kt","start":{"line":5,"col":1},"end":{"line":5,"col":20},"extra":{"message":"endpoint","metavars":{},"lines":""}}]}
+JSON
+  run run_world ingest-code --repo "$SB/repo" --astgrep "$outline" --semgrep "$patterns" --run-id r1
+  assert_rc "ingest rc" 0 "$status"
+  run run_world discover --repo "$SB/repo" --run-id r1
+  assert_rc "discover rc" 0 "$status"
+  run run_world project --repo "$SB/repo"
+  assert_rc "project rc" 0 "$status"
+
+  local ws
+  ws="$SB/data/arch-skillkit/projects/$(v2_pipeline_pid)"
+  assert_file "generated LikeC4 model" "$ws/likec4/model.c4"
+  assert_file "generated Arrows document" "$ws/arrows/architecture.arrows"
+  assert_file "projection metadata sidecar" "$ws/likec4/model.c4.meta.json"
+
+  # the V1 validator (pinned likec4 via mise) accepts the V2 projection
+  run_workspace "$SB/repo" >/dev/null
+  run run_model_validate "$SB/repo"
+  assert_rc "likec4 validate rc" 0 "$status"
+}
