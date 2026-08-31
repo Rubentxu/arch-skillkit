@@ -349,22 +349,38 @@ jobs:
 
 # ArchSkillKit Integration
 
-- **Pinned toolchain**: run Semgrep through mise, never an ad-hoc install:
-  `mise exec -C skills/architecture-discovery/runtime -- semgrep scan ...`.
-- **Project rule pack**: the architecture rule pack lives at
-  `skills/architecture-discovery/rules/semgrep/` (Spring endpoints,
-  messaging, persistence, express endpoints, actix endpoints, reqwest
-  clients). Scan with `--metrics=off --quiet --no-rewrite-rule-ids`:
-  without `--no-rewrite-rule-ids` the OSS CLI prefixes check ids with the
-  config path, which breaks downstream tooling.
+The Python application is the canonical consumer of scans. Conventions
+that apply on top of everything above:
+
+## Python-first usage
+
+- **Scan through the pipeline, query the index afterwards**:
+
+  ```bash
+  python -m archskillkit ingest-code --repo . --semgrep results.json --run-id run-1
+  python -m archskillkit index-stats --repo .        # what got captured
+  python -m archskillkit discover --repo . --run-id run-1   # facts -> architecture
+  ```
+
+- **Extending detection to a new framework** is this skill's rule
+  workflow applied to the project pack:
+  1. write the rule test-first (`ruleid:` / `ok:` annotations) per
+     `references/workflow.md`,
+  2. add it to `skills/architecture-discovery/rules/semgrep/<lang>.yml`,
+     keeping ids in the `<framework>.<role>` family
+     (`endpoint`, `messaging.listener`, `persistence.repository`,
+     `http.client.*`) so the Code Index maps them to EXPOSES / CONSUMES
+     / USES edges,
+  3. re-run `ingest-code` + `discover` and confirm the new edges land
+     in the world (`review` must stay clean of missing-evidence
+     findings).
+- **Pinned toolchain**: `mise exec -C skills/architecture-discovery/runtime -- semgrep scan ...`.
+  Always pass `--metrics=off --quiet --no-rewrite-rule-ids`: without the
+  last flag the OSS CLI prefixes check ids with the config path and
+  downstream mapping breaks.
 - **Repository-clean invariant**: never write rules or results into the
-  analyzed repository; evidence goes to the external XDG workspace.
-- **Evidence format**: `semgrep scan --json` gives `results[]` with
-  `check_id`, `path`, 1-based `start.line` and `extra`. Note the OSS gate:
-  `extra.lines` may come back as "requires login" — do not rely on it;
-  resolve surrounding code through the Code Index instead. The V2 Code
-  Index ingests this payload directly (`python -m archskillkit
-  ingest-code --semgrep ...`).
-- The architecture pack rules are anchored to declarations (annotation +
-  declaration body shapes) because bare annotation patterns match random
-  identifiers in Kotlin — follow the same rule when extending it.
+  analyzed repository.
+- **OSS traps**: `extra.lines` may be `"requires login"` — never treat
+  it as source text; resolve context through the Code Index. Rules must
+  be anchored to declarations: bare annotation patterns match random
+  identifiers in Kotlin.

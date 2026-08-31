@@ -10,6 +10,13 @@ description: >
 
 # Architecture Discovery
 
+> **Orchestration**: if you are deciding HOW to approach a task (what to
+> run, in which order, what to load), start from the `arch-orchestrator`
+> skill — it routes tasks to phases, skills and commands with minimum
+> context. This skill is the deep pipeline reference it delegates to.
+> The V2 Python commands are catalogued in
+> `references/python-facade.md`.
+
 ## Non-negotiable rules
 
 1. Treat the source repository as read-only. Verify with `git status`

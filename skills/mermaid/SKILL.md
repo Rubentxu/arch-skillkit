@@ -85,17 +85,26 @@ flowchart TD
 
 ## ArchSkillKit Integration
 
-- **Reports**: `report.sh` embeds mermaid blocks in
+Diagrams here are fed by the architecture data the Python application
+already maintains — never by re-reading the whole repository:
+
+- **Source data**: get the graph as JSON first, then render:
+
+  ```bash
+  python -m archskillkit state --repo .        # full world snapshot
+  python -m archskillkit context --repo . --goal "overview" --subject orders
+  ```
+
+- **Reports**: `scripts/report.sh` embeds mermaid blocks in
   `reports/index.md` (GitHub renders them natively). When adding a
   diagram to a report, follow the Output Specification above and keep
   node ids sanitized (`[A-Za-z0-9_]+`) — raw ids break the renderer.
 - **Choosing between mermaid and the projection formats**: mermaid is
-  for embedded, human-scale diagrams in Markdown reports. For curated
+  for embedded, human-scale diagrams in Markdown. For curated
   architecture use LikeC4, for exploration Arrows, and for the V2.2
   projection formats (JSON Canvas / GraphML / draw.io) follow
-  `architecture-discovery/references/v2.2-projection-policy.md`.
-  `architecture-discovery/references/v2.2-visual-intent-examples.md`
-  routes a VisualIntent to the right format.
-- **Large graphs**: past a few hundred nodes, prefer GraphML (analysis
+  `architecture-discovery/references/v2.2-projection-policy.md`
+  (`python -m archskillkit project --repo .` generates the projections).
+- **Large graphs**: past a few hundred nodes prefer GraphML (analysis
   tools handle layout) over mermaid flowcharts — see
   `docs/v2/34-projection-routing-policy.md` thresholds.

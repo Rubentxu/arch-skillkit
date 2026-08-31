@@ -370,25 +370,40 @@ Load these references when detailed rule syntax information is needed.
 
 # ArchSkillKit Integration
 
-This skill ships with ArchSkillKit; a few project conventions apply on top
-of everything above:
+The Python application is the canonical consumer of everything this
+skill produces. A few project conventions apply on top of the workflow
+above:
 
-- **Pinned toolchain**: run ast-grep through mise, never a system install:
-  `mise exec -C skills/architecture-discovery/runtime -- ast-grep ...`
-  (the `arch_mise` helper in `scripts/lib/common.sh` does the isolation).
-- **Project rule pack**: the architecture rule pack lives at
-  `skills/architecture-discovery/rules/ast-grep/sgconfig.yml` (outline
-  rules for Rust/Kotlin/TypeScript). Scan with
-  `ast-grep scan -c <abs-path>/sgconfig.yml --json=stream <abs-repo-path>`.
-- **Repository-clean invariant**: scanning must never write into the
-  analyzed repository. Rule files live in the skill, not in the target
-  repo; evidence goes to the external XDG workspace
+## Python-first usage
+
+- **Do not parse raw output unless you are debugging a rule.** Run the
+  scan through the pipeline and query the Code Index instead:
+
+  ```bash
+  # scan + ingest in one deterministic run (writes to the XDG workspace)
+  python -m archskillkit ingest-code --repo . --astgrep evidence.json --run-id run-1
+  # then query facts without touching source
+  python -m archskillkit search-code --repo . "<symbol>"
+  python -m archskillkit context --repo . --goal "how does payments work" --subject getPayment
+  ```
+
+- **When you ARE authoring or debugging a rule** (this skill's core
+  workflow), iterate with the commands above, and once the rule works:
+  1. add it to the project rule pack at
+     `skills/architecture-discovery/rules/ast-grep/` (registered in
+     `sgconfig.yml`),
+  2. re-run `ingest-code` and verify the new symbols appear in
+     `index-stats`.
+- **Pinned toolchain**: run ast-grep through mise, never a system
+  install: `mise exec -C skills/architecture-discovery/runtime --
+  ast-grep ...` (the `arch_mise` helper isolates the environment).
+  Note `mise exec -C` changes the working directory — pass absolute
+  paths to the repo and config.
+- **Repository-clean invariant**: rule files live in the skill, never
+  in the analyzed repo; scan output goes to the external XDG workspace
   (`evidence/raw/ast-grep.jsonl`).
 - **Evidence format**: `--json=stream` emits one JSON object per match
   (`ruleId`, `text`, `file`, 0-based `range.start.line`, `lines`,
-  `metaVariables`). The V2 Code Index ingests that payload directly
-  (`python -m archskillkit ingest-code --astgrep ...`).
-- Gotchas we hit in practice: Kotlin's grammar exposes no `name` field
-  (anchor to declarations and use `stopBy: neighbor` on direct children);
-  `--inline-rules` accepts multi-document YAML separated by `---`;
-  `mise exec -C` changes the working directory, so pass absolute paths.
+  `metaVariables`). Gotchas we hit: Kotlin's grammar exposes no `name`
+  field (anchor to declarations, `stopBy: neighbor`); `--inline-rules`
+  accepts multi-document YAML separated by `---`.

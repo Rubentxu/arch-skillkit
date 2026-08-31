@@ -167,6 +167,9 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/scripts/workspace.sh`
 - `skills/architecture-discovery/templates/model.c4`
 - `skills/architecture-discovery/version.json`
+- `skills/arch-orchestrator/SKILL.md`
+- `skills/arch-orchestrator/references/task-recipes.md`
+- `skills/architecture-discovery/references/python-facade.md`
 - `skills/architecture-discovery/references/scanner-output-interpretation.md`
 - `skills/ast-grep/SKILL.md`
 - `skills/ast-grep/references/outline.md`
