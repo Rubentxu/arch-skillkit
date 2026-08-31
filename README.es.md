@@ -63,7 +63,7 @@ La solución detecta el proyecto, crea o reutiliza un workspace externo, ejecuta
 
 ## Estado
 
-**Phase 1 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). El resolver de workspace XDG externo, el project registry y el doctor están implementados como scripts thin-glue en [`skills/architecture-discovery/scripts/`](skills/architecture-discovery/scripts/), con cobertura UAT en [`tests/`](tests/). Lo siguiente es el scanning determinista (ast-grep, Semgrep, metadata de build) — ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
+**Phase 1 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). El resolver de workspace XDG externo, el project registry, el run manifest y el doctor están implementados como scripts thin-glue en [`skills/architecture-discovery/scripts/`](skills/architecture-discovery/scripts/), probados con BATS en [`tests/`](tests/). Lo siguiente es el scanning determinista (ast-grep, Semgrep, metadata de build) — ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
 
 ## Documentación
 

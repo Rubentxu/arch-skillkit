@@ -10,6 +10,19 @@ Una contribución debe preferir:
 4. script thin-glue;
 5. código propio sólo como última opción.
 
+## Probar scripts (BATS + TDD)
+
+Los scripts thin-glue se prueban con BATS:
+
+- suites en `tests/*.bats`, helpers compartidos en `tests/test_helper.bash`;
+- ejecutar la suite: `bats tests/`;
+- los tests cubren el **seam** del CLI de cada script: exit code, stdout y
+  efectos bajo las raíces XDG resueltas; el repositorio fuente debe quedar
+  intacto (UAT-001) y los tests no acceden a internos de los scripts;
+- desarrollo TDD: test nuevo primero (rojo), implementación mínima después
+  (verde), un slice vertical por ciclo; sin tests en lote previos a la
+  implementación.
+
 ## Añadir una regla Semgrep
 
 Debe incluir:

@@ -17,4 +17,4 @@
 
 ## Tooling
 
-Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Verify the environment with `scripts/doctor.sh` before starting.
+Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Step 6 opens a run with `scripts/run-manifest.sh start` and closes it with `finish --status success|partial|failed`. Verify the environment with `scripts/doctor.sh` before starting.

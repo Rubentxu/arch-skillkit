@@ -54,4 +54,5 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/references/workflow.md`
 - `skills/architecture-discovery/scripts/lib/common.sh`
 - `skills/architecture-discovery/scripts/doctor.sh`
+- `skills/architecture-discovery/scripts/run-manifest.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`

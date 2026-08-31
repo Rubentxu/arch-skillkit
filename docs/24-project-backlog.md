@@ -7,7 +7,7 @@
 - [x] Agent Skill skeleton
 - [x] XDG workspace resolver
 - [x] project registry
-- [ ] run manifest
+- [x] run manifest
 - [ ] mise toolchain
 - [ ] ast-grep baseline
 - [ ] Semgrep rule pack

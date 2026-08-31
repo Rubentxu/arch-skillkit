@@ -26,18 +26,24 @@ jobs:
 
       - name: Lint shell scripts
         run: |
-          (cd skills/architecture-discovery/scripts && shellcheck -x workspace.sh doctor.sh lib/common.sh)
-          shellcheck tests/run-tests.sh
+          (cd skills/architecture-discovery/scripts && shellcheck -x workspace.sh doctor.sh run-manifest.sh lib/common.sh)
+          shellcheck tests/test_helper.bash
+          shellcheck --shell=bash tests/*.bats
 
       - name: Check MANIFEST.md sync
         run: bash scripts/check-manifest.sh
 
-  workspace-tests:
-    name: Workspace UAT (M1.1)
+  bats:
+    name: BATS suite (scripts)
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Run UAT harness
-        run: bash tests/run-tests.sh
+      - name: Install bats-core (pinned)
+        run: |
+          git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core "$HOME/.bats-core"
+          echo "$HOME/.bats-core/bin" >> "$GITHUB_PATH"
+
+      - name: Run BATS suite
+        run: bats tests/
