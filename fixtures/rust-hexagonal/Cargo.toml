@@ -1,0 +1,7 @@
+[package]
+name = "rust-hexagonal"
+version = "0.1.0"
+edition = "2021"
+description = "Fixture: hexagonal-ish Rust crate with known outline symbols"
+
+[dependencies]

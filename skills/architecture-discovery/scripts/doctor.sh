@@ -60,6 +60,20 @@ check_pipeline() {
   fi
 }
 
+show_optional_build_tools() {
+  # Per-project tools (docs/06): their absence never fails the doctor; the
+  # build metadata scan degrades to partial when a project needs them.
+  local t
+  printf 'optional build tools (per project):\n'
+  for t in cargo npm gradle maven; do
+    if command -v "$t" >/dev/null 2>&1; then
+      printf '  [ok]      %-10s %s\n' "$t" "$(command -v "$t")"
+    else
+      printf '  [pending] %-10s needed only for repositories using that build system\n' "$t"
+    fi
+  done
+}
+
 show_roots() {
   local data_root
   data_root="$(arch_data_root)"
@@ -109,6 +123,7 @@ show_current_project() {
 printf 'ArchSkillKit doctor\n'
 check_required
 check_pipeline
+show_optional_build_tools
 show_roots
 show_current_project
 

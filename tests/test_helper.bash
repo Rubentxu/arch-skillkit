@@ -65,6 +65,34 @@ run_patterns() {
   )
 }
 
+# Runs scan-build.sh inside the sandbox; extra args are forwarded.
+run_build() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      "$SCRIPTS/scan-build.sh" "$@"
+  )
+}
+
+# Runs scan-build.sh with a PATH stripped of build tools (cargo/npm/gradle
+# live in ~/.cargo/bin and asdf shims) while git/jq/mise remain available.
+run_build_restricted() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      PATH="/usr/sbin:/usr/bin:/bin:$HOME/.local/bin" \
+      "$SCRIPTS/scan-build.sh" "$@"
+  )
+}
+
 # Runs doctor.sh inside the sandbox. $1: optional PATH for the child process
 # (simulates missing dependencies deterministically). bash is resolved
 # up-front because the child PATH may not contain it.

@@ -69,6 +69,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/scripts/lib/common.sh`
 - `skills/architecture-discovery/scripts/doctor.sh`
 - `skills/architecture-discovery/scripts/run-manifest.sh`
+- `skills/architecture-discovery/scripts/scan-build.sh`
 - `skills/architecture-discovery/scripts/scan-outline.sh`
 - `skills/architecture-discovery/scripts/scan-patterns.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`

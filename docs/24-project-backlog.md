@@ -11,7 +11,7 @@
 - [x] mise toolchain
 - [x] ast-grep baseline
 - [x] Semgrep rule pack
-- [ ] Rust build metadata
+- [x] Rust build metadata
 - [ ] discovery prompt
 - [ ] modeler prompt
 - [ ] reviewer prompt
