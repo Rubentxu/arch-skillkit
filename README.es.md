@@ -87,6 +87,26 @@ git clone https://github.com/Rubentxu/arch-skillkit.git ~/.arch-skillkit
 
 Actualizar = repetir el comando de instalación; desinstalar elimina sólo la Skill — los workspaces y datos bajo tus directorios XDG se conservan salvo que los borres explícitamente. El primer uso en un repositorio requiere `mise install -C <skill>/runtime` (el doctor te lo indica).
 
+## V2 — Evolución ActiveGraph (roadmap activo)
+
+El pipeline V1 (workspace + scanners deterministas + LikeC4/Arrows) es el
+baseline entregado. La evolución activa del producto es la **V2**: la capa
+propia pasa a **Python + ActiveGraph**, con un modelo de dos grafos:
+
+- **Evidence Graph** (`code.sqlite`) — hechos de código deterministas y
+  regenerables a partir de ast-grep, Semgrep, metadata de build y SCIP opcional.
+- **Architecture World** (event log de ActiveGraph) — fuente de verdad
+  auditable de observaciones, claims, elementos arquitectónicos, decisiones,
+  findings y propuestas; fork/diff permite proponer arquitecturas alternativas
+  sin tocar el estado aceptado.
+
+LikeC4 y Arrows pasan a ser **proyecciones** del Architecture World, y un
+Context Compiler alimenta a los agentes con contexto presupuestado y enlazado
+a evidencia en lugar de navegación cruda del fuente. La regla dorada no
+cambia: no se escribe nunca nada dentro del repositorio analizado. Ver el
+[resumen V2](docs/v2/00-v2-summary.md), el [roadmap V2](docs/v2/16-roadmap-v2.md)
+y los ADR-0013…0025.
+
 ## Estado
 
 **Phase 5 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Entregado hasta ahora, todo como scripts thin-glue probados con BATS en [`tests/`](tests/): workspace XDG externo + registry, run manifest, doctor, el pipeline de scanning determinista (outline con ast-grep, patrones arquitectónicos con Semgrep, metadata de build) con orquestación por repositorio, validación del modelo LikeC4 con plantilla dorada, y proyecciones de grafos Arrows derivadas de la evidencia. Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
@@ -105,6 +125,7 @@ Orden de lectura recomendado:
 8. [Roadmap](docs/17-roadmap.md)
 9. [Catálogo de UATs](docs/19-uat.md)
 10. [ADRs](docs/adr/README.md)
+11. [Resumen V2 — evolución ActiveGraph](docs/v2/00-v2-summary.md)
 
 El conjunto completo de documentos está listado en el [manifest](MANIFEST.md).
 

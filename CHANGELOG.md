@@ -10,12 +10,37 @@ fixes.
 
 ### Added
 
+- **V2 design package — ActiveGraph evolution** (mergeable spec over V1,
+  kept as the active roadmap; V1 remains the baseline):
+  - `docs/v2/` — full V2 specification (two-graph model: regenerable
+    `code.sqlite` Evidence Graph + event-sourced ActiveGraph Architecture
+    World; Context Compiler; reactive behaviors; drift; fork/diff; UAT and
+    spike catalogs; Python-only technology policy).
+  - ADR-0013…0025: Python + ActiveGraph as the V2 runtime, Event Log as
+    source of truth, LikeC4/Arrows as projections, SQLite code index,
+    Context Compiler as central capability, drift before LLM, ActiveGraph
+    encapsulated behind the domain, and the definitive Python-only stack
+    (ADR-0023 explicitly Rejected — no own Go line).
+  - `design/` — initial pack definitions (arch-core, arch-model, arch-code,
+    arch-projections) and YAML schemas (observation, architecture-claim,
+    context-pack).
+  - Skill references `v2-activegraph-workflow.md` and
+    `v2-reasoning-policy.md`, plus a V2 roadmap pointer in `SKILL.md`.
 - `report.sh`: organized per-project report (`reports/index.md`) with
   evidence summary, mermaid diagrams derived from the arrows-v1 views
   (render natively on GitHub), LikeC4 model validation status and the
   commands to explore the model live (`--serve`).
 - `projects.sh`: registry index listing every registered project with its
   latest run outcome.
+
+### Changed
+
+- ADR-0005 marked **Superseded by ADR-0015 and ADR-0016** — it remains the
+  valid baseline for the V1 pipeline; in V2 the LikeC4 canonical model
+  becomes a projection of the Architecture World.
+- README(s) and `docs/17-roadmap.md` now present V1 as the shipped baseline
+  and V2 as the active evolution; the V1 specification is preserved
+  unchanged (no history rewrites).
 
 ## [0.1.0] - 2026-08-31
 

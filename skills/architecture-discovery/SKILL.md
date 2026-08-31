@@ -40,3 +40,13 @@ Read `references/modeling-policy.md`.
 ## Evidence policy
 
 Read `references/evidence-policy.md`.
+
+## V2 roadmap (ActiveGraph)
+
+The V2 evolution replaces the canonical LikeC4 model with an event-sourced
+Architecture World (ActiveGraph) plus a deterministic Code Index (SQLite);
+LikeC4 and Arrows become projections. The V1 workflow above remains the
+baseline. For the V2 pipeline and reasoning policy read:
+
+- `references/v2-activegraph-workflow.md`
+- `references/v2-reasoning-policy.md`

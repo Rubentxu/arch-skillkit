@@ -1,0 +1,16 @@
+schema_version: 1
+goal: ""
+summary: ""
+architecture:
+  elements: []
+  relations: []
+code:
+  symbols: []
+  paths: []
+evidence: []
+source_snippets: []
+uncertainties: []
+budget:
+  max_nodes: 50
+  max_edges: 100
+  max_source_lines: 200

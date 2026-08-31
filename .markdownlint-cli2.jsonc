@@ -1,6 +1,6 @@
 {
   "globs": ["**/*.md"],
-  "ignores": ["**/node_modules/**"],
+  "ignores": ["**/node_modules/**", "arch-skillkit-v2.1-activegraph-python-only/**"],
   "config": {
     "MD013": false,
     "MD024": { "siblings_only": true },

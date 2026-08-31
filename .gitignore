@@ -12,3 +12,7 @@ node_modules/
 
 # Local scratch
 tmp/
+
+# V2 design package (local drop, merged into docs/v2 + docs/adr + design/)
+arch-skillkit-v2.1-activegraph-python-only/
+arch-skillkit-v2.1-activegraph-python-only.zip

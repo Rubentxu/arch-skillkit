@@ -1,0 +1,14 @@
+schema_version: 1
+type: observation
+origin: DETECTED
+confidence: high
+subject: ""
+predicate: ""
+object: ""
+evidence:
+  tool: ""
+  rule: ""
+  file: ""
+  start_line: null
+  end_line: null
+  commit: ""

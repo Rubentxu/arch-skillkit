@@ -91,6 +91,25 @@ installed Skill — workspaces and data under your XDG directories are kept
 unless you delete them explicitly. First run in a repository requires
 `mise install -C <skill>/runtime` (the doctor tells you).
 
+## V2 — ActiveGraph evolution (active roadmap)
+
+The V1 pipeline (workspace + deterministic scanners + LikeC4/Arrows) is the
+shipped baseline. The product's active evolution is **V2**: the own-code layer
+moves to **Python + ActiveGraph**, introducing a two-graph model:
+
+- **Evidence Graph** (`code.sqlite`) — deterministic, regenerable code facts
+  from ast-grep, Semgrep, build metadata and optional SCIP.
+- **Architecture World** (ActiveGraph event log) — the auditable source of
+  truth for observations, claims, architecture elements, decisions, findings
+  and proposals; fork/diff enables architectural proposals without touching
+  the accepted state.
+
+LikeC4 and Arrows become **projections** of the Architecture World, and a
+Context Compiler feeds agents budgeted, evidence-linked context instead of
+raw source browsing. The golden rule does not change: nothing is ever
+written into the analyzed repository. See the [V2 summary](docs/v2/00-v2-summary.md),
+the [V2 roadmap](docs/v2/16-roadmap-v2.md) and ADR-0013…0025.
+
 ## Status
 
 **Phase 5 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). Delivered so far, all as thin-glue scripts tested with BATS in [`tests/`](tests/): external XDG workspace + registry, run manifest, doctor, the deterministic scanning pipeline (ast-grep outline, Semgrep architecture patterns, build metadata) with per-repository orchestration, LikeC4 model validation with a golden template, and evidence-derived Arrows graph projections. See the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
@@ -109,6 +128,7 @@ Recommended reading order (the documentation is currently written in Spanish; En
 8. [Roadmap](docs/17-roadmap.md)
 9. [UAT catalog](docs/19-uat.md)
 10. [Architecture Decision Records](docs/adr/README.md)
+11. [V2 summary — ActiveGraph evolution](docs/v2/00-v2-summary.md)
 
 The full document set is listed in the [manifest](MANIFEST.md).
 

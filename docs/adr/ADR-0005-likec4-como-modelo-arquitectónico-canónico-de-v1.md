@@ -1,7 +1,12 @@
 # ADR-0005: LikeC4 como modelo arquitectónico canónico de V1
 
-- Status: Accepted
+- Status: Superseded by ADR-0015 and ADR-0016 (V2)
 - Date: 2026-08-31
+
+> V2 desplaza a LikeC4 de modelo canónico a proyección: el EventStore de
+> ActiveGraph pasa a ser la fuente de verdad arquitectónica y LikeC4 se
+> regenera desde Architecture World. Esta decisión sigue siendo el baseline
+> válido de la pipeline V1 (ver `docs/17-roadmap.md`).
 
 ## Context
 
