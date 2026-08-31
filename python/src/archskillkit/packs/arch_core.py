@@ -83,6 +83,24 @@ class ScanRunData(BaseModel):
     tools: dict[str, str] = Field(default_factory=dict)
 
 
+class FindingData(BaseModel):
+    """A deterministic reviewer finding (docs/v2/04, M2-C4)."""
+
+    kind: Literal["unsupported_claim", "contradiction", "missing_evidence",
+                  "stale_evidence"]
+    severity: Confidence = "medium"
+    target_id: str = ""
+    detail: str = ""
+
+
+class ReviewData(BaseModel):
+    """One reviewer pass over the world (M2-C4)."""
+
+    reviewed_at: str = ""
+    summary: str = ""
+    findings_count: int = 0
+
+
 def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] = (),
               description: str = "") -> RelationType:
     return RelationType(name=name, source_types=source, target_types=target,
@@ -91,6 +109,7 @@ def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] =
 
 ARCH_CORE_OBJECT_TYPES = (
     "project", "scan_run", "observation", "evidence", "claim",
+    "finding", "review",
 )
 
 # design/packs/arch-core.md relation inventory. Endpoints are pinned only
@@ -103,8 +122,8 @@ ARCH_CORE_RELATION_TYPES = (
 
 pack = Pack(
     name="arch_core",
-    version="0.1.0",
-    description="ArchSkillKit core ontology: evidence, observations and claims.",
+    version="0.2.0",
+    description="ArchSkillKit core ontology: evidence, observations, claims and findings.",
     object_types=(
         ObjectType(name="project", schema=ProjectData,
                    description="The analyzed repository."),
@@ -116,6 +135,10 @@ pack = Pack(
                    description="Provenance backing an observation or claim."),
         ObjectType(name="claim", schema=ClaimData,
                    description="An architectural statement awaiting review."),
+        ObjectType(name="finding", schema=FindingData,
+                   description="A deterministic reviewer finding."),
+        ObjectType(name="review", schema=ReviewData,
+                   description="One reviewer pass over the world."),
     ),
     relation_types=(
         _relation("evidenced_by", source=("claim",), target=("evidence",),

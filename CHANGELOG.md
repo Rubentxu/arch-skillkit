@@ -10,6 +10,31 @@ fixes.
 
 ### Added
 
+- **V2 Phase C (M2-C1…C4) — Evidence → Architecture
+  (`archskillkit.promotion`)**: the deterministic promotion pipeline from
+  the Code Index into the Architecture World, i.e. the vertical slice of
+  docs/v2/23 (scan edge → Observation → Claim → ArchitectureElement):
+  - M2-C1 `ingest_scan`: every evidence edge becomes an Observation
+    backed by an Evidence object; idempotent on the provenance tuples.
+  - M2-C2 claim lifecycle: one traceable claim per observation
+    (`derived_from` + evidence refs); deterministic evaluation links
+    same-subject/predicate-different-object contradictions and never
+    promotes them (UAT2-006); DETECTED/high claims auto-accept with
+    resolvable evidence, INFERRED claims require explicit `accept_claim`
+    which refuses unevidenced or contradicted claims.
+  - M2-C3 `realize_architecture`: accepted claims map to
+    architecture elements (component/external_system/topic/datastore per
+    docs/v2/04 categories) and typed relations (exposes/consumes/
+    depends_on…) carrying their evidence ids — UAT2-005 holds by
+    construction; idempotent.
+  - M2-C4 `review`: deterministic reviewer persisting `finding` objects
+    (unsupported_claim, contradiction, missing_evidence) plus an
+    append-only `review` audit object.
+  - New `arch-model` pack (architecture elements + 8 typed relations);
+    `arch-core` pack gains finding/review types (v0.2.0).
+  - CLI `discover` and `review`; 22 new tests (126 total) including the
+    end-to-end slice over the real Kotlin scan with replay verification
+    after every mutation.
 - **V2 Phase B (M2-B1…B4) — Code Index (`archskillkit.codeindex`)**: the
   deterministic, regenerable `code.sqlite` Evidence Graph per project
   (docs/v2/05):

@@ -26,6 +26,7 @@ from archskillkit.packs.arch_core import (
     ProjectData,
     pack,
 )
+from archskillkit.packs.arch_model import pack as arch_model_pack
 
 WORKSPACE_SUBDIRS = ("evidence", "knowledge", "likec4", "arrows", "reports", "exports")
 
@@ -41,6 +42,10 @@ class ReplayReport:
     objects: int
     relations: int
     events: int
+
+
+class PromotionError(Exception):
+    """A promotion precondition failed (claim lifecycle, M2-C2)."""
 
 
 class ArchitectureWorld:
@@ -82,7 +87,9 @@ class ArchitectureWorld:
             runtime = Runtime.load(url, run_id=self.RUN_ID)
         else:
             runtime = Runtime(Graph(run_id=self.RUN_ID), persist_to=url)
-        runtime.load_pack(pack)  # schema validation must hold in every session
+        # Schema validation must hold in every session — load every pack.
+        runtime.load_pack(pack)
+        runtime.load_pack(arch_model_pack)
         self._runtime, self._graph = runtime, runtime.graph
         return self
 
@@ -130,6 +137,73 @@ class ArchitectureWorld:
 
     def link_evidenced_by(self, claim_id: str, evidence_id: str) -> str:
         return self.graph.add_relation(claim_id, evidence_id, "evidenced_by", {}).id
+
+    # ---- domain queries (used by the promotion services) ---------------
+
+    def find_objects(self, obj_type: str, **data_match) -> list[dict]:
+        """Objects of a type whose data contains every given key=value."""
+        out = []
+        for obj in self.graph.objects(type=obj_type):
+            if all(obj.data.get(k) == v for k, v in data_match.items()):
+                out.append({"id": obj.id, "type": obj.type, "data": obj.data})
+        return out
+
+    def get_object(self, object_id: str) -> dict:
+        obj = self.graph.get_object(object_id)
+        if obj is None:
+            raise KeyError(object_id)
+        return {"id": obj.id, "type": obj.type, "data": obj.data}
+
+    def accept_claim(self, claim_id: str, actor: str = "user") -> None:
+        """Explicit acceptance (M2-C2): refused for claims without evidence
+        or with unresolved contradictions — never silent."""
+        claim = self.get_object(claim_id)
+        if claim["type"] != "claim":
+            raise PromotionError(f"{claim_id} is not a claim")
+        status = claim["data"].get("status")
+        if status == "accepted":
+            return
+        if status == "contradicted":
+            raise PromotionError(
+                f"claim {claim_id} is contradicted; resolve the conflict first")
+        if not claim["data"].get("evidence_refs"):
+            raise PromotionError(
+                f"claim {claim_id} has no evidence references")
+        self.graph.patch_object(claim_id, {"status": "accepted"}, actor=actor)
+
+    def add_architecture_element(self, name: str, kind: str,
+                                 origin: str = "DETECTED",
+                                 confidence: str = "high") -> str:
+        """Idempotent by (name, kind) — returns the element id."""
+        existing = self.find_objects("architecture_element", name=name)
+        if existing:
+            return existing[0]["id"]
+        return self.graph.add_object("architecture_element", {
+            "name": name, "kind": kind, "origin": origin,
+            "confidence": confidence, "summary": "",
+        }).id
+
+    def add_architecture_relation(self, kind: str, source_id: str,
+                                  target_id: str,
+                                  data: dict | None = None) -> str:
+        """Idempotent by (kind, source, target) — returns the edge id."""
+        for rel in self.graph.relations(source=source_id, target=target_id):
+            if rel.type == kind:
+                return rel.id
+        return self.graph.add_relation(
+            source_id, target_id, kind, data or {}).id
+
+    def architecture_relations(self) -> list[dict]:
+        """Typed edges whose two endpoints are architecture elements —
+        the domain-level view of ArchitectureRelation (docs/v2/04)."""
+        elements = {o["id"] for o in self.find_objects("architecture_element")}
+        out = []
+        for rel in self.graph.relations():
+            if rel.source in elements and rel.target in elements:
+                out.append({"id": rel.id, "kind": rel.type,
+                            "source": rel.source, "target": rel.target,
+                            "data": rel.data})
+        return out
 
     # ---- reads --------------------------------------------------------
 

@@ -32,8 +32,10 @@ class TestPackShape:
         assert len(rel_names) == len(set(rel_names))
 
     def test_core_object_types_declared(self):
+        # M2-A2 core five + M2-C4 reviewer types (finding, review)
         assert ARCH_CORE_OBJECT_TYPES == (
             "project", "scan_run", "observation", "evidence", "claim",
+            "finding", "review",
         )
 
     def test_core_relations_declared(self):

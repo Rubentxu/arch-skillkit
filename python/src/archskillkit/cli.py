@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from archskillkit.codeindex import CodeIndex, IngestError
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
+from archskillkit.promotion import discover, review
 from archskillkit.world import ArchitectureWorld
 
 
@@ -52,6 +53,15 @@ def main(argv: list[str] | None = None) -> int:
     p_search.add_argument("--repo", required=True)
     p_search.add_argument("query")
 
+    p_discover = sub.add_parser(
+        "discover", help="full promotion pipeline: scan run → architecture")
+    p_discover.add_argument("--repo", required=True)
+    p_discover.add_argument("--run-id", required=True)
+
+    p_review = sub.add_parser("review",
+                              help="deterministic review of the world")
+    p_review.add_argument("--repo", required=True)
+
     args = parser.parse_args(argv)
 
     try:
@@ -74,6 +84,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_index_stats(world)
     if args.command == "search-code":
         return _cmd_search_code(world, args.query)
+    if args.command == "discover":
+        return _cmd_discover(world, args.run_id)
+    if args.command == "review":
+        return _cmd_review(world)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -194,6 +208,36 @@ def _cmd_search_code(world: ArchitectureWorld, query: str) -> int:
         return 1
     with CodeIndex(db) as index:
         print(json.dumps(index.search_symbol(query), indent=2))
+    return 0
+
+
+def _require_code_index(world: ArchitectureWorld) -> CodeIndex | None:
+    db = world.workspace / "code.sqlite"
+    if not db.exists():
+        print(f"error: no code.sqlite for {world.project_id} "
+              f"(run: archskillkit ingest-code --repo {world.root or '.'})",
+              file=sys.stderr)
+        return None
+    return CodeIndex(db).open()
+
+
+def _cmd_discover(world: ArchitectureWorld, run_id: str) -> int:
+    index = _require_code_index(world)
+    if index is None:
+        return 1
+    try:
+        with world:
+            report = discover(world, index, run_id)
+    finally:
+        index.close()
+    print(json.dumps(report.as_dict(), indent=2))
+    return 0
+
+
+def _cmd_review(world: ArchitectureWorld) -> int:
+    with world:
+        result = review(world)
+    print(json.dumps(result, indent=2))
     return 0
 
 

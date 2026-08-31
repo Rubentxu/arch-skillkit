@@ -463,6 +463,29 @@ class CodeIndex:
         self._rebuild_fts()
         self._db.commit()
 
+    def edges_of_run(self, scan_run_id: str) -> list[dict]:
+        """All edges of a scan run with symbol/file context — the input
+        the promotion services (M2-C1) turn into observations."""
+        rows = self._db.execute(
+            """
+            SELECT e.kind AS kind, e.rule AS rule,
+                   ss.id AS source_id, ss.name AS source_name,
+                   ss.start_line AS source_start_line,
+                   sf.path AS source_path, ss.qualified_name AS source_qualified,
+                   st.id AS target_id, st.name AS target_name,
+                   st.kind AS target_kind,
+                   tf.path AS target_path, st.qualified_name AS target_qualified
+            FROM edges e
+            JOIN symbols ss ON ss.id = e.source_id
+            JOIN symbols st ON st.id = e.target_id
+            JOIN files sf ON sf.id = ss.file_id
+            JOIN files tf ON tf.id = st.file_id
+            WHERE e.scan_run_id = ?
+            ORDER BY e.id
+            """,
+            (scan_run_id,)).fetchall()
+        return [dict(r) for r in rows]
+
     # ---- internals ------------------------------------------------------
 
     def _relpath(self, path: str, scan_root: str | Path) -> str:

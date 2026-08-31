@@ -125,6 +125,58 @@ class TestCodeIndexCli:
         assert proc.returncode == 2
 
 
+class TestPromotionCli:
+    def test_discover_and_review_roundtrip(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        assert run_cli("init", "--repo", str(repo), env=env).returncode == 0
+
+        astgrep = tmp_path / "outline.json"
+        astgrep.write_text(json.dumps({
+            "ruleId": "outline.kotlin.function", "text": "get_orders",
+            "file": "src/Orders.kt", "language": "Kotlin",
+            "range": {"start": {"line": 4, "column": 0}},
+            "lines": "fun get_orders() {}", "metaVariables": {"single": {}, "multi": {}},
+        }) + "\n")
+        semgrep = tmp_path / "patterns.json"
+        semgrep.write_text(json.dumps({"results": [{
+            "check_id": "spring.endpoint", "path": "src/Orders.kt",
+            "start": {"line": 5, "col": 1}, "end": {"line": 5, "col": 20},
+            "extra": {"message": "endpoint", "metavars": {}, "lines": ""},
+        }]}))
+        assert run_cli("ingest-code", "--repo", str(repo),
+                       "--astgrep", str(astgrep), "--semgrep", str(semgrep),
+                       "--run-id", "r1", env=env).returncode == 0
+
+        before = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain"],
+            capture_output=True, text=True).stdout
+
+        proc = run_cli("discover", "--repo", str(repo), "--run-id", "r1", env=env)
+        assert proc.returncode == 0, proc.stderr
+        report = json.loads(proc.stdout)
+        assert report["observations"] == 1
+        assert report["claims_accepted"] == 1
+        assert report["elements"] == 2  # component + external_system
+        assert report["relations"] == 1
+        assert report["findings"] == 0
+
+        proc = run_cli("review", "--repo", str(repo), env=env)
+        assert proc.returncode == 0, proc.stderr
+        assert json.loads(proc.stdout)["findings"] == []
+
+        after = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain"],
+            capture_output=True, text=True).stdout
+        assert after == before  # UAT-001 through the whole pipeline
+
+    def test_discover_without_code_index_fails_cleanly(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        assert run_cli("init", "--repo", str(repo), env=env).returncode == 0
+        proc = run_cli("discover", "--repo", str(repo), "--run-id", "r1", env=env)
+        assert proc.returncode == 1
+        assert "no code.sqlite" in proc.stderr
+
+
 def _sandbox_env(monkeypatch, tmp_path):
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",
