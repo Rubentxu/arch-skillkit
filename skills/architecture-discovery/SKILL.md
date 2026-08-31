@@ -1,31 +1,78 @@
 ---
 name: architecture-discovery
 description: >
-  Discover, model and review software architecture without modifying the source
-  repository. Prefer deterministic evidence from ast-grep, Semgrep and build
-  metadata; generate LikeC4 as the canonical architecture model and Arrows as
-  exploratory graph views. Store all generated assets in an external XDG workspace.
+  Discover, model and review software architecture without modifying the
+  source repository. Prefer deterministic evidence from ast-grep, Semgrep
+  and build metadata; generate LikeC4 as the canonical architecture model
+  and Arrows as exploratory graph views. Store all generated assets in an
+  external XDG workspace.
 ---
 
 # Architecture Discovery
 
 ## Non-negotiable rules
 
-1. Treat the source repository as read-only.
-2. Never create ArchSkillKit assets inside the repository.
-3. Prefer deterministic scanners before opening source files with the LLM.
-4. Classify knowledge as DETECTED, INFERRED or DECLARED.
-5. Do not promote low-confidence inferences into the canonical LikeC4 model.
-6. Preserve evidence and provenance.
-7. Use targeted reads only to resolve ambiguity.
-8. Review the final model for unsupported relationships.
-9. Confirm the repository working tree is unchanged.
+1. Treat the source repository as read-only. Verify with `git status`
+   before and after any work: it must be identical (UAT-001).
+2. Never create ArchSkillKit assets inside the repository — everything
+   goes to the external XDG workspace resolved by the scripts.
+3. Prefer deterministic scanners before opening source files with the
+   LLM. Every source read must target a location already resolved by a
+   scanner or the Code Index (UAT2-008).
+4. Classify knowledge as DETECTED, INFERRED or DECLARED, with
+   high | medium | low confidence.
+5. Do not promote low-confidence or contradicted claims into the
+   architecture — contradictions block silent promotion (UAT2-006).
+6. Preserve evidence and provenance: automatic high-confidence
+   relations must carry evidence links (UAT2-005).
+7. Review the final model for unsupported relationships before handing
+   it over.
 
 ## Workflow
 
-Read `references/workflow.md`.
+Run the pipeline through the scripts; each step degrades gracefully
+with actionable errors.
 
-## Roles
+1. **Resolve the workspace**: `scripts/workspace.sh --repo <path>` —
+   detects the repo, computes the stable project id, registers it.
+2. **Check the environment**: `scripts/doctor.sh` — git, jq, mise and
+   the pinned scanners; it tells you exactly what to run on first use
+   (`mise install -C skills/architecture-discovery/runtime`).
+3. **Scan** (deterministic, no LLM): `scripts/scan.sh --repo <path>`
+   runs ast-grep outline, Semgrep patterns and build metadata in one
+   run manifest. Read `references/scanning.md` for per-scanner details.
+4. **Interpret**: read `references/scanner-output-interpretation.md` to
+   map raw payloads to meaning. Query facts without re-scanning or
+   reading source: `search-code`, `index-stats`, `context`.
+5. **Discover** (V2): `python -m archskillkit discover --repo <path>
+   --run-id <run>` turns scan edges into Observations, Claims and the
+   architecture graph. Read `references/discovery.md`.
+6. **Review** (deterministic): `python -m archskillkit review` and
+   `python -m archskillkit drift` surface unsupported claims,
+   contradictions, missing evidence and boundary drift with no LLM.
+7. **Model and project**: generate LikeC4 + Arrows with
+   `python -m archskillkit project --repo <path>` (validated against
+   the pinned likec4), or follow `references/likec4.md` /
+   `references/arrows.md` for the V1 flow.
+8. **Report**: `scripts/report.sh --repo <path>` builds
+   `reports/index.md` with evidence summary and mermaid diagrams; add
+   hand-crafted diagrams with the `mermaid` skill.
+
+## Skills this toolkit composes with
+
+Read these when the task goes beyond the scripts:
+
+- **`ast-grep` skill** — writing structural code queries and rule
+  debugging (`--debug-query`, `stopBy`, metavariables). Use when the
+  rule pack misses a pattern for a backend framework.
+- **`semgrep` skill** — running scans and authoring detection rules
+  (taint mode, pattern operators, test-first rule workflow). Use when
+  extending the architecture pack to new frameworks.
+- **`mermaid` skill** — embedded diagrams for reports with official
+  syntax references for 23+ diagram types. Use for human-scale
+  diagrams; for curated architecture prefer LikeC4.
+
+## Role routing
 
 - Scanner — run the deterministic pipeline: read `references/scanning.md`.
 - Discovery — interpret evidence into an inventory: read `references/discovery.md`.
@@ -33,13 +80,12 @@ Read `references/workflow.md`.
 - Arrows — derive exploratory graph views: read `references/arrows.md`.
 - Review — audit claims, evidence and repository cleanliness: read `references/review.md`.
 
-## Architecture policy
+## Policies
 
-Read `references/modeling-policy.md`.
-
-## Evidence policy
-
-Read `references/evidence-policy.md`.
+- Architecture policy: read `references/modeling-policy.md`.
+- Evidence policy: read `references/evidence-policy.md`.
+- Scanner output formats and traps: read
+  `references/scanner-output-interpretation.md`.
 
 ## V2 roadmap (ActiveGraph)
 
