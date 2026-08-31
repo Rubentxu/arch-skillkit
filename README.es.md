@@ -63,7 +63,7 @@ La solución detecta el proyecto, crea o reutiliza un workspace externo, ejecuta
 
 ## Estado
 
-**Phase 2 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Phase 1 entregó el workspace XDG externo, el project registry, el run manifest y el doctor como scripts thin-glue. Phase 2 arranca el scanning determinista: el outline estructural con ast-grep (Rust, Kotlin/Java, TypeScript) se ejecuta desde un toolchain pineado con mise y produce evidencia raw — sin LLM. Los scripts están probados con BATS en [`tests/`](tests/). Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
+**Phase 5 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Entregado hasta ahora, todo como scripts thin-glue probados con BATS en [`tests/`](tests/): workspace XDG externo + registry, run manifest, doctor, el pipeline de scanning determinista (outline con ast-grep, patrones arquitectónicos con Semgrep, metadata de build) con orquestación por repositorio, validación del modelo LikeC4 con plantilla dorada, y proyecciones de grafos Arrows derivadas de la evidencia. Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
 
 ## Documentación
 

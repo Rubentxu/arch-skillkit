@@ -16,7 +16,7 @@
 - [x] modeler prompt
 - [x] reviewer prompt
 - [x] LikeC4 validation
-- [ ] Arrows basic generation
+- [x] Arrows basic generation
 - [x] repository-clean UAT
 - [x] fixtures
 - [ ] release workflow

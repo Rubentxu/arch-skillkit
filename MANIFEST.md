@@ -49,6 +49,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `examples/project.json`
 - `examples/run-manifest.json`
 - `skills/architecture-discovery/SKILL.md`
+- `skills/architecture-discovery/references/arrows.md`
 - `skills/architecture-discovery/references/discovery.md`
 - `skills/architecture-discovery/references/evidence-policy.md`
 - `skills/architecture-discovery/references/likec4.md`
@@ -72,6 +73,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/runtime/mise.toml`
 - `skills/architecture-discovery/scripts/lib/common.sh`
 - `skills/architecture-discovery/scripts/doctor.sh`
+- `skills/architecture-discovery/scripts/export-arrows.sh`
 - `skills/architecture-discovery/scripts/model-validate.sh`
 - `skills/architecture-discovery/scripts/run-manifest.sh`
 - `skills/architecture-discovery/scripts/scan-build.sh`

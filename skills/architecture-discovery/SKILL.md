@@ -29,6 +29,8 @@ Read `references/workflow.md`.
 
 - Scanner — run the deterministic pipeline: read `references/scanning.md`.
 - Discovery — interpret evidence into an inventory: read `references/discovery.md`.
+- Modeler — keep the LikeC4 model valid and conservative: read `references/likec4.md`.
+- Arrows — derive exploratory graph views: read `references/arrows.md`.
 - Review — audit claims, evidence and repository cleanliness: read `references/review.md`.
 
 ## Architecture policy
