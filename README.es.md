@@ -61,6 +61,32 @@ cd /path/to/repository
 
 La solución detecta el proyecto, crea o reutiliza un workspace externo, ejecuta scanners deterministas, genera un evidence bundle, hace inferencia arquitectónica con agentes, genera/actualiza LikeC4, genera vistas Arrows, revisa contradicciones y alucinaciones, y deja el `git status` del repositorio fuente intacto.
 
+## Instalación
+
+La Skill se instala a nivel de usuario y se reutiliza desde cualquier repositorio — nunca se instala nada dentro del proyecto analizado.
+
+**Canal A — GitHub CLI skills** (cuando esté disponible en tu agente):
+
+```bash
+gh skill install Rubentxu/arch-skillkit architecture-discovery --scope user
+```
+
+**Canal B — skills.sh**:
+
+```bash
+npx skills add Rubentxu/arch-skillkit -g
+```
+
+**Canal C — git clone (fallback siempre disponible)**:
+
+```bash
+git clone https://github.com/Rubentxu/arch-skillkit.git ~/.arch-skillkit
+# expón ~/.arch-skillkit/skills/architecture-discovery a tu agente como
+# directorio de skill (la mayoría aceptan una ruta de skills o un symlink)
+```
+
+Actualizar = repetir el comando de instalación; desinstalar elimina sólo la Skill — los workspaces y datos bajo tus directorios XDG se conservan salvo que los borres explícitamente. El primer uso en un repositorio requiere `mise install -C <skill>/runtime` (el doctor te lo indica).
+
 ## Estado
 
 **Phase 5 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Entregado hasta ahora, todo como scripts thin-glue probados con BATS en [`tests/`](tests/): workspace XDG externo + registry, run manifest, doctor, el pipeline de scanning determinista (outline con ast-grep, patrones arquitectónicos con Semgrep, metadata de build) con orquestación por repositorio, validación del modelo LikeC4 con plantilla dorada, y proyecciones de grafos Arrows derivadas de la evidencia. Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).

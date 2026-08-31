@@ -41,6 +41,15 @@ register_project() {
   [ -n "$(jq -r .ended_at "$manifest")" ]
 }
 
+@test "start: skill version is sourced from the skill version.json" {
+  register_project
+  local run_id manifest declared
+  declared="$(jq -r .skill_version "$SCRIPTS/../version.json")"
+  run_id="$(run_manifest start --repo "$SB/repo")"
+  manifest="$SB/state/arch-skillkit/runs/$run_id/manifest.json"
+  assert_eq "skill version from version.json" "$declared" "$(jq -r .skill_version "$manifest")"
+}
+
 @test "finish: unknown run id is rejected with an actionable message" {
   run run_manifest finish "20990101T000000Z-999999" --status success
   assert_rc "unknown run id fails" 1 "$status"

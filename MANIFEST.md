@@ -4,6 +4,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 
 - `README.md`
 - `README.es.md`
+- `CHANGELOG.md`
 - `MANIFEST.md`
 - `LICENSE.es.md`
 - `docs/00-vision.md`
@@ -82,3 +83,4 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/scripts/scan.sh`
 - `skills/architecture-discovery/scripts/workspace.sh`
 - `skills/architecture-discovery/templates/model.c4`
+- `skills/architecture-discovery/version.json`

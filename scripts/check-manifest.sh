@@ -22,7 +22,7 @@ done <<< "$listed"
 actual="$(
   {
     find docs skills examples -type f
-    printf '%s\n' README.md README.es.md MANIFEST.md LICENSE.es.md
+    printf '%s\n' README.md README.es.md MANIFEST.md LICENSE.es.md CHANGELOG.md
   } | sort
 )"
 

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "skill_version": "0.1.0",
+  "workspace_schema": 1,
+  "toolchain": {
+    "ast-grep": "0.45.2",
+    "semgrep": "1.175.0",
+    "likec4": "1.59.2"
+  }
+}

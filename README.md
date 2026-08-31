@@ -61,6 +61,36 @@ cd /path/to/repository
 
 The solution detects the project, creates or reuses an external workspace, runs deterministic scanners, produces an evidence bundle, infers the architecture with agents, generates/updates LikeC4, generates Arrows views, reviews contradictions and hallucinations, and leaves the source repository's `git status` untouched.
 
+## Install
+
+The Skill installs at user level and is reused from any repository — nothing
+is ever installed inside the project being analyzed.
+
+**Channel A — GitHub CLI skills** (when available in your agent):
+
+```bash
+gh skill install Rubentxu/arch-skillkit architecture-discovery --scope user
+```
+
+**Channel B — skills.sh**:
+
+```bash
+npx skills add Rubentxu/arch-skillkit -g
+```
+
+**Channel C — git clone (always available fallback)**:
+
+```bash
+git clone https://github.com/Rubentxu/arch-skillkit.git ~/.arch-skillkit
+# expose ~/.arch-skillkit/skills/architecture-discovery to your agent as a
+# skill directory (most agents accept a skills path or a symlink)
+```
+
+Update by re-running the install command; uninstall removes only the
+installed Skill — workspaces and data under your XDG directories are kept
+unless you delete them explicitly. First run in a repository requires
+`mise install -C <skill>/runtime` (the doctor tells you).
+
 ## Status
 
 **Phase 5 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). Delivered so far, all as thin-glue scripts tested with BATS in [`tests/`](tests/): external XDG workspace + registry, run manifest, doctor, the deterministic scanning pipeline (ast-grep outline, Semgrep architecture patterns, build metadata) with per-repository orchestration, LikeC4 model validation with a golden template, and evidence-derived Arrows graph projections. See the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).

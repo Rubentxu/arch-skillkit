@@ -59,6 +59,17 @@ case "$cmd" in
     manifest_dir="$(arch_state_root)/runs/$run_id"
     mkdir -p "$manifest_dir"
 
+    # Skill version contract (docs/10): declared in version.json, overridable
+    # via ARCH_SKILLKIT_SKILL_VERSION; fallback for development checkouts.
+    skill_version="${ARCH_SKILLKIT_SKILL_VERSION:-}"
+    if [ -z "$skill_version" ]; then
+      version_file="$(cd "$SCRIPT_DIR/.." && pwd)/version.json"
+      if [ -f "$version_file" ]; then
+        skill_version="$(jq -r .skill_version "$version_file")"
+      fi
+    fi
+    skill_version="${skill_version:-0.0.0-dev}"
+
     tool_version() { # <cmd...>
       if command -v "$1" >/dev/null 2>&1; then
         "$@" 2>/dev/null | head -n 1
@@ -72,7 +83,7 @@ case "$cmd" in
       --arg run_id "$run_id" \
       --arg pid "$pid" \
       --arg commit "$(git -C "$root" rev-parse HEAD)" \
-      --arg skill_version "${ARCH_SKILLKIT_SKILL_VERSION:-0.0.0-dev}" \
+      --arg skill_version "$skill_version" \
       --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --arg git_v "$(tool_version git --version)" \
       --arg jq_v "$(tool_version jq --version)" \

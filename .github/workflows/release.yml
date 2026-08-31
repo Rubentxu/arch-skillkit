@@ -1,0 +1,102 @@
+name: release
+
+# Publishes a GitHub release when a v* tag is pushed. Validation must pass
+# first; the tag must agree with the declared skill version and the pinned
+# toolchain (supply chain, docs/05 and docs/15).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate before release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Lint Markdown
+        run: npx -y markdownlint-cli2
+
+      - name: Lint shell scripts
+        run: |
+          (cd skills/architecture-discovery/scripts && shellcheck -x *.sh lib/common.sh)
+          shellcheck tests/test_helper.bash
+          shellcheck --shell=bash tests/*.bats
+
+      - name: Check MANIFEST.md sync
+        run: bash scripts/check-manifest.sh
+
+      - name: Install mise (pinned)
+        run: |
+          curl -fsSL https://mise.run | MISE_VERSION=v2026.8.6 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned toolchain
+        run: |
+          mise trust skills/architecture-discovery/runtime/mise.toml
+          mise install -C skills/architecture-discovery/runtime
+
+      - name: Install bats-core (pinned)
+        run: |
+          git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core "$HOME/.bats-core"
+          echo "$HOME/.bats-core/bin" >> "$GITHUB_PATH"
+
+      - name: Run BATS suite
+        run: bats tests/
+
+  release:
+    name: Publish release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches the declared skill version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          declared="$(jq -r .skill_version skills/architecture-discovery/version.json)"
+          if [ "$version" != "$declared" ]; then
+            echo "ERROR: tag v$version does not match version.json skill_version $declared"
+            exit 1
+          fi
+
+      - name: Verify toolchain matrix matches mise.toml
+        run: |
+          for tool in ast-grep semgrep likec4; do
+            pinned="$(jq -r --arg t "$tool" '.toolchain[$t]' skills/architecture-discovery/version.json)"
+            if ! grep -q "\"[^\"]*$tool[^\"]*\" = \"$pinned\"" skills/architecture-discovery/runtime/mise.toml; then
+              echo "ERROR: $tool $pinned (version.json) not pinned in mise.toml"
+              exit 1
+            fi
+          done
+
+      - name: Build release artifacts
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          tar -czf "dist/arch-skillkit-${version}.tar.gz" \
+            README.md README.es.md LICENSE LICENSE.es.md CHANGELOG.md MANIFEST.md \
+            .markdownlint-cli2.jsonc docs skills examples scripts tests
+          sha256sum dist/arch-skillkit-"${version}".tar.gz > dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$(awk -v ver="[$version]" 'index($0, "## " ver) {flag=1; next} /^## /{flag=0} flag' CHANGELOG.md)"
+          [ -n "$notes" ] || notes="Release v$version — see CHANGELOG.md."
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "arch-skillkit v$version" \
+            --notes "$notes"
