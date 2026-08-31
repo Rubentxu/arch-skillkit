@@ -10,6 +10,14 @@ fixes.
 
 ### Added
 
+- **V2.2 Phase P0 — projection foundation (`archskillkit.projections`)**:
+  `VisualIntent` schema (8 intent types, docs/v2/26), `ProjectionAdapter`
+  protocol with `ProjectionContext`/`ProjectionResult` (results always
+  carry their source snapshot), projection metadata + lifecycle states
+  (requested…superseded, stale/manual-edit flags) and the deterministic
+  `ProjectionRouter` with per-intent preference table and compatible
+  user override (P0 exit: one intent routes deterministically; 22 new
+  tests).
 - **V2.2 design package — Projection Applications** (extends the V2
   projection layer without touching V2.1 decisions; spec docs 24–43 in
   `docs/v2/` plus the V2.1/V2.2 spec changelogs alongside them):
