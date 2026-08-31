@@ -33,12 +33,41 @@ jobs:
       - name: Check MANIFEST.md sync
         run: bash scripts/check-manifest.sh
 
+  python:
+    name: pytest suite (V2 domain core)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.14"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package (editable) with dev dependencies
+        run: pip install -e 'python/[dev]'
+
+      - name: Run pytest
+        run: pytest python/tests -q
+
   bats:
-    name: BATS suite (scripts)
+    name: BATS suite (scripts + V2 seam)
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install archskillkit (for the V2 seam tests)
+        run: pip install -e python/
 
       - name: Install mise (pinned)
         run: |

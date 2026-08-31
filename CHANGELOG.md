@@ -10,6 +10,26 @@ fixes.
 
 ### Added
 
+- **V2 Phase A (M2-A1…A3) — Python domain core (`python/`)**: the
+  `archskillkit` package (requires-python >= 3.11, dependency: ActiveGraph
+  >= 1.10) delivers the first three V2 milestones:
+  - M2-A1 package skeleton with pyproject, console script and the
+    `arch-core` pack entry point.
+  - M2-A2 domain ontology as the `arch-core` ActiveGraph pack — object
+    types `project`, `scan_run`, `observation`, `evidence`, `claim` with
+    schemas faithful to `design/schemas/*.yaml`, plus the seven arch-core
+    relation types (endpoints pinned where the design pins them).
+  - M2-A3 event-sourced Architecture World per project
+    (`<workspace>/activegraph.sqlite`): mutations are events, state is a
+    pure projection, `replay-verify` proves the log reproduces current
+    state (H2-1, UAT2-004); project isolation via per-project stores
+    (UAT2-018); repository stays untouched (UAT-001).
+  - Identity/path resolution ported 1:1 from the V1 bash helpers —
+    bash and Python resolve the same project id (locked by cross-language
+    parity tests).
+  - Facade CLI `python -m archskillkit init|record-observation|state|replay-verify`.
+  - Test infrastructure: 40 pytest tests (matrix 3.12/3.14) and 4 BATS
+    seam tests sharing the existing XDG sandbox helpers.
 - **V2 design package — ActiveGraph evolution** (mergeable spec over V1,
   kept as the active roadmap; V1 remains the baseline):
   - `docs/v2/` — full V2 specification (two-graph model: regenerable

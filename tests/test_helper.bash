@@ -141,6 +141,19 @@ run_projects() {
   )
 }
 
+# Runs the V2 Python facade (python -m archskillkit) inside the sandbox.
+# ARCHSKILLKIT_PYTHON overrides the interpreter (dev venv, CI python).
+ARCHSKILLKIT_PYTHON="${ARCHSKILLKIT_PYTHON:-python3}"
+run_world() {
+  (
+    cd "$SB" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      "$ARCHSKILLKIT_PYTHON" -m archskillkit "$@"
+  )
+}
+
 # Runs scan-build.sh with a PATH stripped of build tools (cargo/npm/gradle
 # live in ~/.cargo/bin and asdf shims) while git/jq/mise remain available.
 run_build_restricted() {
