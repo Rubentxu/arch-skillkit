@@ -63,7 +63,7 @@ The solution detects the project, creates or reuses an external workspace, runs 
 
 ## Status
 
-**Phase 1 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). The external XDG workspace resolver, project registry, run manifest and doctor are implemented as thin-glue scripts under [`skills/architecture-discovery/scripts/`](skills/architecture-discovery/scripts/), tested with BATS in [`tests/`](tests/). Deterministic scanning (ast-grep, Semgrep, build metadata) comes next — see the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
+**Phase 2 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). Phase 1 delivered the external XDG workspace, project registry, run manifest and doctor as thin-glue scripts. Phase 2 starts deterministic scanning: the ast-grep structural outline (Rust, Kotlin/Java, TypeScript) runs from a pinned mise toolchain and produces raw evidence — no LLM involved. Scripts are tested with BATS in [`tests/`](tests/). See the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
 
 ## Documentation
 

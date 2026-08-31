@@ -1,0 +1,8 @@
+id: outline.rust.function
+language: Rust
+rule:
+  kind: identifier
+  inside:
+    kind: function_item
+    field: name
+    stopBy: end

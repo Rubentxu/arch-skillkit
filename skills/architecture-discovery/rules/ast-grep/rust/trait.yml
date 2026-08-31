@@ -1,0 +1,7 @@
+id: outline.rust.trait
+language: Rust
+rule:
+  kind: type_identifier
+  inside:
+    kind: trait_item
+    field: name

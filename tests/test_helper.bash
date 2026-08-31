@@ -39,6 +39,19 @@ run_manifest() {
   )
 }
 
+# Runs scan-outline.sh inside the sandbox; extra args are forwarded.
+run_scan() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir" || exit 9
+    XDG_CONFIG_HOME="$SB/config" XDG_DATA_HOME="$SB/data" \
+      XDG_STATE_HOME="$SB/state" XDG_CACHE_HOME="$SB/cache" \
+      ARCH_SKILLKIT_HOME="${SB_OVERRIDE:-}" \
+      "$SCRIPTS/scan-outline.sh" "$@"
+  )
+}
+
 # Runs doctor.sh inside the sandbox. $1: optional PATH for the child process
 # (simulates missing dependencies deterministically). bash is resolved
 # up-front because the child PATH may not contain it.

@@ -5,6 +5,7 @@
 #
 # Usage: run-manifest.sh start [--repo <path>]
 #        run-manifest.sh finish <run_id> --status <success|partial|failed>
+#        run-manifest.sh record <run_id> [--scanner <name>] [--tool <key>=<version>]
 set -euo pipefail
 SCRIPT_DIR="${BASH_SOURCE[0]%/*}"
 [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR=.
@@ -135,6 +136,61 @@ case "$cmd" in
     tmp="$(mktemp "$(dirname "$manifest")/.manifest.XXXXXX")"
     jq --arg status "$status_value" --arg ended_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       '.status = $status | .ended_at = $ended_at' "$manifest" >"$tmp"
+    mv "$tmp" "$manifest"
+    ;;
+  record)
+    run_id="${1:-}"
+    shift || true
+    [ -n "$run_id" ] || { usage >&2; exit 2; }
+    scanners=()
+    tools=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --scanner)
+          [ $# -ge 2 ] || { printf 'error: --scanner needs a value\n' >&2; exit 2; }
+          scanners+=("$2")
+          shift 2
+          ;;
+        --tool)
+          [ $# -ge 2 ] || { printf 'error: --tool needs a value\n' >&2; exit 2; }
+          tools+=("$2")
+          shift 2
+          ;;
+        *)
+          printf 'error: unknown option: %s\n' "$1" >&2
+          usage >&2
+          exit 2
+          ;;
+      esac
+    done
+
+    manifest="$(arch_state_root)/runs/$run_id/manifest.json"
+    if [ ! -f "$manifest" ]; then
+      printf 'error: unknown run id: %s\n' "$run_id" >&2
+      exit 1
+    fi
+
+    jq_args=()
+    jq_filter="."
+    for s in "${scanners[@]:-}"; do
+      [ -n "$s" ] || continue
+      jq_args+=(--arg s "$s")
+      jq_filter="$jq_filter | .scanners = (if (.scanners | index(\$s)) then .scanners else .scanners + [\$s] end)"
+    done
+    for t in "${tools[@]:-}"; do
+      [ -n "$t" ] || continue
+      case "$t" in
+        *=*) ;;
+        *) printf 'error: invalid --tool: %s (expected key=version)\n' "$t" >&2; exit 2 ;;
+      esac
+      key="${t%%=*}"
+      version="${t#*=}"
+      jq_args+=(--arg "k_$key" "$key" --arg "v_$key" "$version")
+      jq_filter="$jq_filter | .tools[\$k_${key}] = \$v_${key}"
+    done
+
+    tmp="$(mktemp "$(dirname "$manifest")/.manifest.XXXXXX")"
+    jq "${jq_args[@]}" "$jq_filter" "$manifest" >"$tmp"
     mv "$tmp" "$manifest"
     ;;
   *)

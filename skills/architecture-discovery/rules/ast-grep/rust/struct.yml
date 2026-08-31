@@ -1,0 +1,7 @@
+id: outline.rust.struct
+language: Rust
+rule:
+  kind: type_identifier
+  inside:
+    kind: struct_item
+    field: name

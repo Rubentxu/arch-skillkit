@@ -1,0 +1,8 @@
+# ast-grep project config for the architecture-discovery skill.
+# Paths are relative to this file. The target repository never gets its own
+# ast-grep config (repository-clean, ADR-0001): we point ast-grep here with
+# `ast-grep scan -c <this file>`.
+ruleDirs:
+  - rust
+  - typescript
+  - kotlin

@@ -1,0 +1,7 @@
+# Pinned toolchain for the architecture-discovery skill (docs/06, ADR-0009).
+# Versions are tested as a set: bump deliberately and re-run the BATS suite.
+# Semgrep lands with M2.2 and LikeC4 with M4 — not before their milestones
+# (ADR-0012: no anticipar complejidad).
+
+[tools]
+"github:ast-grep/ast-grep" = "0.45.2"

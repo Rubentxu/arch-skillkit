@@ -15,6 +15,8 @@ strict=0
 [ "${1:-}" = "--strict" ] && strict=1
 
 fail=0
+skill_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
+runtime_dir="$skill_dir/runtime"
 
 check_required() {
   local t
@@ -30,15 +32,31 @@ check_required() {
 }
 
 check_pipeline() {
-  local t missing
-  printf 'pipeline scanners (Phase 2+):\n'
-  for t in ast-grep semgrep likec4; do
+  local t missing scanner_ok
+  printf 'scanners:\n'
+
+  # ast-grep is required since M2.1: on PATH or in the skill runtime.
+  scanner_ok=0
+  if command -v ast-grep >/dev/null 2>&1; then
+    printf '  [ok]      %-10s %s (PATH)\n' "ast-grep" "$(command -v ast-grep)"
+    scanner_ok=1
+  elif arch_mise "$runtime_dir" ast-grep --version >/dev/null 2>&1; then
+    printf '  [ok]      %-10s %s (skill runtime)\n' "ast-grep" "$(arch_mise "$runtime_dir" ast-grep --version)"
+    scanner_ok=1
+  fi
+  if [ "$scanner_ok" -eq 0 ]; then
+    printf '  [MISSING] %-10s required; install with: mise install -C %s\n' "ast-grep" "$runtime_dir"
+    fail=1
+  fi
+
+  printf 'upcoming scanners (not required yet):\n'
+  for t in semgrep likec4; do
     missing=1
     if command -v "$t" >/dev/null 2>&1; then
       printf '  [ok]      %-10s %s\n' "$t" "$(command -v "$t")"
       missing=0
     else
-      printf '  [missing] %-10s not needed until Phase 2; install via mise when starting it\n' "$t"
+      printf '  [pending] %-10s lands with its own milestone (M2.2 / M4)\n' "$t"
     fi
     if [ "$strict" -eq 1 ] && [ "$missing" -eq 1 ]; then
       fail=1

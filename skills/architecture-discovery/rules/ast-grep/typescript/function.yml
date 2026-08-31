@@ -1,0 +1,7 @@
+id: outline.typescript.function
+language: TypeScript
+rule:
+  kind: identifier
+  inside:
+    kind: function_declaration
+    field: name

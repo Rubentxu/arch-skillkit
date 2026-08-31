@@ -1,0 +1,7 @@
+id: outline.typescript.class
+language: TypeScript
+rule:
+  kind: type_identifier
+  inside:
+    kind: class_declaration
+    field: name

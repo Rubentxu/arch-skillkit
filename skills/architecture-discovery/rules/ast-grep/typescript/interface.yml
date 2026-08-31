@@ -1,0 +1,7 @@
+id: outline.typescript.interface
+language: TypeScript
+rule:
+  kind: type_identifier
+  inside:
+    kind: interface_declaration
+    field: name

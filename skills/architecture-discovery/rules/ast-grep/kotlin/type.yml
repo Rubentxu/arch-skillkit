@@ -1,0 +1,11 @@
+# tree-sitter-kotlin has no `name` field on class_declaration and models
+# interface declarations as class_declaration: the class name is the only
+# direct-child type_identifier. Classes, data classes and interfaces all
+# surface as outline.kotlin.type.
+id: outline.kotlin.type
+language: Kotlin
+rule:
+  kind: type_identifier
+  inside:
+    kind: class_declaration
+    stopBy: neighbor

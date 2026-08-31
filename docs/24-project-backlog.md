@@ -8,8 +8,8 @@
 - [x] XDG workspace resolver
 - [x] project registry
 - [x] run manifest
-- [ ] mise toolchain
-- [ ] ast-grep baseline
+- [x] mise toolchain
+- [x] ast-grep baseline
 - [ ] Semgrep rule pack
 - [ ] Rust build metadata
 - [ ] discovery prompt

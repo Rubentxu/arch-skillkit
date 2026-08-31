@@ -1,0 +1,7 @@
+id: outline.rust.enum
+language: Rust
+rule:
+  kind: type_identifier
+  inside:
+    kind: enum_item
+    field: name

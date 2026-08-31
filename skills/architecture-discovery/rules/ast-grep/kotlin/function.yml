@@ -1,0 +1,9 @@
+# The function name is a bare simple_identifier direct child of
+# function_declaration (no `name` field in tree-sitter-kotlin).
+id: outline.kotlin.function
+language: Kotlin
+rule:
+  kind: simple_identifier
+  inside:
+    kind: function_declaration
+    stopBy: neighbor

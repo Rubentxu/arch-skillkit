@@ -32,6 +32,25 @@ arch_registry_file() {
   printf '%s\n' "$(arch_state_root)/registry.json"
 }
 
+arch_mise() {
+  # Runs a tool from the skill runtime through mise, isolated from the
+  # surrounding environment:
+  # - XDG_* are dropped: mise 2026 gives XDG_DATA_HOME precedence over
+  #   MISE_DATA_HOME, so a sandboxed XDG (tests, CI) would make mise believe
+  #   nothing is installed and re-download the world;
+  # - MISE_CONFIG_DIR points at an empty config dir so the user's global
+  #   config (~/.tool-versions, ~/.config/mise) is not merged into resolution.
+  # $1: runtime dir with mise.toml; rest: command and args.
+  local runtime_dir="$1"
+  shift
+  local cfg_dir
+  cfg_dir="$(arch_cache_root)/mise-config"
+  mkdir -p "$cfg_dir"
+  env -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME \
+    MISE_CONFIG_DIR="$cfg_dir" \
+    mise exec -C "$runtime_dir" -- "$@"
+}
+
 require_tools() {
   local t missing=0
   for t in "$@"; do

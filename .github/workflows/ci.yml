@@ -40,10 +40,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install bats-core (pinned)
+      - name: Install mise (pinned)
         run: |
-          git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core "$HOME/.bats-core"
-          echo "$HOME/.bats-core/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://mise.run | MISE_VERSION=v2026.8.6 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned toolchain
+        run: |
+          mise trust skills/architecture-discovery/runtime/mise.toml
+          mise install -C skills/architecture-discovery/runtime
 
       - name: Run BATS suite
         run: bats tests/
