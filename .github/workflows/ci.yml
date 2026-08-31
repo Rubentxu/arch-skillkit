@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint docs and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Lint Markdown
+        run: npx -y markdownlint-cli2
+
+      - name: Lint shell scripts
+        run: |
+          cd skills/architecture-discovery/scripts
+          shellcheck -x workspace.sh doctor.sh lib/common.sh
+          cd ../../../..
+          shellcheck tests/run-tests.sh
+
+      - name: Check MANIFEST.md sync
+        run: bash scripts/check-manifest.sh
+
+  workspace-tests:
+    name: Workspace UAT (M1.1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run UAT harness
+        run: bash tests/run-tests.sh

@@ -2,11 +2,11 @@
 
 ## Must
 
-- [ ] Public repository skeleton
-- [ ] LICENSE
-- [ ] Agent Skill skeleton
-- [ ] XDG workspace resolver
-- [ ] project registry
+- [x] Public repository skeleton
+- [x] LICENSE
+- [x] Agent Skill skeleton
+- [x] XDG workspace resolver
+- [x] project registry
 - [ ] run manifest
 - [ ] mise toolchain
 - [ ] ast-grep baseline
@@ -17,8 +17,8 @@
 - [ ] reviewer prompt
 - [ ] LikeC4 validation
 - [ ] Arrows basic generation
-- [ ] repository-clean UAT
-- [ ] fixtures
+- [x] repository-clean UAT
+- [x] fixtures
 - [ ] release workflow
 
 ## Should

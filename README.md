@@ -2,7 +2,7 @@
 
 > ArchSkillKit is a working name. The final public name may change without affecting the architecture.
 
-[![docs](https://github.com/Rubentxu/arch-skillkit/actions/workflows/docs.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/docs.yml)
+[![ci](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml)
 
 **English** | [Español](README.es.md)
 
@@ -63,7 +63,7 @@ The solution detects the project, creates or reuses an external workspace, runs 
 
 ## Status
 
-**Design phase.** This repository currently contains the complete V1 design specification: product documentation, ADRs, the initial Agent Skill and schema examples. Implementation of the first milestones (Phase 0/1) is starting — see the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
+**Phase 1 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). The external XDG workspace resolver, project registry and doctor are implemented as thin-glue scripts under [`skills/architecture-discovery/scripts/`](skills/architecture-discovery/scripts/) with UAT coverage in [`tests/`](tests/). Deterministic scanning (ast-grep, Semgrep, build metadata) comes next — see the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
 
 ## Documentation
 

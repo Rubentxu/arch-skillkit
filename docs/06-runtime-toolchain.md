@@ -25,6 +25,7 @@ Evitar que cada repositorio de usuario tenga que declarar:
 Requerido:
 
 - git;
+- jq (glue JSON para registry y metadata de proyecto);
 - mise;
 - ast-grep;
 - Semgrep;

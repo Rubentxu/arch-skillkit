@@ -14,3 +14,7 @@
 12. Validate LikeC4.
 13. Compare final Git status with initial status.
 14. Write report and unresolved assumptions.
+
+## Tooling
+
+Steps 1–2 are automated by `scripts/workspace.sh` (repository detection, project identity, external workspace, registry). Verify the environment with `scripts/doctor.sh` before starting.
