@@ -6,6 +6,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `README.es.md`
 - `CHANGELOG.md`
 - `MANIFEST.md`
+- `mise.toml`
 - `LICENSE.es.md`
 - `docs/00-vision.md`
 - `docs/01-goals-non-goals.md`
@@ -32,6 +33,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/22-contributing.md`
 - `docs/23-implementation-spec-v1.md`
 - `docs/24-project-backlog.md`
+- `python/uv.lock`
 - `docs/adr/README.md`
 - `docs/adr/ADR-0001-mantener-el-repositorio-fuente-read-only.md`
 - `docs/adr/ADR-0002-usar-xdg-para-datos,-estado,-configuración-y-caché.md`
@@ -89,6 +91,7 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/v2/21-migration-from-v1.md`
 - `docs/v2/22-activegraph-validation-notes.md`
 - `docs/v2/23-implementation-sequence.md`
+- `docs/v2/24-distribution-and-installation.md`
 - `docs/v2/24-v2.2-summary.md`
 - `docs/v2/25-projection-architecture.md`
 - `docs/v2/26-visual-intent-spec.md`
@@ -111,6 +114,17 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/v2/43-merge-notes-v2.2.md`
 - `docs/v2/CHANGELOG-V2.1.md`
 - `docs/v2/CHANGELOG-V2.2.md`
+- `docs/v2/STATUS.md`
+- `docs/manual/user-manual.md`
+- `docs/manual/manual-de-usuario.md`
+- `docs/manual/cheat-sheet.md`
+- `docs/manual/cheat-sheet.es.md`
+- `docs/v2/uat/README.md`
+- `docs/v2/uat/evidence-manifest.template.yaml`
+- `docs/v2/uat/report.template.yaml`
+- `docs/v2/uat/session.template.yaml`
+- `docs/v2/uat/v2.1-plan.yaml`
+- `docs/v2/uat/v2.1-sessions.not-run.yaml`
 - `design/projections/projection-result.yaml`
 - `design/projections/visual-intent.yaml`
 - `design/schemas/projection-metadata.yaml`
@@ -217,4 +231,5 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/semgrep/SKILL.md`
 - `skills/semgrep/references/quick-reference.md`
 - `skills/semgrep/references/workflow.md`
+- `tests/operations.bats`
 - `ATTRIBUTION.md`

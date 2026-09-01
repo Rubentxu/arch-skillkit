@@ -3,6 +3,7 @@
   "ignores": [
     "**/node_modules/**",
     ".venv/**",
+    "python/.venv/**",
     "arch-skillkit-v2.1-activegraph-python-only/**",
     "arch-skillkit-v2.2-projection-applications/**",
     "skills/mermaid/references/**"

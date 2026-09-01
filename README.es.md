@@ -2,11 +2,25 @@
 
 > ArchSkillKit es un nombre de trabajo. El nombre público definitivo puede cambiar sin afectar a la arquitectura.
 
-[![ci](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml)
+[![release](https://github.com/Rubentxu/arch-skillkit/actions/workflows/release.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/release.yml)
 
 [English](README.md) | **Español**
 
 ArchSkillKit es una propuesta **agent-first, tool-first y repository-clean** para descubrir, revisar y visualizar arquitectura de software con ayuda de herramientas deterministas y LLMs, generando modelos LikeC4 y grafos Arrows **sin introducir ni un solo fichero en el repositorio analizado**.
+
+## TL;DR
+
+```bash
+uv tool install archskillkit==0.2.0   # instala la app
+archskillkit setup                    # instala el runtime pineado (ast-grep, Semgrep, Node/LikeC4)
+archskillkit doctor                   # verifica → "ready"
+archskillkit init --repo .            # empieza a analizar un repositorio
+```
+
+Guía completa: [manual de usuario](docs/manual/manual-de-usuario.md) ·
+referencia de una página: [hoja de referencia](docs/manual/cheat-sheet.es.md)
+(English: [user manual](docs/manual/user-manual.md) ·
+[cheat sheet](docs/manual/cheat-sheet.md)).
 
 ## El problema
 
@@ -63,6 +77,27 @@ La solución detecta el proyecto, crea o reutiliza un workspace externo, ejecuta
 
 ## Instalación
 
+ArchSkillKit se distribuye en dos formas complementarias: la **aplicación**
+(el CLI `archskillkit`, que gestiona y verifica su runtime de herramientas
+externas) y el **Agent Skill** (reglas y referencias para agentes de
+codificación). Ninguna de las dos instala nada dentro del proyecto analizado.
+
+### La aplicación
+
+```bash
+uv tool install archskillkit==0.2.0     # o: pipx install archskillkit==0.2.0
+archskillkit setup                      # herramientas externas, verificadas por hash, atómicas
+archskillkit doctor                     # diagnóstico de instalación de solo lectura
+```
+
+Detalles paso a paso, flujos offline, integración con visores y resolución
+de problemas: [manual de usuario](docs/manual/manual-de-usuario.md) ·
+[hoja de referencia](docs/manual/cheat-sheet.es.md) ·
+[user manual](docs/manual/user-manual.md) ·
+[cheat sheet](docs/manual/cheat-sheet.md).
+
+### El Agent Skill (V1)
+
 La Skill se instala a nivel de usuario y se reutiliza desde cualquier repositorio — nunca se instala nada dentro del proyecto analizado.
 
 **Canal A — GitHub CLI skills** (cuando esté disponible en tu agente):
@@ -87,6 +122,23 @@ git clone https://github.com/Rubentxu/arch-skillkit.git ~/.arch-skillkit
 
 Actualizar = repetir el comando de instalación; desinstalar elimina sólo la Skill — los workspaces y datos bajo tus directorios XDG se conservan salvo que los borres explícitamente. El primer uso en un repositorio requiere `mise install -C <skill>/runtime` (el doctor te lo indica).
 
+## Desarrollo local
+
+El desarrollo local usa una única receta fijada:
+
+```bash
+mise trust mise.toml
+mise run bootstrap
+mise run doctor
+mise run ci
+```
+
+La [guía de contribución](docs/22-contributing.md) documenta las tareas de test
+focalizadas y la propiedad de cada parte del toolchain. El workflow compatible
+con GitHub Actions se guarda en `ci/github-actions/ci.yml`, fuera de `.github/`,
+y se ejecuta localmente con `just ci-github-local`; GitHub no lo detecta ni
+ejecuta.
+
 ## V2 — Evolución ActiveGraph (roadmap activo)
 
 El pipeline V1 (workspace + scanners deterministas + LikeC4/Arrows) es el
@@ -107,36 +159,37 @@ cambia: no se escribe nunca nada dentro del repositorio analizado. Ver el
 [resumen V2](docs/v2/00-v2-summary.md), el [roadmap V2](docs/v2/16-roadmap-v2.md)
 y los ADR-0013…0025.
 
-**V2.2 — Projection Applications** generaliza esa capa: un `VisualIntent`
-(p. ej. `architecture`, `knowledge_map`, `dependency_graph`) se enruta de
-forma determinista al formato adecuado — LikeC4, Arrows, **draw.io**,
-**JSON Canvas** o **GraphML** (consumido por Cytoscape/Gephi/yEd) — mediante
-un contrato común `ProjectionAdapter` con ciclo de vida, detección de
-obsolescencia, protección de ediciones manuales y perfiles de redacción. Las
-aplicaciones son consumidoras; el event log sigue siendo la única fuente de
-verdad. Ver el [resumen V2.2](docs/v2/24-v2.2-summary.md), el
+**V2.2 — Projection Applications** dispone actualmente de la foundation
+`VisualIntent` y `ProjectionAdapter`, soporte inicial de routing/lifecycle y
+los adapters LikeC4 y Arrows normalizados. draw.io, JSON Canvas, GraphML,
+redacción y routing productivo siguen gestionados en el roadmap; no son
+formatos operativos. Las aplicaciones son consumidoras; el event log sigue
+siendo la única fuente de verdad. Ver el [resumen V2.2](docs/v2/24-v2.2-summary.md), el
 [roadmap V2.2](docs/v2/37-roadmap-v2.2.md) y los ADR-0026…0031.
 
 ## Estado
 
-**Phase 5 en curso.** La especificación de diseño de V1 está completa (documentación de producto, ADRs, la Skill inicial y ejemplos de esquemas). Entregado hasta ahora, todo como scripts thin-glue probados con BATS en [`tests/`](tests/): workspace XDG externo + registry, run manifest, doctor, el pipeline de scanning determinista (outline con ast-grep, patrones arquitectónicos con Semgrep, metadata de build) con orquestación por repositorio, validación del modelo LikeC4 con plantilla dorada, y proyecciones de grafos Arrows derivadas de la evidencia. Ver el [roadmap](docs/17-roadmap.md) y el [backlog](docs/24-project-backlog.md).
+**Las fases A–G de V2.1 están implementadas; la verificación actual y los gates de release siguen abiertos.** La siguiente prioridad es conseguir un baseline reproducible y verde, seguida de benchmarks de rendimiento y evidencia UAT consolidada. SCIP permanece como spike condicional. V2.2 es parcial: están la foundation, LikeC4 y Arrows; faltan draw.io, JSON Canvas, GraphML, redacción y routing productivo. Los nombres de iniciativa V2.1/V2.2 no son el SemVer del paquete: Python declara `0.2.0` y el último tag Git es `v0.2.0`. El mecanismo de distribución/instalación está especificado e implementado en [docs/v2/24](docs/v2/24-distribution-and-installation.md). Ver el [estado V2 actual](docs/v2/STATUS.md) y el [roadmap V2](docs/v2/16-roadmap-v2.md).
 
 ## Documentación
 
 Orden de lectura recomendado:
 
-1. [Visión](docs/00-vision.md)
-2. [Arquitectura de referencia](docs/03-architecture.md)
-3. [Contrato de workspace externo](docs/04-workspace-layout.md)
-4. [Pipeline de scanning](docs/07-scanning-pipeline.md)
-5. [Modelo de evidencia](docs/08-evidence-model.md)
-6. [Modelo de agentes](docs/09-agent-model.md)
-7. [Arquitectura emergente](docs/16-emergent-architecture.md)
-8. [Roadmap](docs/17-roadmap.md)
-9. [Catálogo de UATs](docs/19-uat.md)
-10. [ADRs](docs/adr/README.md)
-11. [Resumen V2 — evolución ActiveGraph](docs/v2/00-v2-summary.md)
-12. [Resumen V2.2 — proyecciones](docs/v2/24-v2.2-summary.md)
+1. [Manual de usuario](docs/manual/manual-de-usuario.md) — instalar, usar, visualizar (también en [inglés](docs/manual/user-manual.md))
+2. [Hoja de referencia](docs/manual/cheat-sheet.es.md) — comandos en una página (también en [inglés](docs/manual/cheat-sheet.md))
+3. [Visión](docs/00-vision.md)
+4. [Arquitectura de referencia](docs/03-architecture.md)
+5. [Contrato de workspace externo](docs/04-workspace-layout.md)
+6. [Pipeline de scanning](docs/07-scanning-pipeline.md)
+7. [Modelo de evidencia](docs/08-evidence-model.md)
+8. [Modelo de agentes](docs/09-agent-model.md)
+9. [Arquitectura emergente](docs/16-emergent-architecture.md)
+10. [Roadmap](docs/17-roadmap.md)
+11. [Catálogo de UATs](docs/19-uat.md)
+12. [ADRs](docs/adr/README.md)
+13. [Resumen V2 — evolución ActiveGraph](docs/v2/00-v2-summary.md)
+14. [Resumen V2.2 — proyecciones](docs/v2/24-v2.2-summary.md)
+15. [Estado actual de implementación V2](docs/v2/STATUS.md)
 
 El conjunto completo de documentos está listado en el [manifest](MANIFEST.md).
 

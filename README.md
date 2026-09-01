@@ -2,11 +2,25 @@
 
 > ArchSkillKit is a working name. The final public name may change without affecting the architecture.
 
-[![ci](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/ci.yml)
+[![release](https://github.com/Rubentxu/arch-skillkit/actions/workflows/release.yml/badge.svg)](https://github.com/Rubentxu/arch-skillkit/actions/workflows/release.yml)
 
 **English** | [Español](README.es.md)
 
 ArchSkillKit is an **agent-first, tool-first and repository-clean** toolkit for discovering, reviewing and visualizing software architecture with deterministic tooling and LLM agents. It produces LikeC4 models and Arrows graph views **without writing a single file into the repository being analyzed**.
+
+## TL;DR
+
+```bash
+uv tool install archskillkit==0.2.0   # install the app
+archskillkit setup                    # install the pinned runtime (ast-grep, Semgrep, Node/LikeC4)
+archskillkit doctor                   # verify → "ready"
+archskillkit init --repo .            # start analyzing a repository
+```
+
+Full walk-through: [user manual](docs/manual/user-manual.md) ·
+one-page reference: [cheat sheet](docs/manual/cheat-sheet.md)
+(Español: [manual](docs/manual/manual-de-usuario.md) ·
+[hoja de referencia](docs/manual/cheat-sheet.es.md)).
 
 ## The problem
 
@@ -63,8 +77,28 @@ The solution detects the project, creates or reuses an external workspace, runs 
 
 ## Install
 
-The Skill installs at user level and is reused from any repository — nothing
-is ever installed inside the project being analyzed.
+ArchSkillKit ships in two complementary forms: the **application** (the
+`archskillkit` CLI, which owns and verifies its external-tool runtime) and
+the **Agent Skill** (rules and references for coding agents). Neither ever
+installs anything inside the project being analyzed.
+
+### The application
+
+```bash
+uv tool install archskillkit==0.2.0     # or: pipx install archskillkit==0.2.0
+archskillkit setup                      # external tools, hash-verified, atomic
+archskillkit doctor                     # read-only installation diagnosis
+```
+
+Step-by-step details, offline flows, viewer integration and troubleshooting:
+[user manual](docs/manual/user-manual.md) ·
+[cheat sheet](docs/manual/cheat-sheet.md) ·
+[manual en español](docs/manual/manual-de-usuario.md) ·
+[hoja de referencia](docs/manual/cheat-sheet.es.md).
+
+### The Agent Skill (V1)
+
+The Skill installs at user level and is reused from any repository —
 
 **Channel A — GitHub CLI skills** (when available in your agent):
 
@@ -91,6 +125,22 @@ installed Skill — workspaces and data under your XDG directories are kept
 unless you delete them explicitly. First run in a repository requires
 `mise install -C <skill>/runtime` (the doctor tells you).
 
+## Local development
+
+Local development uses one pinned recipe:
+
+```bash
+mise trust mise.toml
+mise run bootstrap
+mise run doctor
+mise run ci
+```
+
+See the [contribution guide](docs/22-contributing.md) for focused test tasks
+and toolchain ownership. The GitHub Actions-compatible local workflow is stored
+at `ci/github-actions/ci.yml`, outside `.github/`, and runs with
+`just ci-github-local`; GitHub never discovers or runs it.
+
 ## V2 — ActiveGraph evolution (active roadmap)
 
 The V1 pipeline (workspace + deterministic scanners + LikeC4/Arrows) is the
@@ -110,36 +160,38 @@ raw source browsing. The golden rule does not change: nothing is ever
 written into the analyzed repository. See the [V2 summary](docs/v2/00-v2-summary.md),
 the [V2 roadmap](docs/v2/16-roadmap-v2.md) and ADR-0013…0025.
 
-**V2.2 — Projection Applications** generalizes that layer: a `VisualIntent`
-(e.g. `architecture`, `knowledge_map`, `dependency_graph`) is routed
-deterministically to the right format — LikeC4, Arrows, **draw.io**,
-**JSON Canvas** or **GraphML** (consumed by Cytoscape/Gephi/yEd) — through a
-common `ProjectionAdapter` contract with lifecycle, staleness detection,
-manual-edit protection and redaction profiles. Applications are consumers;
-the Event Log stays the single source of truth. See the
+**V2.2 — Projection Applications** currently provides the `VisualIntent` and
+common `ProjectionAdapter` foundation, initial routing/lifecycle support, and
+the normalized LikeC4 and Arrows adapters. draw.io, JSON Canvas, GraphML,
+redaction and production routing remain managed roadmap work, not operational
+formats. Applications are consumers; the Event Log stays the single source of
+truth. See the
 [V2.2 summary](docs/v2/24-v2.2-summary.md), the
 [V2.2 roadmap](docs/v2/37-roadmap-v2.2.md) and ADR-0026…0031.
 
 ## Status
 
-**Phase 5 in progress.** The V1 design specification is complete (product documentation, ADRs, the initial Agent Skill and schema examples). Delivered so far, all as thin-glue scripts tested with BATS in [`tests/`](tests/): external XDG workspace + registry, run manifest, doctor, the deterministic scanning pipeline (ast-grep outline, Semgrep architecture patterns, build metadata) with per-repository orchestration, LikeC4 model validation with a golden template, and evidence-derived Arrows graph projections. See the [roadmap](docs/17-roadmap.md) and the [backlog](docs/24-project-backlog.md).
+**V2.1 phases A–G are implemented; current verification and release gates remain open.** The next priority is a reproducible green baseline, followed by performance benchmarks and consolidated UAT evidence. SCIP remains a conditional spike. V2.2 is partial: its foundation plus LikeC4 and Arrows are present; draw.io, JSON Canvas, GraphML, redaction and production routing remain pending. Initiative names (V2.1/V2.2) are separate from package SemVer: the Python package and the latest Git tag are both `0.2.0`. The distribution/installation mechanism is specified and implemented in [docs/v2/24](docs/v2/24-distribution-and-installation.md). See the [current V2 status](docs/v2/STATUS.md) and [V2 roadmap](docs/v2/16-roadmap-v2.md).
 
 ## Documentation
 
-Recommended reading order (the documentation is currently written in Spanish; English translations are planned and contributions are welcome):
+Recommended reading order (the design documentation is currently written in Spanish; English translations are planned and contributions are welcome):
 
-1. [Vision](docs/00-vision.md)
-2. [Reference architecture](docs/03-architecture.md)
-3. [External workspace contract](docs/04-workspace-layout.md)
-4. [Scanning pipeline](docs/07-scanning-pipeline.md)
-5. [Evidence model](docs/08-evidence-model.md)
-6. [Agent model](docs/09-agent-model.md)
-7. [Emergent architecture](docs/16-emergent-architecture.md)
-8. [Roadmap](docs/17-roadmap.md)
-9. [UAT catalog](docs/19-uat.md)
-10. [Architecture Decision Records](docs/adr/README.md)
-11. [V2 summary — ActiveGraph evolution](docs/v2/00-v2-summary.md)
-12. [V2.2 summary — projection applications](docs/v2/24-v2.2-summary.md)
+1. [User manual](docs/manual/user-manual.md) — install, use, visualize (also in [Spanish](docs/manual/manual-de-usuario.md))
+2. [Cheat sheet](docs/manual/cheat-sheet.md) — one-page command reference (also in [Spanish](docs/manual/cheat-sheet.es.md))
+3. [Vision](docs/00-vision.md)
+4. [Reference architecture](docs/03-architecture.md)
+5. [External workspace contract](docs/04-workspace-layout.md)
+6. [Scanning pipeline](docs/07-scanning-pipeline.md)
+7. [Evidence model](docs/08-evidence-model.md)
+8. [Agent model](docs/09-agent-model.md)
+9. [Emergent architecture](docs/16-emergent-architecture.md)
+10. [Roadmap](docs/17-roadmap.md)
+11. [UAT catalog](docs/19-uat.md)
+12. [Architecture Decision Records](docs/adr/README.md)
+13. [V2 summary — ActiveGraph evolution](docs/v2/00-v2-summary.md)
+14. [V2.2 summary — projection applications](docs/v2/24-v2.2-summary.md)
+15. [Current V2 implementation status](docs/v2/STATUS.md)
 
 The full document set is listed in the [manifest](MANIFEST.md).
 
