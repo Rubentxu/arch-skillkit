@@ -1,0 +1,53 @@
+name: local-ci
+
+on:
+  push:
+
+jobs:
+  lint:
+    name: Lint docs and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          apt-get update
+          apt-get install --yes shellcheck
+
+      - name: Lint Markdown
+        run: npx -y markdownlint-cli2
+
+      - name: Lint shell scripts
+        run: |
+          (cd skills/architecture-discovery/scripts && shellcheck -x workspace.sh doctor.sh run-manifest.sh lib/common.sh)
+          shellcheck tests/test_helper.bash
+          shellcheck --shell=bash tests/*.bats
+
+      - name: Check MANIFEST.md sync
+        run: bash scripts/check-manifest.sh
+
+  test:
+    name: Reproducible test baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install mise (pinned)
+        run: |
+          curl -fsSL https://mise.run | MISE_VERSION=v2026.8.6 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Reset host virtual environment
+        run: rm -rf python/.venv
+
+      - name: Bootstrap pinned toolchains
+        run: mise run bootstrap
+
+      - name: Verify environment
+        run: mise run doctor
+
+      - name: Run canonical CI recipe
+        run: mise run ci

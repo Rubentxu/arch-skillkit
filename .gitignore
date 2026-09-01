@@ -9,6 +9,7 @@ Thumbs.db
 
 # Local tooling
 node_modules/
+.devbox/
 
 # Local scratch
 tmp/
@@ -20,8 +21,13 @@ arch-skillkit-v2.2-projection-applications/
 
 # Python (V2 domain core)
 .venv/
+python/.cache/
 __pycache__/
 *.egg-info/
 .pytest_cache/
 dist/
 build/
+
+# Local generated artifacts
+artifacts/
+.atl/

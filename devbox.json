@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.18.0/.schema/devbox.schema.json",
+  "packages": [
+    "bash",
+    "bats",
+    "cacert",
+    "coreutils",
+    "findutils",
+    "git",
+    "gnugrep",
+    "gnused",
+    "gnutar",
+    "jq",
+    "mise",
+    "python312",
+    "uv"
+  ],
+  "shell": {
+    "init_hook": [
+      "export UV_NO_PROGRESS=1"
+    ],
+    "scripts": {}
+  }
+}

@@ -1,0 +1,95 @@
+# Reproducible contributor/CI entry point (ADR-0009).
+# Scanner and LikeC4 versions remain owned by
+# skills/architecture-discovery/runtime/mise.toml.
+
+[tools]
+python = "3.12.11"
+uv = "0.12.6"
+"aqua:bats-core/bats-core" = "1.14.0"
+
+[tasks.bootstrap]
+description = "Install pinned toolchains and sync the locked Python dev environment"
+run = '''
+mise install
+mise trust skills/architecture-discovery/runtime/mise.toml
+mise install -C skills/architecture-discovery/runtime
+mkdir -p python/.cache/uv
+UV_CACHE_DIR=python/.cache/uv \
+  uv sync --project python --python "$(mise which python)" --extra dev --locked
+'''
+
+[tasks.doctor]
+description = "Check the reproducible development environment"
+run = '''
+set -eu
+failed=0
+semgrep_cache="$MISE_PROJECT_ROOT/python/.cache/semgrep"
+mkdir -p "$semgrep_cache"
+if [ ! -f "$semgrep_cache/version" ]; then
+  printf '%s\n{}\n' "$(date +%s)" >"$semgrep_cache/version"
+fi
+export SEMGREP_SETTINGS_FILE="$semgrep_cache/settings.yml"
+export SEMGREP_VERSION_CACHE_PATH="$semgrep_cache/version"
+export SEMGREP_LOG_FILE="$semgrep_cache/semgrep.log"
+
+echo "Required dependencies"
+for tool in mise git jq python uv bats; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    printf '  OK      %s\n' "$tool"
+  else
+    printf '  MISSING %s\n' "$tool"
+    failed=1
+  fi
+done
+
+for tool in ast-grep semgrep likec4; do
+  if mise exec -C skills/architecture-discovery/runtime -- "$tool" --version >/dev/null 2>&1; then
+    printf '  OK      %s (skill runtime)\n' "$tool"
+  else
+    printf '  MISSING %s (run mise run bootstrap)\n' "$tool"
+    failed=1
+  fi
+done
+
+echo "Python environment"
+if [ -x python/.venv/bin/python ]; then
+  echo "  OK      python/.venv"
+else
+  echo "  MISSING python/.venv (run mise run bootstrap)"
+  failed=1
+fi
+
+echo "Optional dependencies"
+for tool in shellcheck node npx gh; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    printf '  OK      %s\n' "$tool"
+  else
+    printf '  OPTIONAL %s\n' "$tool"
+  fi
+done
+
+exit "$failed"
+'''
+
+[tasks."test:python"]
+description = "Run Python tests from the locked project environment"
+env = { UV_CACHE_DIR = "python/.cache/uv" }
+run = '''
+test_xdg="$(mktemp -d python/.cache/test-xdg.XXXXXX)"
+export XDG_CONFIG_HOME="$test_xdg/config"
+export XDG_DATA_HOME="$test_xdg/data"
+export XDG_STATE_HOME="$test_xdg/state"
+export XDG_CACHE_HOME="$test_xdg/cache"
+uv run --project python --locked pytest -q
+'''
+
+[tasks."test:bats"]
+description = "Run shell and CLI seam tests with the locked Python interpreter"
+run = '''
+export ARCHSKILLKIT_PYTHON="$MISE_PROJECT_ROOT/python/.venv/bin/python"
+bats "${ARCHSKILLKIT_BATS_TARGET:-tests/}"
+'''
+
+[tasks.ci]
+description = "Run the same test recipe locally and in CI"
+depends = ["test:python", "test:bats"]
