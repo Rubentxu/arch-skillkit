@@ -2,7 +2,9 @@
 
 Read-only towards the analyzed repository: the only git invocations are
 rev-parse / config --get / remote. Exit codes: 0 ok, 1 world/usage error
-at runtime, 2 argument or precondition failure.
+at runtime, 2 argument or precondition failure. `setup` and `doctor` are
+host-level commands (docs/v2/24): they never need a repository, never touch
+git, and doctor never uses the network.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ from archskillkit.proposals import (
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
 from archskillkit.projections.writer import ProjectionError, project_to_workspace
+from archskillkit.runtime import SetupError, load_manifest_for_setup, run_doctor, run_setup
+from archskillkit.runtime_manifest import ManifestError
 from archskillkit.world import ArchitectureWorld, _run_exists
 
 
@@ -115,12 +119,40 @@ def main(argv: list[str] | None = None) -> int:
     p_reject.add_argument("--name", required=True)
     p_reject.add_argument("--actor", required=True)
 
+    p_setup = sub.add_parser(
+        "setup", help="fetch, verify and atomically install the third-party"
+        " runtime (host-level; no repository involved)")
+    p_setup.add_argument("--manifest",
+                         help="path or URL of the runtime manifest (default:"
+                         " stored copy, then the release manifest)")
+    p_setup.add_argument("--prefetch", action="store_true",
+                         help="fill the digest cache and stop; no activation")
+    p_setup.add_argument("--offline", action="store_true",
+                         help="never open the network; fail if something is"
+                         " missing")
+
+    p_doctor = sub.add_parser(
+        "doctor", help="read-only installation diagnosis as JSON (never"
+        " downloads, never repairs)")
+    p_doctor.add_argument("--manifest",
+                          help="path or URL of the runtime manifest to"
+                          " diagnose against (default: stored copies)")
+
     args = parser.parse_args(argv)
+
+    if args.command == "setup":
+        return _cmd_setup(args)
+    if args.command == "doctor":
+        return _cmd_doctor(args)
 
     try:
         world = ArchitectureWorld.for_repo(args.repo)
     except RepoNotFound as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except FileNotFoundError as exc:
+        print("error: HOST_TOOL_MISSING git is required for repository"
+              f" analysis: {exc}", file=sys.stderr)
         return 2
 
     if args.command == "init":
@@ -157,6 +189,42 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_reject(world, args.name, args.actor)
     parser.error(f"unknown command: {args.command}")
     return 2
+
+
+def _cmd_setup(args: argparse.Namespace) -> int:
+    from archskillkit.runtime import Paths
+
+    paths = Paths.from_env()
+    try:
+        manifest, source = load_manifest_for_setup(
+            paths, args.manifest, offline=args.offline)
+        receipt = run_setup(paths, manifest, offline=args.offline,
+                            prefetch=args.prefetch)
+    except (SetupError, ManifestError) as exc:
+        payload = exc.as_dict() if isinstance(exc, SetupError) else {
+            "code": "RUNTIME_INCOMPATIBLE", "message": str(exc),
+            "remedy": "check the manifest or pass --manifest explicitly"}
+        print(json.dumps(payload))
+        print(f"error: {payload['message']}", file=sys.stderr)
+        return 2
+    print(json.dumps(receipt, indent=2))
+    return 0
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from archskillkit.runtime import Paths, read_manifest_source
+
+    paths = Paths.from_env()
+    manifest = None
+    if args.manifest:
+        try:
+            manifest = read_manifest_source(args.manifest)
+        except (ManifestError, OSError) as exc:
+            print(f"error: unreadable manifest: {exc}", file=sys.stderr)
+            return 2
+    diagnosis, exit_code = run_doctor(paths, manifest)
+    print(json.dumps(diagnosis, indent=2))
+    return exit_code
 
 
 def _cmd_init(world: ArchitectureWorld) -> int:
