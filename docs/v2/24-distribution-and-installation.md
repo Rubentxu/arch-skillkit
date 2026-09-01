@@ -245,14 +245,25 @@ por digest, verificadores de manifest/hash/attestation y preflight. El
 actual `mise`/Devbox sigue siendo la ruta de mantenedor, sin cambios de
 comportamiento.
 
-### Fase 2 — verificación de instalación en CI (ex-UAT, lado mantenedor)
+### Fase 2 — verificación de instalación en contenedores limpios (implementada)
 
-La verificación de que el artefacto distribuido funciona es un trabajo de
-mantenedor en CI, en contenedores base desnudos por plataforma, consumiendo
-sólo la interfaz pública: `uv tool install` → `setup` → `doctor` → análisis
-de un repositorio pineado (tarball con hash, `tree_sha256` antes/después
-intacto) → `setup --offline` → tests de corrupción (un byte alterado por
-clase de asset debe ser rechazado). Nada de esto se embarca en el producto.
+La verificación de que el artefacto publicado funciona es un trabajo de
+mantenedor, automatizado **en local** (política CI: GitHub Actions reservado
+al gate de release): `just verify-release <versión>` ejecuta
+[scripts/verify/run-verify.sh](../../scripts/verify/run-verify.sh) — dos
+contenedores Debian vacíos (sin python/git/herramientas):
+
+- **A (con red)**: instala el wheel del release con `uv tool install`,
+  `setup`, `doctor` en `ready`, análisis de un repo de prueba con los
+  binarios del runtime (repositorio intacto), test de corrupción (un byte
+  alterado produce estado `corruption`).
+- **B (sin red)**: instalación offline del wheel y del runtime desde las
+  cachés compartidas (`uv tool install --offline`, `setup --offline`,
+  `doctor` en `ready`).
+
+Evidencia por ejecución en `artifacts/verify/<RUN_ID>/` (doctor JSON,
+logs, result.json). La verificación ya detectó y corrigió un defecto real
+del CLI (falta de `--version`).
 
 ### Fase 3 — canales adicionales
 

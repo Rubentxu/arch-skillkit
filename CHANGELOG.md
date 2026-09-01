@@ -12,6 +12,14 @@ fixes.
 
 ### Added
 
+- **Fase 2 automatizada en local (docs/v2/24)**: `just verify-release`
+  ejecuta en dos contenedores Debian limpios el flujo completo de un
+  usuario — instalación del wheel del release, `setup`, `doctor ready`,
+  análisis de un repo de prueba (repo intacto), detección de corrupción y
+  el camino completo offline (`setup --offline` sin red) — con evidencia
+  por ejecución en `artifacts/verify/`. Su primera corrida detectó un
+  defecto real (CLI sin `--version`), corregido.
+
 - **V2.3-F2 — quality gates and a single green recipe (docs/v2/46)**:
   `ruff` + scoped `mypy` + `pytest-cov` (73 % informed, non-blocking);
   `mise run lint` / `mise run coverage`; `mise run ci` now runs

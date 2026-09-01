@@ -67,3 +67,13 @@ uat-test:
       --env "ARCHSK_NODE_MAX_OLD_SPACE_SIZE_MB=${ARCHSK_NODE_MAX_OLD_SPACE_SIZE_MB:-}" \
       --env "NODE_OPTIONS=${NODE_OPTIONS:-}" \
       -- bats tests/uat
+
+[group('verify')]
+[doc('Verificación Fase 2 en contenedor limpio (online): instala el release, setup, doctor, análisis, corrupción')]
+verify-release version="0.3.0":
+    ./scripts/verify/run-verify.sh "{{version}}"
+
+[group('verify')]
+[doc('Verificación Fase 2 completa incluyendo camino OFFLINE (dos contenedores)')]
+verify-release-full version="0.3.0":
+    ./scripts/verify/run-verify.sh "{{version}}"

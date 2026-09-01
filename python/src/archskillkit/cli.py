@@ -38,10 +38,14 @@ from archskillkit.world import ArchitectureWorld
 
 
 def main(argv: list[str] | None = None) -> int:
+    from archskillkit import __version__
+
     parser = argparse.ArgumentParser(
         prog="archskillkit",
         description="ArchSkillKit V2 Architecture World facade.",
     )
+    parser.add_argument("--version", action="version",
+                        version=f"archskillkit {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name in ("init", "state", "replay-verify"):
