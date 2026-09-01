@@ -77,3 +77,8 @@ verify-release version="0.3.0":
 [doc('Verificación Fase 2 completa incluyendo camino OFFLINE (dos contenedores)')]
 verify-release-full version="0.3.0":
     ./scripts/verify/run-verify.sh "{{version}}"
+
+[group('dogfood')]
+[doc('ArchSkillKit analizando ArchSkillKit con su propio runtime (drift + evidencia)')]
+dogfood:
+    ./scripts/dogfood.sh

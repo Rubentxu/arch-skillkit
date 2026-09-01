@@ -92,12 +92,15 @@ class ContextCompiler:
         elements = self._elements_for(subject, uncertainties)
 
         # 3.+4. expand one bounded hop through architecture relations
-        relations = self._relations_touching({e["id"] for e in elements})
+        seed_ids = {e["id"] for e in elements}
+        relations = self._relations_touching(seed_ids)
         neighbors = [e for e in self.world.find_objects("architecture_element")
                      if e["id"] in {r["source"] for r in relations}
                      | {r["target"] for r in relations}
                      and e not in elements]
-        elements = self._ranked(elements) + self._ranked(neighbors)
+        elements = self._ranked(
+            elements + neighbors, seeds=seed_ids, goal=goal,
+            relations=relations)
 
         # 8. budget: nodes first, then relations among the kept nodes
         elements = elements[:budget.max_nodes]
@@ -195,8 +198,44 @@ class ContextCompiler:
         return matched
 
     @staticmethod
-    def _ranked(elements: list[dict]) -> list[dict]:
-        return sorted(elements, key=lambda e: e["data"]["name"])
+    @staticmethod
+    def _ranked(elements: list[dict], *, seeds: set[str], goal: str,
+                relations: list[dict]) -> list[dict]:
+        """Deterministic relevance ranking (docs/v2/46, review P2):
+        graph distance (seeds first), goal-term match, origin and
+        confidence, centrality (relation degree). Name as final
+        tiebreak keeps runs identical under replay."""
+        import re
+
+        goal_terms = set(re.findall(r"\w+", goal.lower()))
+        degree: dict[str, int] = {}
+        evidence: dict[str, int] = {}
+        for rel in relations:
+            for endpoint in (rel["source"], rel["target"]):
+                degree[endpoint] = degree.get(endpoint, 0) + 1
+            for ev_id in (rel["data"] or {}).get("evidence_ids", []):
+                evidence[rel["source"]] = evidence.get(rel["source"], 0) + 1
+
+        origin_rank = {"DECLARED": 3, "DETECTED": 2, "INFERRED": 1}
+        conf_rank = {"high": 3, "medium": 2, "low": 1}
+
+        def score(e: dict) -> tuple:
+            data = e["data"]
+            name = data["name"].lower()
+            s = 0.0
+            if e["id"] in seeds:
+                s += 100
+            if name in goal_terms:
+                s += 50
+            elif any(term in name for term in goal_terms):
+                s += 25
+            s += origin_rank.get(data.get("origin"), 0) * 3
+            s += conf_rank.get(data.get("confidence"), 0) * 2
+            s += min(degree.get(e["id"], 0), 5) * 2
+            s += min(evidence.get(e["id"], 0), 5)
+            return (-s, data["name"])
+
+        return sorted(elements, key=score)
 
     def _relations_touching(self, ids: set[str]) -> list[dict]:
         return [r for r in self.world.architecture_relations()

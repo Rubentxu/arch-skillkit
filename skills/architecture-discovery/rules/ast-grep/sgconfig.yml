@@ -6,3 +6,4 @@ ruleDirs:
   - rust
   - typescript
   - kotlin
+  - python

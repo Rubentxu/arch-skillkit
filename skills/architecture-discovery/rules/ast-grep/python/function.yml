@@ -1,0 +1,7 @@
+id: outline.python.function
+language: Python
+rule:
+  kind: identifier
+  inside:
+    kind: function_definition
+    field: name

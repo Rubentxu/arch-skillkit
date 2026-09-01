@@ -1,0 +1,7 @@
+id: outline.python.class
+language: Python
+rule:
+  kind: identifier
+  inside:
+    kind: class_definition
+    field: name

@@ -12,6 +12,11 @@ fixes.
 
 ### Added
 
+- **Dogfooding + reglas Python (docs/v2/45 §5)**: `just dogfood` ejecuta
+  el pipeline completo del producto sobre el propio repositorio con el
+  runtime pineado (reglas outline Python nuevas en el pack ast-grep);
+  evidencia en `artifacts/dogfood/`.
+
 - **Fase 2 automatizada en local (docs/v2/24)**: `just verify-release`
   ejecuta en dos contenedores Debian limpios el flujo completo de un
   usuario — instalación del wheel del release, `setup`, `doctor ready`,

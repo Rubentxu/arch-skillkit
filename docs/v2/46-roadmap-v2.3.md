@@ -4,6 +4,9 @@ Plan de ejecución de la iniciativa definida en
 [45-v2.3-semantic-integrity-hardening.md](45-v2.3-semantic-integrity-hardening.md),
 derivada de la [auditoría de septiembre 2026](44-architecture-review-2026-09.md).
 
+> **ESTADO: COMPLETADA.** F1-F10 implementadas y verificadas; decisiones
+> D-1 (a) y D-2 (a) cerradas. Ver CHANGELOG y docs/v2/STATUS.md.
+
 Principio rector: **el siguiente evolutivo no añade features**. Primero
 integridad semántica y límites reales; después, sobre base sana, el resto
 de V2.2.
