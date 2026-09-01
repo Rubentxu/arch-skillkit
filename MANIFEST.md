@@ -112,6 +112,9 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `docs/v2/41-backlog-v2.2.md`
 - `docs/v2/42-evolution-rules-v2.2.md`
 - `docs/v2/43-merge-notes-v2.2.md`
+- `docs/v2/44-architecture-review-2026-09.md`
+- `docs/v2/45-v2.3-semantic-integrity-hardening.md`
+- `docs/v2/46-roadmap-v2.3.md`
 - `docs/v2/CHANGELOG-V2.1.md`
 - `docs/v2/CHANGELOG-V2.2.md`
 - `docs/v2/STATUS.md`

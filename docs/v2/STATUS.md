@@ -14,7 +14,7 @@
 | V2.1 ActiveGraph/Python | Implementado; benchmark/KPI parcial completado | Fases A–G en `python/src/archskillkit/` y `python/tests/`. UAT2-017 midió el KPI con resultado PASS para su carga canónica; el [plan UAT trazable](uat/v2.1-plan.yaml) permanece sin evidencia obligatoria consolidada, y faltan instalación y validar el workflow local. |
 | V2.2 Projection Applications | Parcial | Foundation, router inicial, lifecycle y LikeC4/Arrows presentes. Faltan writers draw.io, JSON Canvas y GraphML, redacción y thresholds/routing productivo. |
 
-Estos nombres identifican iniciativas de producto y **no son versiones SemVer del paquete**. El paquete Python declara `0.2.0.dev0` en [`python/pyproject.toml`](../../python/pyproject.toml); el único tag Git actual es `v0.1.0`.
+Estos nombres identifican iniciativas de producto y **no son versiones SemVer del paquete**. El paquete Python declara `0.2.0` en [`python/pyproject.toml`](../../python/pyproject.toml); el último tag Git es `v0.2.0` (la fuente de versión canónica es pyproject — ver [V2.3, §6](45-v2.3-semantic-integrity-hardening.md#6-fuente-única-de-versión)).
 
 Política de compatibilidad pendiente: [`python/pyproject.toml`](../../python/pyproject.toml) declara Python `>=3.11`, mientras que el baseline reproducible fija Python `3.12.11`. La verificación local sólo demuestra el entorno fijado; no valida toda la compatibilidad declarada.
 
