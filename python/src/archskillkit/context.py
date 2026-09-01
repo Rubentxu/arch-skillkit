@@ -63,7 +63,13 @@ def classify_intent(goal: str) -> str:
 
 
 class ContextCompiler:
-    """Assembles ContextPacks; one instance counts its context reads."""
+    """Assembles ContextPacks and records calls separately from source I/O.
+
+    ``context_reads`` remains an alias for ``compiler_calls`` for consumers
+    of the original metric.  ``source_file_reads`` counts successful file
+    reads made while resolving snippets; it is intentionally not incremented
+    for a compiler invocation that needs no source or for an unreadable path.
+    """
 
     def __init__(self, world: ArchitectureWorld, index: CodeIndex,
                  source_root: str | Path | None = None):
@@ -71,12 +77,14 @@ class ContextCompiler:
         self.index = index
         self.source_root = Path(source_root) if source_root else (
             Path(world.root) if world.root else None)
-        self._reads = 0
+        self._compiler_calls = 0
+        self._source_file_reads = 0
+        self._source_bytes_read = 0
 
     def compile(self, goal: str, subject: str | None = None,
                 budget: Budget | None = None) -> ContextPack:
         budget = budget or Budget()
-        self._reads += 1
+        self._compiler_calls += 1
         intent = classify_intent(goal)
         uncertainties: list[str] = []
 
@@ -157,7 +165,11 @@ class ContextCompiler:
                 "symbols": len(symbols),
                 "snippets": len(snippets),
                 "source_lines": lines_used,
-                "context_reads": self._reads,
+                "compiler_calls": self._compiler_calls,
+                "source_file_reads": self._source_file_reads,
+                "source_bytes_read": self._source_bytes_read,
+                # Compatibility alias retained for existing metric consumers.
+                "context_reads": self._compiler_calls,
             },
         )
         for el in elements:
@@ -215,6 +227,16 @@ class ContextCompiler:
             lines = path.read_text().splitlines()
         except OSError:
             return None, 0
+        self._source_file_reads += 1
+        # ``read_text`` opens the complete file, even when the returned
+        # snippet is clipped.  Stat after the successful read keeps the byte
+        # metric aligned with that I/O operation and does not count failures.
+        try:
+            self._source_bytes_read += path.stat().st_size
+        except OSError:
+            # The read already succeeded; a concurrent removal must not make
+            # the source-read counter inaccurate.
+            pass
         end = min(len(lines), start + take - 1)
         if start_line > len(lines):
             return None, 0

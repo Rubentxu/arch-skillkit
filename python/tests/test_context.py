@@ -72,6 +72,9 @@ class TestOverviewCompile:
         assert m["elements"] == 10
         assert m["relations"] == 5
         assert m["context_reads"] >= 1
+        assert m["compiler_calls"] == m["context_reads"]
+        assert m["source_file_reads"] == 0
+        assert m["source_bytes_read"] == 0
 
     def test_empty_world_compiles_minimal_pack(self, repo):
         from archskillkit.codeindex import CodeIndex
@@ -143,6 +146,23 @@ class TestBudgets:
 
 
 class TestSnippets:
+    def test_source_metrics_count_successful_file_reads(self, repo_with_source):
+        world, index = repo_with_source
+        compiler = ContextCompiler(world, index)
+
+        first = compiler.compile(
+            goal="show me the endpoint handler", subject="getPayment")
+        second = compiler.compile(
+            goal="show me the endpoint handler", subject="getPayment")
+
+        assert first.metrics["compiler_calls"] == 1
+        assert first.metrics["source_file_reads"] == len(first.source_snippets)
+        assert first.metrics["source_bytes_read"] > 0
+        assert second.metrics["compiler_calls"] == 2
+        assert second.metrics["source_file_reads"] == (
+            2 * len(first.source_snippets))
+        assert second.metrics["context_reads"] == second.metrics["compiler_calls"]
+
     def test_snippet_read_from_resolved_location(self, repo_with_source):
         world, index = repo_with_source
         pack = ContextCompiler(world, index).compile(
@@ -179,9 +199,11 @@ class TestDeterminism:
         compiler = ContextCompiler(world, index)
         first = compiler.compile(goal="overview", subject="getPayment")
         second = compiler.compile(goal="overview", subject="getPayment")
-        # context_reads is call-scoped by design; everything else is stable
-        first.metrics.pop("context_reads")
-        second.metrics.pop("context_reads")
+        # I/O counters are instance-scoped by design; everything else is stable.
+        for metric in ("compiler_calls", "context_reads", "source_file_reads",
+                       "source_bytes_read"):
+            first.metrics.pop(metric)
+            second.metrics.pop(metric)
         assert first.model_dump() == second.model_dump()
 
     def test_compilation_does_not_mutate_the_world(self, repo_with_source):
