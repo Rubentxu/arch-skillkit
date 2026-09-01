@@ -8,8 +8,21 @@ fixes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-01
+
 ### Added
 
+- **Distribution and installation, Python-first (docs/v2/24)**: the
+  `archskillkit` CLI installs via `uv tool install` / `pipx`; `setup`
+  installs the pinned runtime of external tools (ast-grep 0.45.2,
+  Semgrep 1.175.0 in an isolated venv, Node 22.14.0 + LikeC4 1.59.2) from
+  a hash-pinned release manifest with atomic activation, digest-addressed
+  cache, preflight checks and stable error codes; `doctor` provides a
+  read-only JSON installation diagnosis (`ready`, `ready-offline`,
+  `incomplete`, `corruption`, `host-insufficient`). The release pipeline
+  publishes the wheel, runtime bundles and provenance attestations.
+- **User documentation**: user manual and cheat sheet in English and
+  Spanish (docs/manual/).
 - **V2 Phase G (M2-G1…G4) — fork/diff of the architecture
   (`archskillkit.proposals`)**: architectural proposals on independent
   branches of the project's event log (docs/v2/08):
@@ -197,6 +210,9 @@ fixes.
 
 ### Changed
 
+- Context compiler metrics now separate compiler calls from source file
+  reads (`compiler_calls`, `source_file_reads`, `source_bytes_read`;
+  `context_reads` kept as a compatibility alias).
 - ADR-0005 marked **Superseded by ADR-0015 and ADR-0016** — it remains the
   valid baseline for the V1 pipeline; in V2 the LikeC4 canonical model
   becomes a projection of the Architecture World.
