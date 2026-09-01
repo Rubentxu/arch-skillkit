@@ -5,7 +5,6 @@ The ArchitectureWorld service encapsulates ActiveGraph behind the domain
 """
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -119,8 +118,8 @@ class TestReplayAndIsolation:
         world2.close()
 
     def test_project_isolation(self, sandbox, tmp_path):
-        repo_a = tmp_path / "alpha"
-        repo_b = tmp_path / "beta"
+        _repo_a = tmp_path / "alpha"
+        _repo_b = tmp_path / "beta"
         for name, remote in (("alpha", "https://github.com/org/alpha.git"),
                              ("beta", "https://github.com/org/beta.git")):
             r = tmp_path / name

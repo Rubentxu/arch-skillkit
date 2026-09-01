@@ -18,10 +18,10 @@ de V2.2.
 
 ## Decisiones abiertas
 
-| id | Decisión | Opciones | Por defecto propuesto |
+| id | Decisión | Opciones | Estado |
 |---|---|---|---|
-| D-1 | ¿CI automática de PR/push en `.github/workflows/`? | (a) mantener política actual (Actions solo release gate, CI local como fuente de verdad); (b) reactivar PR CI con la misma receta `mise run ci` | (a), revisable si el equipo crece |
-| D-2 | Fuente única de versión | (a) pyproject como fuente + sync script; (b) setuptools-scm desde el tag | (a): sin dependencia del checkout para construir |
+| D-1 | ¿CI automática de PR/push en `.github/workflows/`? | (a) mantener política actual (Actions solo release gate, CI local como fuente de verdad); (b) reactivar PR CI con la misma receta `mise run ci` | **RESUELTA (a)** — la política CI del repo se mantiene; la receta verde única es `mise run ci`, ejecutada localmente y por el gate de release |
+| D-2 | Fuente única de versión | (a) pyproject como fuente + sync script; (b) setuptools-scm desde el tag | **RESUELTA (a)** — pyproject es la fuente; `scripts/release/sync-versions.py --check` en el gate |
 
 ## Fases
 

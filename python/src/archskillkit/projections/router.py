@@ -7,10 +7,10 @@ the ambiguity cases in Phase P5; routing stays deterministic now.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
-from archskillkit.projections.intents import IntentType, VisualIntent
 from archskillkit.projections.contract import ProjectionAdapter
+from archskillkit.projections.intents import IntentType, VisualIntent
 
 # Deterministic preference per intent type. Where the spec allows two
 # destinations (proposal_board, investigation), the first listed format

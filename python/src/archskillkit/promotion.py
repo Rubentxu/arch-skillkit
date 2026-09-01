@@ -23,8 +23,13 @@ import datetime as _dt
 from dataclasses import dataclass, field
 
 from archskillkit.codeindex import CodeIndex
-from archskillkit.packs.arch_core import EvidenceData, ObservationData
-from archskillkit.world import ArchitectureWorld, PromotionError
+from archskillkit.packs.arch_core import (
+    ClaimData,
+    EvidenceData,
+    ObservationData,
+)
+from archskillkit.ports import ArchitectureWorldPort
+from archskillkit.world import PromotionError
 
 # Code Index pseudo-kind → architecture element category (docs/v2/04).
 PSEUDO_TO_CATEGORY = {
@@ -77,7 +82,7 @@ class PromotionReport:
 
 # ---- M2-C1: scan edges → observations + evidence --------------------
 
-def ingest_scan(world: ArchitectureWorld, index: CodeIndex,
+def ingest_scan(world: ArchitectureWorldPort, index: CodeIndex,
                 scan_run_id: str) -> PromotionReport:
     """Turn every evidence edge of a scan run into an Observation backed
     by Evidence. Idempotent: the (subject, predicate, object) triple and
@@ -121,14 +126,13 @@ def ingest_scan(world: ArchitectureWorld, index: CodeIndex,
 
 # ---- M2-C2: claims ---------------------------------------------------
 
-def propose_claims(world: ArchitectureWorld) -> int:
+def propose_claims(world: ArchitectureWorldPort) -> int:
     """One proposed claim per observation not yet claimed; the claim is
     linked to its observation via derived_from and carries the
     observation's evidence references."""
     proposed = 0
     for obs in world.find_objects("observation"):
-        existing = world.graph.relations(target=obs["id"], type="derived_from")
-        if any(world.get_object(r.source)["type"] == "claim" for r in existing):
+        if world.observation_is_claimed(obs["id"]):
             continue
         data = obs["data"]
         embedded = data["evidence"]
@@ -148,18 +152,17 @@ def propose_claims(world: ArchitectureWorld) -> int:
                 start_line=embedded.get("start_line"),
                 end_line=embedded.get("end_line"),
                 commit=embedded.get("commit", "")))
-        claim_id = world.graph.add_object("claim", {
-            "schema_version": 1,
-            "origin": data["origin"],
-            "confidence": data["confidence"],
-            "statement": f"{data['subject']} {data['predicate']} {data['object']}",
-            "subjects": [obs["id"]],
-            "relations": [],
-            "evidence_refs": [ev_id],
-            "contradiction_refs": [],
-            "status": "proposed",
-        }).id
-        world.graph.add_relation(claim_id, obs["id"], "derived_from", {})
+        world.propose_derived_claim(ClaimData(
+            schema_version=1,
+            origin=data["origin"],
+            confidence=data["confidence"],
+            statement=f"{data['subject']} {data['predicate']} {data['object']}",
+            subjects=[obs["id"]],
+            relations=[],
+            evidence_refs=[ev_id],
+            contradiction_refs=[],
+            status="proposed",
+        ), obs["id"])
         proposed += 1
     return proposed
 
@@ -193,7 +196,7 @@ def predicate_cardinality(predicate: str) -> str:
                                      DEFAULT_CARDINALITY)
 
 
-def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
+def evaluate_claims(world: ArchitectureWorldPort) -> dict[str, int]:
     """Deterministic claim evaluation (behavior: claim_evaluator).
 
     1. Link contradictions: two observations sharing subject+predicate
@@ -207,8 +210,7 @@ def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
     counts = {"accepted": 0, "contradicted": 0, "stayed": 0}
 
     for claim in world.find_objects("claim", status="proposed"):
-        derived = [r.target for r in
-                   world.graph.relations(source=claim["id"], type="derived_from")]
+        derived = world.claim_observation_ids(claim["id"])
         for obs_id in derived:
             obs = world.get_object(obs_id)["data"]
             if predicate_cardinality(obs["predicate"]) != "one":
@@ -220,30 +222,29 @@ def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
                 if other["id"] == obs_id or \
                     other["data"]["object"] == obs["object"]:
                     continue
-                world.graph.add_relation(
-                    other["id"], claim["id"], "contradicts",
-                    {"reason": "single-valued predicate holds two objects"})
+                world.link_contradicts(
+                    other["id"], claim["id"],
+                    "single-valued predicate holds two objects")
 
     for claim in world.find_objects("claim", status="proposed"):
         contradicted = bool(claim["data"].get("contradiction_refs")) or \
-            any(r.type == "contradicts"
-                for r in world.graph.relations(target=claim["id"]))
+            world.claim_is_contradicted(claim["id"])
         if contradicted:
-            world.graph.patch_object(claim["id"], {"status": "contradicted"})
+            world.set_claim_status(claim["id"], "contradicted")
             counts["contradicted"] += 1
             continue
         resolvable = all(
             _is_evidence(world, ref) for ref in claim["data"]["evidence_refs"])
         if claim["data"]["origin"] == "DETECTED" and \
             claim["data"]["confidence"] == "high" and resolvable:
-            world.graph.patch_object(claim["id"], {"status": "accepted"})
+            world.set_claim_status(claim["id"], "accepted")
             counts["accepted"] += 1
         else:
             counts["stayed"] += 1
     return counts
 
 
-def _is_evidence(world: ArchitectureWorld, ref: str) -> bool:
+def _is_evidence(world: ArchitectureWorldPort, ref: str) -> bool:
     try:
         return world.get_object(ref)["type"] == "evidence"
     except (KeyError, PromotionError):
@@ -252,7 +253,7 @@ def _is_evidence(world: ArchitectureWorld, ref: str) -> bool:
 
 # ---- M2-C3: architecture mapper --------------------------------------
 
-def realize_architecture(world: ArchitectureWorld) -> PromotionReport:
+def realize_architecture(world: ArchitectureWorldPort) -> PromotionReport:
     """Map accepted claims' observations into architecture elements and
     typed relations carrying their evidence (behavior:
     architecture_mapper). Idempotent on both."""
@@ -260,9 +261,8 @@ def realize_architecture(world: ArchitectureWorld) -> PromotionReport:
     elements_before = len(world.find_objects("architecture_element"))
     relations_before = len(world.architecture_relations())
     for claim in world.find_objects("claim", status="accepted"):
-        for rel in world.graph.relations(source=claim["id"],
-                                         type="derived_from"):
-            obs = world.get_object(rel.target)["data"]
+        for obs_id in world.claim_observation_ids(claim["id"]):
+            obs = world.get_object(obs_id)["data"]
             rel_kind = PREDICATE_TO_RELATION.get(obs["predicate"])
             if rel_kind is None:
                 report.warnings.append(
@@ -288,7 +288,7 @@ def realize_architecture(world: ArchitectureWorld) -> PromotionReport:
     return report
 
 
-def _evidence_ids_for(world: ArchitectureWorld, obs: dict) -> list[str]:
+def _evidence_ids_for(world: ArchitectureWorldPort, obs: dict) -> list[str]:
     ev = world.find_objects(
         "evidence", rule=obs["evidence"].get("rule", ""),
         file=obs["evidence"].get("file", ""),
@@ -298,7 +298,7 @@ def _evidence_ids_for(world: ArchitectureWorld, obs: dict) -> list[str]:
 
 # ---- M2-C4: reviewer --------------------------------------------------
 
-def review(world: ArchitectureWorld) -> dict:
+def review(world: ArchitectureWorldPort) -> dict:
     """Deterministic reviewer (behavior: reviewer): unsupported claims,
     unresolved contradictions, and automatic high relations without
     evidence (UAT2-005). Findings are persisted as `finding` objects."""
@@ -334,7 +334,7 @@ def review(world: ArchitectureWorld) -> dict:
 
 # ---- full pipeline -----------------------------------------------------
 
-def discover(world: ArchitectureWorld, index: CodeIndex,
+def discover(world: ArchitectureWorldPort, index: CodeIndex,
              scan_run_id: str) -> PromotionReport:
     """The vertical slice of docs/v2/23:
 

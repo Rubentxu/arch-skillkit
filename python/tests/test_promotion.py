@@ -12,12 +12,10 @@ evidence), UAT2-006 (contradictions are never silently promoted) and
 H2-1 (the world still replays after every mutation).
 """
 
-import json
 
 import pytest
+from conftest import KOTLIN_RUN
 
-from archskillkit.codeindex import CodeIndex
-from conftest import KOTLIN_RUN, load_fixture
 from archskillkit.packs.arch_core import ClaimData, EvidenceData, ObservationData
 from archskillkit.promotion import (
     PromotionError,
@@ -98,7 +96,7 @@ class TestClaimLifecycle:
         assert statuses == {"accepted"}
 
     def test_inferred_claims_require_explicit_accept(self, kotlin_world_index):
-        world, index = kotlin_world_index
+        world, _index = kotlin_world_index
         world.record_observation(inferred_observation())
         assert propose_claims(world) == 1
         counts = evaluate_claims(world)
@@ -199,7 +197,7 @@ class TestArchitectureMapper:
 
 class TestReviewer:
     def test_clean_pipeline_has_no_findings(self, kotlin_world_index):
-        world, index = kotlin_world_index
+        world, _index = kotlin_world_index
         report = review(world)  # nothing ingested yet: empty review
         assert report["findings"] == []
 
@@ -227,7 +225,7 @@ class TestReviewer:
         assert report["persisted"] == len(report["findings"])
 
     def test_findings_are_replayable(self, kotlin_world_index):
-        world, index = kotlin_world_index
+        world, _index = kotlin_world_index
         world.propose_claim(ClaimData(statement="guess", subjects=["g"]))
         review(world)
         assert world.replay_verify().ok

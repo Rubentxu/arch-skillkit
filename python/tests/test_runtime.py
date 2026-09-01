@@ -6,7 +6,6 @@ URLs so no test ever touches the network.
 """
 
 import json
-import os
 import stat
 from pathlib import Path
 
@@ -210,9 +209,8 @@ class TestSetup:
 
     def test_concurrent_setup_is_locked(self, paths, tmp_path):
         manifest = load_manifest(make_manifest([make_binary(tmp_path, "a")]))
-        with setup_lock(paths):
-            with pytest.raises(SetupError) as excinfo:
-                run_setup(paths, manifest)
+        with setup_lock(paths), pytest.raises(SetupError) as excinfo:
+            run_setup(paths, manifest)
         assert excinfo.value.code == "SETUP_LOCKED"
 
     def test_required_attestation_missing_offline(self, paths, tmp_path,
@@ -282,7 +280,7 @@ class TestDoctor:
         payload = json.loads(make_manifest([make_binary(tmp_path, "a")]))
         payload["platforms"][0]["os"] = other
         manifest = load_manifest(json.dumps(payload))
-        diagnosis, exit_code = run_doctor(paths, manifest)
+        diagnosis, _exit_code = run_doctor(paths, manifest)
         assert diagnosis["status"] == CODE_HOST_INSUFFICIENT
         assert diagnosis["findings"][0]["code"] == "PLATFORM_UNSUPPORTED"
 

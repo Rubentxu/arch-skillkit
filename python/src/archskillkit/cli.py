@@ -20,16 +20,15 @@ from archskillkit.codeindex import CodeIndex, IngestError
 from archskillkit.context import Budget, ContextCompiler
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
-from archskillkit.promotion import discover, review
-from archskillkit.proposals import (
-    PromotionError,
-    PromotionRequired,
-    promote,
-    structural_diff,
-)
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
 from archskillkit.projections.writer import ProjectionError, project_to_workspace
+from archskillkit.promotion import discover, review
+from archskillkit.proposals import (
+    PromotionError,
+    promote,
+    structural_diff,
+)
 from archskillkit.runtime import SetupError, load_manifest_for_setup, run_doctor, run_setup
 from archskillkit.runtime_manifest import ManifestError
 from archskillkit.world import ArchitectureWorld, _run_exists
@@ -196,7 +195,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
 
     paths = Paths.from_env()
     try:
-        manifest, source = load_manifest_for_setup(
+        manifest, _source = load_manifest_for_setup(
             paths, args.manifest, offline=args.offline)
         receipt = run_setup(paths, manifest, offline=args.offline,
                             prefetch=args.prefetch)

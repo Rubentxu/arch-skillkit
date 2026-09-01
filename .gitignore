@@ -31,3 +31,6 @@ build/
 # Local generated artifacts
 artifacts/
 .atl/
+
+# Python tooling artifacts
+.coverage

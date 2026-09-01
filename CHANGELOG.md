@@ -10,6 +10,18 @@ fixes.
 
 ### Added
 
+- **V2.3-F2 — quality gates and a single green recipe (docs/v2/46)**:
+  `ruff` + scoped `mypy` + `pytest-cov` (73 % informed, non-blocking);
+  `mise run lint` / `mise run coverage`; `mise run ci` now runs
+  lint + python + bats and is the only definition of green — executed
+  locally and by the release gate. `scripts/release/sync-versions.py`
+  keeps `version.json` synced from `pyproject.toml` (decision D-2a);
+  D-1 resolved as (a): GitHub Actions stays release-gate-only.
+- **V2.3-F3/F4 — real boundaries (docs/v2/45 §2.1/§4)**: `ProjectContext`
+  (ids.py) resolves project identity once — `CodeIndex` no longer imports
+  `ArchitectureWorld`; `ArchitectureWorldPort` (ports.py) formalizes the
+  domain surface — promotion/proposals use port methods and `.graph` has
+  zero callsites outside world.py (ADR-0024 enforced by construction).
 - **V2.3-F1 — semantic integrity property tests (docs/v2/46)**:
   `tests/test_properties.py` pins the five domain invariants PR-1…PR-5
   (directed paths, scan-generation replacement, promotion diff-fixpoint,
@@ -33,6 +45,18 @@ fixes.
   - `projections`: manual-edit protection is content-based — the sidecar
     records `generated_sha256` and regeneration compares the artifact's
     current hash (UAT-P12 is now enforced, not nominal).
+- **V2.3-F2 — quality gates and a single green recipe (docs/v2/46)**:
+  `ruff` + scoped `mypy` + `pytest-cov` (73 % informed, non-blocking);
+  `mise run lint` / `mise run coverage`; `mise run ci` now runs
+  lint + python + bats and is the only definition of green — executed
+  locally and by the release gate. `scripts/release/sync-versions.py`
+  keeps `version.json` synced from `pyproject.toml` (decision D-2a);
+  D-1 resolved as (a): GitHub Actions stays release-gate-only.
+- **V2.3-F3/F4 — real boundaries (docs/v2/45 §2.1/§4)**: `ProjectContext`
+  (ids.py) resolves project identity once — `CodeIndex` no longer imports
+  `ArchitectureWorld`; `ArchitectureWorldPort` (ports.py) formalizes the
+  domain surface — promotion/proposals use port methods and `.graph` has
+  zero callsites outside world.py (ADR-0024 enforced by construction).
 
 ## [0.2.0] - 2026-09-01
 

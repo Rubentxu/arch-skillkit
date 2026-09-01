@@ -5,9 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from archskillkit.runtime import Paths, current_platform_key
-from test_runtime import COMMIT, make_binary, make_manifest
+from test_runtime import make_binary, make_manifest
 
 
 def run_cli(*args, env):

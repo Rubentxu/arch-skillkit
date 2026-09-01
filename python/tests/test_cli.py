@@ -149,7 +149,7 @@ class TestPromotionCli:
 
         before = subprocess.run(
             ["git", "-C", str(repo), "status", "--porcelain"],
-            capture_output=True, text=True).stdout
+            capture_output=True, text=True, check=False).stdout
 
         proc = run_cli("discover", "--repo", str(repo), "--run-id", "r1", env=env)
         assert proc.returncode == 0, proc.stderr
@@ -166,7 +166,7 @@ class TestPromotionCli:
 
         after = subprocess.run(
             ["git", "-C", str(repo), "status", "--porcelain"],
-            capture_output=True, text=True).stdout
+            capture_output=True, text=True, check=False).stdout
         assert after == before  # UAT-001 through the whole pipeline
 
     def test_discover_without_code_index_fails_cleanly(self, repo, tmp_path, monkeypatch):

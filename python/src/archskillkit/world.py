@@ -14,11 +14,15 @@ import datetime as _dt
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 from activegraph import Graph, Runtime
 from activegraph.store import open_store
 
-from archskillkit.ids import RepoNotFound, compute_project_id, projects_root, repo_remote, repo_root
+from archskillkit.ids import (
+    ProjectContext,
+    projects_root,
+)
 from archskillkit.packs.arch_core import (
     ClaimData,
     EvidenceData,
@@ -73,17 +77,14 @@ class ArchitectureWorld:
     # ---- construction -------------------------------------------------
 
     @classmethod
-    def for_repo(cls, repo_path: str | Path) -> "ArchitectureWorld":
-        root = repo_root(repo_path)
-        if root is None:
-            raise RepoNotFound(f"not a git repository: {repo_path}")
-        remote = repo_remote(root)
-        project_id = compute_project_id(str(root), remote)
-        return cls(project_id=project_id, name=root.name, root=str(root), remote=remote)
+    def for_repo(cls, repo_path: str | Path) -> ArchitectureWorld:
+        ctx = ProjectContext.for_repo(repo_path)
+        return cls(project_id=ctx.project_id, name=ctx.name,
+                   root=str(ctx.root), remote=ctx.remote)
 
     # ---- lifecycle ----------------------------------------------------
 
-    def open(self) -> "ArchitectureWorld":
+    def open(self) -> ArchitectureWorld:
         for sub in WORKSPACE_SUBDIRS:
             (self.workspace / sub).mkdir(parents=True, exist_ok=True)
         url = f"sqlite:///{self.db_path}"
@@ -103,7 +104,7 @@ class ArchitectureWorld:
     def close(self) -> None:
         self._runtime, self._graph = None, None
 
-    def __enter__(self) -> "ArchitectureWorld":
+    def __enter__(self) -> Self:
         return self.open()
 
     def __exit__(self, *exc) -> None:
@@ -232,6 +233,47 @@ class ArchitectureWorld:
             "severity": severity,
         }).id
 
+    # ---- domain port (docs/v2/45 §4, V2.3-F4) --------------------------
+    # ActiveGraph stays behind these domain methods: promotion/proposals
+    # must never touch `.graph` directly (ADR-0024).
+
+    def observation_is_claimed(self, observation_id: str) -> bool:
+        existing = self.graph.relations(target=observation_id,
+                                        type="derived_from")
+        return any(self.get_object(r.source)["type"] == "claim"
+                   for r in existing)
+
+    def propose_derived_claim(self, claim: ClaimData,
+                              observation_id: str) -> str:
+        claim_id = self.propose_claim(claim)
+        self.graph.add_relation(claim_id, observation_id, "derived_from", {})
+        return claim_id
+
+    def claim_observation_ids(self, claim_id: str) -> list[str]:
+        return [r.target for r in
+                self.graph.relations(source=claim_id, type="derived_from")]
+
+    def link_contradicts(self, observation_id: str, claim_id: str,
+                         reason: str) -> None:
+        self.graph.add_relation(observation_id, claim_id, "contradicts",
+                                {"reason": reason})
+
+    def claim_is_contradicted(self, claim_id: str) -> bool:
+        return any(r.type == "contradicts"
+                   for r in self.graph.relations(target=claim_id))
+
+    def set_claim_status(self, claim_id: str, status: str) -> None:
+        self.graph.patch_object(claim_id, {"status": status})
+
+    def set_object_fields(self, object_id: str, fields: dict) -> None:
+        self.graph.patch_object(object_id, fields)
+
+    def remove_relation_by_id(self, relation_id: str) -> None:
+        self.graph.remove_relation(relation_id)
+
+    def remove_object_by_id(self, object_id: str) -> None:
+        self.graph.remove_object(object_id)
+
     def persist_findings(self, findings: list[dict]) -> int:
         """Persist findings as objects linked to a fresh review audit
         object. Dedup key: (kind, target_id). Returns new findings count."""
@@ -313,7 +355,7 @@ class ArchitectureWorld:
 
     # ---- fork/diff of the architecture (Phase G, docs/v2/08) -----------
 
-    def fork(self, name: str) -> "ArchitectureWorld":
+    def fork(self, name: str) -> ArchitectureWorld:
         """Branch this world's event log into an independent proposal run
         `proposal-<name>`. Idempotent by name: an existing fork run is
         reopened, never re-branched."""
@@ -332,7 +374,7 @@ class ArchitectureWorld:
                 label=name, created_at=_utcnow())
         return self._view(fork_run_id)
 
-    def _view(self, run_id: str) -> "ArchitectureWorld":
+    def _view(self, run_id: str) -> ArchitectureWorld:
         return ArchitectureWorld(
             project_id=self.project_id, name=self.project_name,
             root=self.root, remote=self.remote, run_id=run_id).open()

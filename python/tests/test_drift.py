@@ -9,12 +9,9 @@ points at locations absent from the current Code Index.
 """
 
 import pytest
-
 from conftest import KOTLIN_RUN, load_fixture
 
-from archskillkit.codeindex import CodeIndex
 from archskillkit.promotion import discover
-from archskillkit.world import ArchitectureWorld
 
 
 @pytest.fixture()

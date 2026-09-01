@@ -7,15 +7,14 @@ Deterministic: hypothesis-based generation arrives in V2.3-F8.
 import json
 
 import pytest
-
-from archskillkit.codeindex import CodeIndex
-from archskillkit.promotion import discover, evaluate_claims, propose_claims
-from archskillkit.proposals import promote, structural_diff
-from archskillkit.projections.adapters.likec4 import LikeC4Adapter
-from archskillkit.projections.writer import ProjectionError, project_to_workspace
-from archskillkit.world import ArchitectureWorld
 from conftest import KOTLIN_RUN
 from test_promotion import inferred_observation
+
+from archskillkit.codeindex import CodeIndex
+from archskillkit.projections.adapters.likec4 import LikeC4Adapter
+from archskillkit.projections.writer import ProjectionError, project_to_workspace
+from archskillkit.promotion import discover, evaluate_claims, propose_claims
+from archskillkit.proposals import promote, structural_diff
 
 
 def _astgrep_ndjson(*records: tuple[str, str, str, int]) -> str:

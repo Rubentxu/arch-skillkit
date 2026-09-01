@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from archskillkit.world import ArchitectureWorld, PromotionError
+from archskillkit.ports import ArchitectureWorldPort
+from archskillkit.world import PromotionError
 
 
 class PromotionRequired(PromotionError):
@@ -36,7 +37,7 @@ class StructuralDiff:
                     or self.findings_new or self.findings_resolved)
 
 
-def _arch_view(world: ArchitectureWorld):
+def _arch_view(world: ArchitectureWorldPort):
     """Architecture layers keyed by semantic names, not runtime ids."""
     elements = {o["data"]["name"]: o["data"]
                 for o in world.find_objects("architecture_element")}
@@ -52,8 +53,8 @@ def _arch_view(world: ArchitectureWorld):
     return elements, relations, findings
 
 
-def structural_diff(main: ArchitectureWorld,
-                    proposal: ArchitectureWorld) -> StructuralDiff:
+def structural_diff(main: ArchitectureWorldPort,
+                    proposal: ArchitectureWorldPort) -> StructuralDiff:
     main_elements, main_relations, main_findings = _arch_view(main)
     fork_elements, fork_relations, fork_findings = _arch_view(proposal)
 
@@ -91,7 +92,7 @@ def structural_diff(main: ArchitectureWorld,
     return diff
 
 
-def promote(main: ArchitectureWorld, proposal: ArchitectureWorld) -> dict:
+def promote(main: ArchitectureWorldPort, proposal: ArchitectureWorldPort) -> dict:
     """Apply an approved proposal's diff to the main world.
 
     Policy gate: the fork must carry a proposal object with status
@@ -120,8 +121,8 @@ def promote(main: ArchitectureWorld, proposal: ArchitectureWorld) -> dict:
         element = next(o for o in
                        main.find_objects("architecture_element",
                                          name=change["element"]))
-        main.graph.patch_object(element["id"],
-                                {"confidence": change["to"]})
+        main.set_object_fields(element["id"],
+                               {"confidence": change["to"]})
         summary["confidence_changed"] += 1
 
     for rel in diff.relations_added:
@@ -146,14 +147,14 @@ def promote(main: ArchitectureWorld, proposal: ArchitectureWorld) -> dict:
                            main_element_names.get(r["target"], r["target"]))
                        == (rel["kind"], rel["source"], rel["target"])), None)
         if victim is not None:
-            main.graph.remove_relation(victim["id"])
+            main.remove_relation_by_id(victim["id"])
             summary["relations_removed"] += 1
 
     for name in diff.elements_removed:
         element = next(o for o in main.find_objects(
             "architecture_element", name=name))
-        main.graph.remove_object(element["id"])
+        main.remove_object_by_id(element["id"])
         summary["elements_removed"] += 1
 
-    proposal.graph.patch_object(approved[0]["id"], {"status": "promoted"})
+    proposal.set_object_fields(approved[0]["id"], {"status": "promoted"})
     return summary

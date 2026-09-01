@@ -90,6 +90,30 @@ export ARCHSKILLKIT_PYTHON="$MISE_PROJECT_ROOT/python/.venv/bin/python"
 bats "${ARCHSKILLKIT_BATS_TARGET:-tests/}"
 '''
 
+[tasks.lint]
+description = "Static gates: ruff, scoped mypy, version sync (docs/v2/46 F2)"
+run = '''
+set -eu
+cd "$MISE_PROJECT_ROOT/python"
+uv run --locked ruff check src tests
+uv run --locked mypy
+cd "$MISE_PROJECT_ROOT"
+python3 scripts/release/sync-versions.py --check
+'''
+
+[tasks.coverage]
+description = "pytest with coverage report (informed, non-blocking)"
+run = '''
+test_xdg="$(mktemp -d python/.cache/test-xdg.XXXXXX)"
+export XDG_CONFIG_HOME="$test_xdg/config"
+export XDG_DATA_HOME="$test_xdg/data"
+export XDG_STATE_HOME="$test_xdg/state"
+export XDG_CACHE_HOME="$test_xdg/cache"
+UV_CACHE_DIR=python/.cache/uv \
+  uv run --project python --locked --extra dev pytest -q \
+  --cov=archskillkit --cov-report=term-missing
+'''
+
 [tasks.ci]
 description = "Run the same test recipe locally and in CI"
-depends = ["test:python", "test:bats"]
+depends = ["lint", "test:python", "test:bats"]

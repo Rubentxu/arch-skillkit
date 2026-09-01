@@ -430,7 +430,8 @@ class TestRepoClean:
         subprocess.run(["git", "-C", str(repo), "remote", "add", "origin",
                         "https://github.com/rubentxu/fixture.git"], check=True)
         before = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
-                                capture_output=True, text=True).stdout
+                                capture_output=True, text=True,
+                                check=False).stdout
 
         idx = CodeIndex.for_repo(repo).open()
         payload = ndjson(outline_record(
@@ -439,5 +440,6 @@ class TestRepoClean:
         idx.close()
 
         after = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
-                               capture_output=True, text=True).stdout
+                               capture_output=True, text=True,
+                               check=False).stdout
         assert after == before

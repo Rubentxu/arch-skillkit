@@ -9,15 +9,14 @@ of docs/v2/19 SPIKE-05 (sync payment → async payment).
 """
 
 import pytest
+from conftest import KOTLIN_RUN
 
+from archskillkit.promotion import discover
 from archskillkit.proposals import (
     PromotionRequired,
     promote,
     structural_diff,
 )
-from conftest import KOTLIN_RUN
-
-from archskillkit.promotion import discover
 
 
 @pytest.fixture()
@@ -61,7 +60,7 @@ class TestFork:
 
     def test_fork_is_idempotent_by_name(self, main_world):
         first = main_world.fork("async-payments")
-        first_events = len(list(first.snapshot()["objects"]))
+        _first_events_before_fork = len(list(first.snapshot()["objects"]))
         second = main_world.fork("async-payments")
         assert second.run_id == first.run_id
         assert second.snapshot()["counts"] == first.snapshot()["counts"]

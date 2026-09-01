@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from archskillkit.promotion import discover
 from archskillkit.projections import (
     ProjectionAdapter,
     ProjectionRouter,
@@ -27,6 +26,7 @@ from archskillkit.projections.writer import (
     project_to_workspace,
     revision_hash,
 )
+from archskillkit.promotion import discover
 
 
 @pytest.fixture()

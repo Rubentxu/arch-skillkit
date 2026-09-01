@@ -20,8 +20,9 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Self
 
-from archskillkit.world import ArchitectureWorld
+from archskillkit.ids import ProjectContext
 
 SCHEMA_VERSION = 1
 
@@ -105,13 +106,13 @@ class CodeIndex:
         self._conn: sqlite3.Connection | None = None
 
     @classmethod
-    def for_repo(cls, repo_path) -> "CodeIndex":
-        world = ArchitectureWorld.for_repo(repo_path)
-        return cls(world.workspace / "code.sqlite")
+    def for_repo(cls, repo_path) -> CodeIndex:
+        ctx = ProjectContext.for_repo(repo_path)
+        return cls(ctx.workspace / "code.sqlite")
 
     # ---- lifecycle ----------------------------------------------------
 
-    def open(self) -> "CodeIndex":
+    def open(self) -> CodeIndex:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.db_path)
         self._conn.row_factory = sqlite3.Row
@@ -125,7 +126,7 @@ class CodeIndex:
             self._conn.close()
             self._conn = None
 
-    def __enter__(self) -> "CodeIndex":
+    def __enter__(self) -> Self:
         return self.open()
 
     def __exit__(self, *exc) -> None:
@@ -361,14 +362,12 @@ class CodeIndex:
             if row is None:
                 raise AmbiguousSymbolError(f"no symbol with id {ref}")
             return self._symbol_dict(row)
+        base = ("SELECT s.*, f.path AS path FROM symbols s JOIN files f"
+                " ON f.id=s.file_id WHERE ")
         for sql, param in (
-            ("SELECT s.*, f.path AS path FROM symbols s JOIN files f"
-             " ON f.id=s.file_id WHERE s.qualified_name=?", (str(ref),)),
-            ("SELECT s.*, f.path AS path FROM symbols s JOIN files f"
-             " ON f.id=s.file_id WHERE s.qualified_name LIKE ?",
-             (f"{ref}@%",)),
-            ("SELECT s.*, f.path AS path FROM symbols s JOIN files f"
-             " ON f.id=s.file_id WHERE s.name=?", (str(ref),)),
+            (base + "s.qualified_name=?", (str(ref),)),
+            (base + "s.qualified_name LIKE ?", (f"{ref}@%",)),
+            (base + "s.name=?", (str(ref),)),
         ):
             rows = self._db.execute(sql, param).fetchall()
             if len(rows) == 1:
@@ -574,8 +573,7 @@ class CodeIndex:
             ids).fetchall()
 
     def _edges(self, symbol_id: int, outgoing: bool) -> list[dict]:
-        join_col, other_col = ("source_id", "target_id") if outgoing \
-            else ("target_id", "source_id")
+        join_col = "source_id" if outgoing else "target_id"
         rows = self._db.execute(
             f"""
             SELECT e.*, sf.path AS source_path, tf.path AS target_path,

@@ -17,6 +17,7 @@ import hashlib
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 _SCP_COLON = re.compile(r"^([^/:]+):/")
@@ -92,23 +93,20 @@ def normalize_remote(url: str) -> str:
     """
     if url.startswith("ssh://"):
         url = url[len("ssh://"):]
-        if url.startswith("git@"):
-            url = url[len("git@"):]
+        url = url.removeprefix("git@")
         url = _SSH_PORT.sub(r"\1/", url)
     elif url.startswith("git@"):
         url = url[len("git@"):]
         url = _SCP_COLON.sub(r"\1/", url)
     elif url.startswith("git://"):
         url = url[len("git://"):]
-    elif url.startswith("http://") or url.startswith("https://"):
+    elif url.startswith(("http://", "https://")):
         url = url.split("://", 1)[1]
         # bash ${url#*@}: strip through the FIRST '@'
         if "@" in url:
             url = url.split("@", 1)[1]
-    if url.endswith(".git"):
-        url = url[: -len(".git")]
-    if url.endswith("/"):
-        url = url[:-1]
+    url = url.removesuffix(".git")
+    url = url.removesuffix("/")
     return url
 
 
@@ -126,3 +124,27 @@ def compute_project_id(root: str, remote: str) -> str:
     seed = remote if remote else root
     digest = hashlib.sha256(seed.encode()).hexdigest()[:8]
     return f"{project_name(root)}-{digest}"
+
+
+@dataclass(frozen=True)
+class ProjectContext:
+    """Resolved project identity — the single value both domains
+    (Architecture World, Code Index) share instead of importing each
+    other (docs/v2/45 §2.1, V2.3-F3)."""
+
+    project_id: str
+    name: str
+    root: Path
+    remote: str
+    workspace: Path
+
+    @classmethod
+    def for_repo(cls, repo_path: str | os.PathLike[str]) -> ProjectContext:
+        root = repo_root(repo_path)
+        if root is None:
+            raise RepoNotFound(f"not a git repository: {repo_path}")
+        remote = repo_remote(root)
+        project_id = compute_project_id(str(root), remote)
+        return cls(project_id=project_id, name=project_name(str(root)),
+                   root=root, remote=remote,
+                   workspace=projects_root() / project_id)

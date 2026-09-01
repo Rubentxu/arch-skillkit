@@ -74,7 +74,7 @@ class Artifact(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _attestation_shape(self) -> "Artifact":
+    def _attestation_shape(self) -> Artifact:
         if self.attestation.required and not self.attestation.bundle:
             raise ValueError(
                 f"artifact {self.id!r} requires attestation but declares no bundle")
@@ -87,7 +87,7 @@ class PlatformEntry(BaseModel):
     artifacts: list[Artifact]
 
     @model_validator(mode="after")
-    def _unique_artifact_ids(self) -> "PlatformEntry":
+    def _unique_artifact_ids(self) -> PlatformEntry:
         ids = [a.id for a in self.artifacts]
         if len(ids) != len(set(ids)):
             raise ValueError(f"duplicate artifact id for {self.os}/{self.arch}")
@@ -126,7 +126,7 @@ class RuntimeManifest(BaseModel):
     requirements: Requirements = Requirements()
 
     @model_validator(mode="after")
-    def _schema_and_platforms(self) -> "RuntimeManifest":
+    def _schema_and_platforms(self) -> RuntimeManifest:
         if self.schema_version != SUPPORTED_SCHEMA_VERSION:
             raise ValueError(
                 f"unsupported manifest schema_version {self.schema_version}"

@@ -54,8 +54,8 @@ jobs:
           mise run bootstrap
           mise run doctor
 
-      - name: Run BATS suite (locked project interpreter)
-        run: mise run test:bats
+      - name: CI gate (lint + python + bats — the only green definition)
+        run: mise run ci
 
   runtime-assets:
     name: Runtime assets (${{ matrix.arch }})

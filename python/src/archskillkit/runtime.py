@@ -93,7 +93,7 @@ class Paths:
     state: Path
 
     @classmethod
-    def from_env(cls) -> "Paths":
+    def from_env(cls) -> Paths:
         return cls(
             data=arch_data_root(),
             cache=arch_cache_root() / "downloads" / "sha256",
@@ -508,7 +508,7 @@ def preflight(
             f"{manifest.release.version}",
             "check the supported platforms in the release manifest"))
         return hard, warnings
-    if sys.version_info < (3, 11):
+    if sys.version_info < (3, 11):  # noqa: UP036 — runtime guard, not a gate
         hard.append(Finding(
             "RUNTIME_INCOMPATIBLE",
             f"python {sys.version_info.major}.{sys.version_info.minor} is"
@@ -555,13 +555,14 @@ def preflight(
                 f"{disk_free} MiB free < {needed_mib} MiB needed"
                 " (artifacts + staging + margin)",
                 "free disk space; nothing was downloaded or installed"))
-        if cache_missing and not offline:
-            if not network_available(platform_entry.artifacts[0].url):
-                hard.append(Finding(
-                    "NETWORK_UNAVAILABLE",
-                    "network is unreachable and the cache is incomplete",
-                    "restore connectivity or pre-populate the cache with"
-                    " setup --prefetch"))
+        network_needed = cache_missing and not offline
+        if network_needed and \
+                not network_available(platform_entry.artifacts[0].url):
+            hard.append(Finding(
+                "NETWORK_UNAVAILABLE",
+                "network is unreachable and the cache is incomplete",
+                "restore connectivity or pre-populate the cache with"
+                " setup --prefetch"))
     return hard, warnings
 
 
