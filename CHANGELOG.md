@@ -27,6 +27,15 @@ fixes.
   (directed paths, scan-generation replacement, promotion diff-fixpoint,
   manual-edit detection, cardinality-gated contradictions). Verified red
   against the previous code and green after the fixes.
+- **V2.3-F5 — SensorContract + content-addressed evidence (docs/v2/45
+  §2.2/§2.4)**: scanner rules declare their fact via
+  `metadata.archskillkit` (fact, target_kind, target_metavar, cardinality,
+  confidence) — check_id substring classification is removed (legacy
+  bridge kept for pre-contract payloads); semgrep match spans are stored
+  (`match_start/match_end`, Code Index schema v2) and container resolution
+  prefers the smallest containing symbol range; `EvidenceData.evidence_id`
+  content-addresses provenance and is the promotion dedup key; the three
+  shipped sensor packs (kotlin/rust/typescript) declare their contracts.
 
 ### Changed
 
