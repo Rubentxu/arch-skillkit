@@ -121,6 +121,9 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - name: Install manifest generator dependency
+        run: python3 -m pip install --quiet pydantic
+
       - name: Generate pinned runtime manifest
         run: |
           version="${GITHUB_REF_NAME#v}"
