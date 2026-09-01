@@ -8,6 +8,8 @@ fixes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-01
+
 ### Added
 
 - **V2.3-F2 — quality gates and a single green recipe (docs/v2/46)**:
