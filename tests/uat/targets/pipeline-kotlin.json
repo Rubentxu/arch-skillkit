@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "pipeline-kotlin",
+  "repository": "https://github.com/Rubentxu/pipeline-kotlin.git",
+  "normalized_remote": "github.com/Rubentxu/pipeline-kotlin",
+  "commit": "3354f319095f70450d0fac85d970bbf3412e8635",
+  "local_candidates": [
+    "Proyectos/kotlin/pipeline-kotlin",
+    "Projects/pipeline-kotlin",
+    "src/pipeline-kotlin"
+  ]
+}

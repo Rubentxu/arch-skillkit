@@ -173,10 +173,13 @@ if [ "${#dep_bodies[@]}" -gt 0 ]; then
 fi
 
 # --- pattern-derived views (only when matches exist) ----------------------
-pattern_view() { # $1: output file, $2: title, $3: rule substring, $4: node label
+pattern_view() { # $1: output file, $2: title, $3: rule substring, $4: node label, $5: message substring
   local f="$out/$1" body
-  body="$(jq --arg root "$root" --arg pat "$3" --arg label "$4" '
-    [.results[] | select(.check_id | contains($pat))] as $rs
+  body="$(jq --arg root "$root" --arg pat "$3" --arg label "$4" --arg message "$5" '
+    [.results[] | select(
+      (((.check_id? // "") | tostring) | contains($pat))
+      or ((((.extra? // {}).message? // "") | tostring) | contains($message))
+    )] as $rs
     | if ($rs | length) == 0 then empty else
     {
       nodes: (
@@ -205,9 +208,9 @@ pattern_view() { # $1: output file, $2: title, $3: rule substring, $4: node labe
 }
 
 if [ -f "$evidence/semgrep.json" ]; then
-  pattern_view "endpoints.arrows" "Endpoints" ".endpoint" "Endpoint"
-  pattern_view "messaging.arrows" "Messaging" "messaging" "MessagingConsumer"
-  pattern_view "data-access.arrows" "Data access" "persistence" "DataAccess"
+  pattern_view "endpoints.arrows" "Endpoints" ".endpoint" "Endpoint" "HTTP endpoint"
+  pattern_view "messaging.arrows" "Messaging" "messaging" "MessagingConsumer" "messaging consumer"
+  pattern_view "data-access.arrows" "Data access" "persistence" "DataAccess" "persistence port"
 fi
 
 printf 'export-arrows: done\noutput: %s\n' "$out"

@@ -64,6 +64,7 @@ skill_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
 runtime_dir="$skill_dir/runtime"
 rules_dir="$skill_dir/rules/semgrep"
 evidence_dir="$workspace/evidence/raw"
+semgrep_jobs="$(arch_semgrep_jobs)" || exit $?
 
 if [ -n "$run_id_arg" ]; then
   # Orchestrated mode: the caller owns the run manifest lifecycle.
@@ -78,7 +79,7 @@ semgrep() {
 }
 
 tmp_evidence="$evidence_dir/.semgrep.json.tmp"
-if semgrep scan --config "$rules_dir" --json --metrics=off --quiet \
+if semgrep scan --config "$rules_dir" --jobs "$semgrep_jobs" --json --metrics=off --quiet \
     --no-rewrite-rule-ids "$root" >"$tmp_evidence" 2>"$evidence_dir/semgrep.stderr.log"; then
   mv "$tmp_evidence" "$evidence_dir/semgrep.json"
   scan_status="success"
@@ -100,7 +101,8 @@ jq -n \
   --arg tool "semgrep" \
   --arg tool_version "$tool_version" \
   --arg rules_checksum "$rules_checksum" \
-  --arg command "semgrep scan --config rules/semgrep --json --metrics=off --no-rewrite-rule-ids $root" \
+  --arg command "semgrep scan --config rules/semgrep --jobs $semgrep_jobs --json --metrics=off --no-rewrite-rule-ids $root" \
+  --argjson jobs "$semgrep_jobs" \
   --arg commit "$commit" \
   --arg run_id "$run_id" \
   --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -111,6 +113,7 @@ jq -n \
     tool_version: $tool_version,
     rules_checksum: $rules_checksum,
     command: $command,
+    resource_limits: {jobs: $jobs},
     commit: $commit,
     run_id: $run_id,
     recorded_at: $recorded_at,

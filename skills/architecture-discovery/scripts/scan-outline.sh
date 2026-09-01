@@ -64,6 +64,7 @@ skill_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
 runtime_dir="$skill_dir/runtime"
 rules_dir="$skill_dir/rules/ast-grep"
 evidence_dir="$workspace/evidence/raw"
+astgrep_threads="$(arch_ast_grep_threads)" || exit $?
 
 if [ -n "$run_id_arg" ]; then
   # Orchestrated mode: the caller owns the run manifest lifecycle.
@@ -78,7 +79,7 @@ ast_grep() {
 }
 
 tmp_evidence="$evidence_dir/.ast-grep.jsonl.tmp"
-if ast_grep scan -c "$rules_dir/sgconfig.yml" --json=stream "$root" >"$tmp_evidence" 2>"$evidence_dir/ast-grep.stderr.log"; then
+if ast_grep scan -c "$rules_dir/sgconfig.yml" --threads "$astgrep_threads" --json=stream "$root" >"$tmp_evidence" 2>"$evidence_dir/ast-grep.stderr.log"; then
   mv "$tmp_evidence" "$evidence_dir/ast-grep.jsonl"
   scan_status="success"
 else
@@ -99,7 +100,8 @@ jq -n \
   --arg tool "ast-grep" \
   --arg tool_version "$tool_version" \
   --arg rules_checksum "$rules_checksum" \
-  --arg command "ast-grep scan -c sgconfig.yml --json=stream $root" \
+  --arg command "ast-grep scan -c sgconfig.yml --threads $astgrep_threads --json=stream $root" \
+  --argjson threads "$astgrep_threads" \
   --arg commit "$commit" \
   --arg run_id "$run_id" \
   --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -109,6 +111,7 @@ jq -n \
     tool_version: $tool_version,
     rules_checksum: $rules_checksum,
     command: $command,
+    resource_limits: {threads: $threads},
     commit: $commit,
     run_id: $run_id,
     recorded_at: $recorded_at

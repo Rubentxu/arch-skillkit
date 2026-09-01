@@ -6,6 +6,52 @@ set -euo pipefail
 
 ARCHSK_SCHEMA_VERSION=1
 
+# Resource policy for deterministic scanners. Defaults deliberately favor
+# resource-constrained machines; callers may raise them with positive integer
+# environment overrides. Keep the Node heap flag constructed in one place so
+# a caller's NODE_OPTIONS never accumulates duplicate max-old-space-size flags.
+arch_positive_integer() {
+  local name="$1" value="$2"
+  case "$value" in
+    '' | *[!0-9]* | 0 | 0*)
+      printf 'error: %s must be a positive integer; got %s\n' "$name" "${value:-<empty>}" >&2
+      return 2
+      ;;
+  esac
+}
+
+arch_ast_grep_threads() {
+  local value="${ARCHSK_AST_GREP_THREADS:-1}"
+  arch_positive_integer ARCHSK_AST_GREP_THREADS "$value" || return
+  printf '%s\n' "$value"
+}
+
+arch_semgrep_jobs() {
+  local value="${ARCHSK_SEMGREP_JOBS:-1}"
+  arch_positive_integer ARCHSK_SEMGREP_JOBS "$value" || return
+  printf '%s\n' "$value"
+}
+
+arch_node_max_old_space_size_mb() {
+  local value="${ARCHSK_NODE_MAX_OLD_SPACE_SIZE_MB:-512}"
+  arch_positive_integer ARCHSK_NODE_MAX_OLD_SPACE_SIZE_MB "$value" || return
+  printf '%s\n' "$value"
+}
+
+arch_node_options_with_heap() {
+  local heap_mb="$1" inherited="${NODE_OPTIONS:-}" cleaned
+  arch_positive_integer ARCHSK_NODE_MAX_OLD_SPACE_SIZE_MB "$heap_mb" || return
+  # Node parses NODE_OPTIONS as whitespace-separated flags. Remove both the
+  # hyphenated and underscored spellings, whether their value is joined with
+  # '=' or supplied as the next token, before adding one canonical flag.
+  cleaned="$(printf '%s\n' "$inherited" | sed -E 's/(^|[[:space:]])--max[-_]old[-_]space[-_]size(=[^[:space:]]+|[[:space:]]+[^[:space:]]+)//g; s/^[[:space:]]+//; s/[[:space:]]+$//; s/[[:space:]]+/ /g')"
+  if [ -n "$cleaned" ]; then
+    printf '%s --max-old-space-size=%s\n' "$cleaned" "$heap_mb"
+  else
+    printf '%s\n' "--max-old-space-size=$heap_mb"
+  fi
+}
+
 arch_config_root() {
   printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/arch-skillkit"
 }
@@ -43,11 +89,23 @@ arch_mise() {
   # $1: runtime dir with mise.toml; rest: command and args.
   local runtime_dir="$1"
   shift
-  local cfg_dir
+  local cfg_dir semgrep_dir node_heap node_options
   cfg_dir="$(arch_cache_root)/mise-config"
-  mkdir -p "$cfg_dir"
+  semgrep_dir="$(arch_cache_root)/semgrep"
+  mkdir -p "$cfg_dir" "$semgrep_dir"
+  # An empty, fresh version response keeps offline/test runs deterministic;
+  # Semgrep refreshes it normally after the cache timestamp expires.
+  if [ ! -f "$semgrep_dir/version" ]; then
+    printf '%s\n{}\n' "$(date +%s)" >"$semgrep_dir/version"
+  fi
+  node_heap="$(arch_node_max_old_space_size_mb)" || return
+  node_options="$(arch_node_options_with_heap "$node_heap")" || return
   env -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME \
     MISE_CONFIG_DIR="$cfg_dir" \
+    SEMGREP_SETTINGS_FILE="${SEMGREP_SETTINGS_FILE:-$semgrep_dir/settings.yml}" \
+    SEMGREP_VERSION_CACHE_PATH="${SEMGREP_VERSION_CACHE_PATH:-$semgrep_dir/version}" \
+    SEMGREP_LOG_FILE="${SEMGREP_LOG_FILE:-$semgrep_dir/semgrep.log}" \
+    NODE_OPTIONS="$node_options" \
     mise exec -C "$runtime_dir" -- "$@"
 }
 
