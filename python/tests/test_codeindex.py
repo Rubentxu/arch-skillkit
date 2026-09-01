@@ -272,8 +272,12 @@ class TestScanLifecycle:
         index.ingest_semgrep(sg, scan_run_id="r1", scan_root=FX_ROOT)
         assert index.stats() == before
 
-    def test_world_survives_index_deletion(self, tmp_path):
+    def test_world_survives_index_deletion(self, tmp_path, monkeypatch):
         # UAT2-003: code.sqlite is disposable; activegraph.sqlite is not
+        # (sandboxed XDG: never touch the developer's real workspaces)
+        for var in ("XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME",
+                    "XDG_CACHE_HOME"):
+            monkeypatch.setenv(var, str(tmp_path / var.lower()))
         repo = tmp_path / "fixture"
         repo.mkdir()
         subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)

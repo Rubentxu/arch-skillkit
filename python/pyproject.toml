@@ -25,6 +25,7 @@ check_untyped_defs = true
 # Progressive strictness (docs/v2/46 F2): the newest, tightest modules first.
 files = [
   "src/archskillkit/runtime_manifest.py",
+  "src/archskillkit/sensors.py",
   "src/archskillkit/ids.py",
   "src/archskillkit/ports.py",
   "src/archskillkit/projections/metadata.py",

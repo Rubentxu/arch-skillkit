@@ -29,6 +29,10 @@ from archskillkit.packs.arch_core import (
     ObservationData,
 )
 from archskillkit.ports import ArchitectureWorldPort
+from archskillkit.sensors import PREDICATE_CARDINALITY  # noqa: F401 re-export
+from archskillkit.sensors import (
+    cardinality_for_predicate as predicate_cardinality,
+)
 from archskillkit.world import PromotionError
 
 # Code Index pseudo-kind → architecture element category (docs/v2/04).
@@ -92,16 +96,19 @@ def ingest_scan(world: ArchitectureWorldPort, index: CodeIndex,
         subject = f"{edge['source_path']}::{edge['source_name']}"
         predicate = edge["kind"].lower()
         object_ref = f"{edge['target_kind']}:{edge['target_name']}"
+        evidence_id = _evidence_id(
+            tool="code-index", rule=edge["rule"], file=edge["source_path"],
+            match_start=edge.get("match_start"),
+            match_end=edge.get("match_end"))
 
-        evidence = world.find_objects(
-            "evidence", rule=edge["rule"],
-            file=edge["source_path"],
-            start_line=edge["source_start_line"])
+        evidence = world.find_objects("evidence", evidence_id=evidence_id)
         if not evidence:
             ev_id = world.record_evidence(EvidenceData(
+                evidence_id=evidence_id,
                 tool="code-index", rule=edge["rule"],
                 file=edge["source_path"],
-                start_line=edge["source_start_line"]))
+                start_line=edge.get("match_start"),
+                end_line=edge.get("match_end")))
             report.evidence += 1
         else:
             ev_id = evidence[0]["id"]
@@ -116,8 +123,8 @@ def ingest_scan(world: ArchitectureWorldPort, index: CodeIndex,
                     "tool": ev_data.get("tool", "code-index"),
                     "rule": edge["rule"],
                     "file": edge["source_path"],
-                    "start_line": edge["source_start_line"],
-                    "end_line": None,
+                    "start_line": edge.get("match_start"),
+                    "end_line": edge.get("match_end"),
                     "commit": "",
                 }))
             report.observations += 1
@@ -167,33 +174,21 @@ def propose_claims(world: ArchitectureWorldPort) -> int:
     return proposed
 
 
-# ---- SensorContract v0: predicate cardinality ------------------------
-
-# Cardinality of the fact a predicate expresses. `one` means a subject
-# holds at most one object at a time — two distinct objects then form a
-# contradiction. `many` predicates never contradict (SensorContract,
-# docs/v2/45 §2.2; full metadata-driven contract lands in V2.3-F5).
-PREDICATE_CARDINALITY: dict[str, str] = {
-    "belongs_to": "one",
-    "part_of": "one",
-    "deployed_on": "one",
-    "implemented_by": "many",
-    "depends_on": "many",
-    "uses": "many",
-    "exposes": "many",
-    "publishes": "many",
-    "consumes": "many",
-    "reads": "many",
-    "writes": "many",
-    "calls": "many",
-}
-
-DEFAULT_CARDINALITY = "many"
+# Predicate cardinality lives in archskillkit.sensors (SensorContract):
+# registered contracts override static defaults; re-exported above for
+# backward compatibility.
 
 
-def predicate_cardinality(predicate: str) -> str:
-    return PREDICATE_CARDINALITY.get(predicate.strip().lower(),
-                                     DEFAULT_CARDINALITY)
+def _evidence_id(*, tool: str, rule: str, file: str,
+                 match_start: int | None, match_end: int | None,
+                 commit: str = "") -> str:
+    """Content-addressed evidence identity (docs/v2/45 §2.4): provenance
+    fields hashed, never guessed from neighbouring lines."""
+    import hashlib
+
+    raw = "|".join(str(part) for part in (
+        commit, file, match_start, match_end, tool, rule))
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
 def evaluate_claims(world: ArchitectureWorldPort) -> dict[str, int]:

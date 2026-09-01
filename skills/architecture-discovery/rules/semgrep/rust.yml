@@ -9,6 +9,12 @@ rules:
     languages: [rust]
     severity: INFO
     message: HTTP endpoint declared with an actix-web attribute macro
+    metadata:
+      archskillkit:
+        fact: exposes
+        target_kind: endpoint
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: |
           #[get($PATH)]
@@ -35,6 +41,12 @@ rules:
     languages: [rust]
     severity: INFO
     message: outgoing HTTP client construction with reqwest
+    metadata:
+      archskillkit:
+        fact: uses
+        target_kind: http_client
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: reqwest::Client::new()
       - pattern: reqwest::get(...)

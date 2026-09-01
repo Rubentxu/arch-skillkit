@@ -8,6 +8,12 @@ rules:
     languages: [typescript]
     severity: INFO
     message: HTTP endpoint registered on an express application or router
+    metadata:
+      archskillkit:
+        fact: exposes
+        target_kind: endpoint
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: app.get($PATH, ...)
       - pattern: app.post($PATH, ...)

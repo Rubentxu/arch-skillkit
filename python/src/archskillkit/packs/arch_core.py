@@ -27,7 +27,11 @@ ScanStatus = Literal["running", "success", "partial", "failed"]
 
 
 class EvidenceData(BaseModel):
-    """Provenance of a detection — design/schemas/observation.yaml#evidence."""
+    """Provenance of a detection — design/schemas/observation.yaml#evidence.
+
+    `evidence_id` is the content-addressed identity (docs/v2/45 §2.4):
+    sha256 over commit/file/match-span/tool/rule — the promotion dedup key.
+    """
 
     tool: str
     rule: str = ""
@@ -35,6 +39,7 @@ class EvidenceData(BaseModel):
     start_line: int | None = None
     end_line: int | None = None
     commit: str = ""
+    evidence_id: str = ""
 
 
 class ObservationData(BaseModel):

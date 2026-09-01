@@ -22,9 +22,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
+from archskillkit import sensors
 from archskillkit.ids import ProjectContext
+from archskillkit.sensors import ContractError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SYMBOL_KINDS_WITHOUT_HASH = frozenset()
 
@@ -34,15 +36,10 @@ _EXTENSION_LANGUAGES = {
     ".py": "python", ".go": "go",
 }
 
-# check_id family → (edge kind, pseudo-target kind). Order matters.
-_EDGE_RULES: tuple[tuple[str, str, str], ...] = (
-    ("messaging.listener", "CONSUMES", "topic"),
-    ("persistence.repository", "USES", "datastore"),
-    ("http.client", "USES", "http_client"),
-    ("endpoint", "EXPOSES", "endpoint"),
-)
-
-_MAX_CONTAINER_DISTANCE = 2  # semgrep line vs symbol declaration line
+# check_id → (edge kind, pseudo-target kind) mapping is GONE: rules
+# declare their contract via metadata.archskillkit (sensors.py). The
+# legacy bridge lives there too, for payloads captured before packs
+# migrated.
 
 
 class IngestError(Exception):
@@ -78,13 +75,6 @@ class IngestReport:
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _classify_edge(check_id: str) -> tuple[str, str] | None:
-    for pattern, edge_kind, target_kind in _EDGE_RULES:
-        if pattern in check_id:
-            return edge_kind, target_kind
-    return None
 
 
 def _literal_from_metavars(metavars: dict) -> str | None:
@@ -189,7 +179,9 @@ class CodeIndex:
               origin TEXT NOT NULL DEFAULT 'DETECTED',
               rule TEXT NOT NULL DEFAULT '',
               confidence TEXT NOT NULL DEFAULT 'high',
-              scan_run_id TEXT NOT NULL
+              scan_run_id TEXT NOT NULL,
+              match_start INTEGER,
+              match_end INTEGER
             );
             CREATE UNIQUE INDEX edges_unique ON edges
               (scan_run_id, source_id, target_id, kind, rule);
@@ -236,6 +228,7 @@ class CodeIndex:
                     rule_id = rec["ruleId"]
                     file_path = rec["file"]
                     line = int(rec["range"]["start"]["line"])
+                    end = int(rec["range"].get("end", {}).get("line", line))
                     lines_text = str(rec.get("lines", ""))
                 except (KeyError, TypeError, ValueError) as exc:
                     raise IngestError(f"incomplete ast-grep record: {exc}") from exc
@@ -244,12 +237,13 @@ class CodeIndex:
                                             _sha256(lines_text), scan_run_id)
                 kind = rule_id.rsplit(".", 1)[-1]
                 start_line = line + 1
+                end_line = end + 1
                 db.execute(
                     "INSERT OR IGNORE INTO symbols (file_id, kind, name,"
                     " qualified_name, start_line, end_line, hash)"
-                    " VALUES (?, ?, ?, ?, ?, NULL, ?)",
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (file_id, kind, name, f"{rel}::{name}@{start_line}",
-                     start_line, _sha256(lines_text)))
+                     start_line, end_line, _sha256(lines_text)))
                 if db.execute("SELECT changes()").fetchone()[0]:
                     report.kinds[kind] = report.kinds.get(kind, 0) + 1
                     report.symbols += 1
@@ -269,8 +263,12 @@ class CodeIndex:
                        scan_root: str | Path) -> IngestReport:
         """Ingest one Semgrep run (`scan --json`). Matches become edges from
         the containing symbol to a typed pseudo-symbol (endpoint, topic,
-        datastore, http_client); matches without a nearby declaration are
-        reported as warnings and skipped."""
+        datastore, http_client).
+
+        Classification: the rule's `metadata.archskillkit` contract wins
+        (SensorContract); rules without it go through the legacy bridge.
+        Matches without a resolvable container symbol are reported as
+        warnings and skipped."""
         try:
             document = json.loads(payload) if payload.strip() else {"results": []}
         except json.JSONDecodeError as exc:
@@ -290,22 +288,56 @@ class CodeIndex:
                     check_id = result["check_id"]
                     path = result["path"]
                     line = int(result["start"]["line"])
+                    end_line = int(result.get("end", {}).get("line", line))
                 except (KeyError, TypeError, ValueError) as exc:
                     raise IngestError(f"incomplete semgrep result: {exc}") from exc
-                classified = _classify_edge(check_id)
-                if classified is None:
-                    report.warnings.append(f"unknown check_id skipped: {check_id}")
+
+                extra = result.get("extra", {}) or {}
+                metavars = extra.get("metavars", {}) or {}
+                try:
+                    contract = sensors.SensorContract.from_metadata(
+                        check_id, extra.get("metadata"))
+                except ContractError as exc:
+                    report.warnings.append(f"invalid sensor contract: {exc}")
                     continue
-                edge_kind, target_kind = classified
+                if contract is not None:
+                    sensors.register(contract)
+                    edge_kind, target_kind = contract.edge_kind, contract.target_kind
+                    confidence = contract.confidence
+                    target_name = None
+                    if contract.target_metavar:
+                        content = str(metavars.get(contract.target_metavar, {})
+                                      .get("abstract_content", ""))
+                        quoted = re.search(r'"([^"]+)"', content)
+                        target_name = quoted.group(1) if quoted else (
+                            content.strip() or None)
+                    if target_name is None:
+                        # literal scan across metavars (deprecated fallback)
+                        target_name = _literal_from_metavars(metavars)
+                    if target_name is None:
+                        report.warnings.append(
+                            f"contract target missing for {check_id}"
+                            f" at {path}:{line}")
+                        continue
+                else:
+                    legacy = sensors.classify_legacy(check_id)
+                    if legacy is None:
+                        report.warnings.append(
+                            f"unknown check_id skipped: {check_id}")
+                        continue
+                    edge_kind, target_kind = legacy
+                    confidence = "high"
+                    target_name = _literal_from_metavars(metavars) or \
+                        f"{target_kind}@{line}"
+
                 rel = self._relpath(path, scan_root)
                 file_row = self._file_by_path(rel)
-                source = self._container_symbol(file_row, line) if file_row else None
+                source = self._container_symbol(file_row, line,
+                                                end_line) if file_row else None
                 if source is None:
                     report.warnings.append(
                         f"no container symbol for {check_id} at {rel}:{line}")
                     continue
-                metavars = (result.get("extra", {}) or {}).get("metavars", {}) or {}
-                target_name = _literal_from_metavars(metavars) or f"{target_kind}@{line}"
                 target_id = self._ensure_symbol(
                     file_row, target_kind, target_name,
                     f"{rel}::{target_kind}:{target_name}@{line}", line)
@@ -315,10 +347,12 @@ class CodeIndex:
                         report.kinds.get(target_kind, 0) + 1
                 db.execute(
                     "INSERT OR IGNORE INTO edges (source_id, target_id, kind,"
-                    " origin, rule, confidence, scan_run_id)"
-                    " VALUES (?, ?, ?, 'DETECTED', ?, 'high', ?)",
-                    (source["id"], target_id, edge_kind, check_id, scan_run_id))
-                if db.execute("SELECT changes()").fetchone()[0]:
+                    " origin, rule, confidence, scan_run_id,"
+                    " match_start, match_end)"
+                    " VALUES (?, ?, ?, 'DETECTED', ?, ?, ?, ?, ?)",
+                    (source["id"], target_id, edge_kind, check_id, confidence,
+                     scan_run_id, line, end_line))
+                if self._db.execute("SELECT changes()").fetchone()[0]:
                     report.edge_kinds[edge_kind] = \
                         report.edge_kinds.get(edge_kind, 0) + 1
                     report.edges += 1
@@ -482,6 +516,7 @@ class CodeIndex:
         rows = self._db.execute(
             """
             SELECT e.kind AS kind, e.rule AS rule,
+                   e.match_start AS match_start, e.match_end AS match_end,
                    ss.id AS source_id, ss.name AS source_name,
                    ss.start_line AS source_start_line,
                    sf.path AS source_path, ss.qualified_name AS source_qualified,
@@ -543,21 +578,38 @@ class CodeIndex:
             "SELECT * FROM files WHERE path=?", (rel,)).fetchone()
         return dict(row) if row else None
 
-    def _container_symbol(self, file_row: dict, line: int) -> dict | None:
+    def _container_symbol(self, file_row: dict, match_start: int,
+                          match_end: int | None = None) -> dict | None:
+        """Smallest symbol range containing the semgrep match. Symbols
+        without a stored end (old payloads) fall back to the legacy
+        declaration-distance heuristic (≤ 2 lines)."""
+        match_end = match_end or match_start
         rows = self._db.execute(
             "SELECT s.*, f.path AS path FROM symbols s JOIN files f"
             " ON f.id=s.file_id WHERE s.file_id=? AND s.start_line IS NOT NULL",
             (file_row["id"],)).fetchall()
-        candidates = []
+        containing: list[tuple[int, int, str, sqlite3.Row]] = []
+        nearby: list[tuple[int, int, str, sqlite3.Row]] = []
         for row in rows:
-            distance = abs((row["start_line"] or 0) - line)
-            if distance <= _MAX_CONTAINER_DISTANCE:
-                candidates.append((0 if row["kind"] == "function" else 1,
-                                   distance, row["name"], row))
-        if not candidates:
+            start = row["start_line"] or 0
+            end = row["end_line"] or start
+            span = end - start
+            if start <= match_start and match_end <= end:
+                containing.append((span, 0 if row["kind"] == "function" else 1,
+                                   row["name"], row))
+                continue
+            # transitional fallback: outline ranges that only cover the
+            # declaration line cannot contain deep matches — keep the old
+            # declaration-distance heuristic (≤ 2) for those.
+            distance = abs(start - match_start)
+            if distance <= 2:
+                nearby.append((distance, 0 if row["kind"] == "function"
+                               else 1, row["name"], row))
+        pool = containing or nearby
+        if not pool:
             return None
-        candidates.sort(key=lambda item: (item[0], item[1], item[2]))
-        return dict(candidates[0][3])
+        pool.sort(key=lambda item: item[:3])
+        return dict(pool[0][3])
 
     def _symbol_dict(self, row: sqlite3.Row) -> dict:
         return dict(row)

@@ -11,6 +11,12 @@ rules:
     languages: [kotlin]
     severity: INFO
     message: HTTP endpoint declared with a Spring mapping annotation
+    metadata:
+      archskillkit:
+        fact: exposes
+        target_kind: endpoint
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: |
           @GetMapping($P)
@@ -57,6 +63,12 @@ rules:
     languages: [kotlin]
     severity: INFO
     message: messaging consumer declared with a Spring/Kafka listener annotation
+    metadata:
+      archskillkit:
+        fact: consumes
+        target_kind: topic
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: |
           @KafkaListener(...)
@@ -71,6 +83,12 @@ rules:
     languages: [kotlin]
     severity: INFO
     message: persistence port declared with a Spring repository annotation
+    metadata:
+      archskillkit:
+        fact: uses
+        target_kind: datastore
+        cardinality: many
+        confidence: high
     pattern-either:
       - pattern: |
           @Repository
