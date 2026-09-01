@@ -22,6 +22,7 @@ DOMAIN_MODULES = [
     "projections/intents.py",
     "projections/adapters/likec4.py", "projections/adapters/arrows.py",
     "projections/adapters/graphml.py", "projections/adapters/jsoncanvas.py",
+    "projections/adapters/drawio.py",
 ]
 
 
@@ -79,6 +80,7 @@ class TestCliPublicSurface:
 class TestAdapterContract:
     def test_every_shipped_adapter_implements_the_contract(self):
         from archskillkit.projections.adapters.arrows import ArrowsAdapter
+        from archskillkit.projections.adapters.drawio import DrawioAdapter
         from archskillkit.projections.adapters.graphml import GraphMLAdapter
         from archskillkit.projections.adapters.jsoncanvas import (
             JSONCanvasAdapter,
@@ -87,7 +89,7 @@ class TestAdapterContract:
         from archskillkit.projections.contract import ProjectionAdapter
 
         for adapter in (LikeC4Adapter(), ArrowsAdapter(), GraphMLAdapter(),
-                        JSONCanvasAdapter()):
+                        JSONCanvasAdapter(), DrawioAdapter()):
             assert isinstance(adapter, ProjectionAdapter), (
                 f"adapter {type(adapter).__name__} does not satisfy "
                 "ProjectionAdapter")

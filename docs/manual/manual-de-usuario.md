@@ -53,7 +53,7 @@ pipx install archskillkit==0.2.0
 ```
 
 Ambos aíslan la aplicación en su propio entorno y dejan el comando
-`archskillkit` en tu `PATH`.
+`archskillkit` en tu `PATH`.  Para verificación estricta de attestations añade `--extra attestation`.
 
 ### Desde un GitHub Release
 

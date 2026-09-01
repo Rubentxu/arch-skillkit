@@ -667,8 +667,8 @@ def run_setup(
             return _with_warnings(receipt, warnings)
 
         for artifact in platform_entry.artifacts:
-            ensure_cached(paths, artifact, offline=offline)
-            _ensure_attestation(paths, artifact, offline=offline)
+            cached = ensure_cached(paths, artifact, offline=offline)
+            _ensure_attestation(paths, artifact, cached, offline=offline)
         if prefetch:
             receipt = _write_receipt(paths, manifest, key, result="prefetched",
                                      already=False)
@@ -715,24 +715,128 @@ def run_setup(
 
 
 def _ensure_attestation(
-    paths: Paths, artifact: Artifact, *, offline: bool
+    paths: Paths, artifact: Artifact, cached: Path, *, offline: bool
 ) -> None:
-    """Policy v1: a required bundle must be present; Sigstore verification is
-    Fase 0 work. Required-but-absent is a hard failure, never a silent pass."""
-    if not artifact.attestation.required or not artifact.attestation.bundle:
+    """Policy for required attestations (docs/v2/24, V2.3 hardening):
+
+    1. Resolve the bundle — cached (offline/air-gap) or fetched from the
+       GitHub attestation API (snappy-compressed).
+    2. Cryptographically verify it with sigstore (`python -m sigstore
+       verify github --bundle --repository`). A bundle that cannot be
+       verified is a HARD failure — never a silent pass.
+    Non-required policies only ensure presence when a bundle is declared.
+    """
+    if not artifact.attestation.required:
         return
-    bundle_url = artifact.attestation.bundle
-    key = (artifact.attestation.subject_sha256
-           or hashlib.sha256(bundle_url.encode()).hexdigest())
-    target = paths.cache / "attestations" / key
-    if target.is_file():
-        return
-    if offline:
+    if not artifact.attestation.bundle and not artifact.attestation.repository:
         raise SetupError(
             "ATTESTATION_MISSING",
-            f"attestation bundle for {artifact.id} is required and not cached",
-            f"prefetch {bundle_url} or ship it with the air-gapped bundle")
-    download(bundle_url, target)
+            f"artifact {artifact.id} requires attestation but declares no "
+            "bundle or repository",
+            "declare attestation.repository in the manifest for GitHub "
+            "attestation lookup")
+    digest = sha256_file(cached)
+    bundle_path = paths.cache / "attestations" / f"{digest}.bundle.json"
+    if not bundle_path.exists():
+        if artifact.attestation.bundle and offline:
+            raise SetupError(
+                "ATTESTATION_MISSING",
+                f"attestation bundle for {artifact.id} is required and not "
+                "cached",
+                f"prefetch {artifact.attestation.bundle} or ship it with "
+                "the air-gapped bundle")
+        if artifact.attestation.bundle and not offline:
+            download(artifact.attestation.bundle, bundle_path)
+        else:
+            repository = artifact.attestation.repository
+            if offline:
+                raise SetupError(
+                    "ATTESTATION_MISSING",
+                    f"attestation for {artifact.id} is required and not "
+                    "cached (offline)",
+                    "prefetch on a connected host or ship the air-gapped "
+                    "bundle")
+            _fetch_attestation_bundle(repository, digest, bundle_path)
+    _verify_sigstore(artifact, cached, bundle_path)
+
+
+def _fetch_attestation_bundle(repository: str, digest: str,
+                              dest: Path) -> None:
+    """Fetch the attestation bundle for a digest from the GitHub
+    attestation API. The blob is snappy-compressed; decompress before
+    caching."""
+    import urllib.request
+
+    import cramjam
+
+    if not repository:
+        raise SetupError(
+            "ATTESTATION_MISSING",
+            "attestation lookup requires attestation.repository in the "
+            "manifest",
+            "declare attestation.repository (owner/repo) for the artifact")
+    api = (f"https://api.github.com/repos/{repository}/attestations/"
+           f"sha256:{digest}")
+    request = urllib.request.Request(api, headers={
+        "User-Agent": "archskillkit-setup", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request) as response:
+            entries = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        raise SetupError(
+            "ATTESTATION_MISSING",
+            f"attestation lookup failed for sha256:{digest} in "
+            f"{repository} (HTTP {exc.code})",
+            "re-run the release workflow to (re)generate attestations") from exc
+    except urllib.error.URLError as exc:
+        raise SetupError(
+            "NETWORK_UNAVAILABLE",
+            f"cannot reach the GitHub attestation API: {exc}",
+            "check connectivity or verify offline with a cached bundle") from exc
+    if not entries.get("attestations"):
+        raise SetupError(
+            "ATTESTATION_MISSING",
+            f"no attestation found for digest sha256:{digest} in "
+            f"{repository}",
+            "re-run the release workflow to (re)generate attestations")
+    bundle_url = entries["attestations"][0]["bundle_url"]
+    compressed = urllib.request.urlopen(bundle_url).read()
+    clean = bytes(cramjam.snappy.decompress_raw(compressed))
+    clean = clean[clean.find(b"{"):]
+    json.loads(clean)  # fail before caching if not valid JSON
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(clean)
+
+
+def _verify_sigstore(artifact: Artifact, artifact_file: Path,
+                     bundle_path: Path) -> None:
+    """Cryptographic Sigstore verification via the sigstore CLI (the
+    `attestation` extra). Online or offline — bundles carry their own
+    verification material."""
+    import subprocess
+
+    repository = artifact.attestation.repository
+    cmd = [sys.executable, "-m", "sigstore", "verify", "github",
+           str(artifact_file), "--bundle", str(bundle_path)]
+    if repository:
+        cmd += ["--repository", repository]
+    try:
+        result = subprocess.run(cmd, check=False, capture_output=True,
+                                text=True)
+    except FileNotFoundError as exc:
+        raise SetupError(
+            "ATTESTATION_INVALID",
+            f"cannot verify required attestation for {artifact.id}: "
+            "the sigstore CLI is not available",
+            "install the attestation extra: "
+            "uv tool install archskillkit --extra attestation") from exc
+    if result.returncode != 0:
+        raise SetupError(
+            "ATTESTATION_INVALID",
+            f"sigstore verification failed for {artifact.id}: "
+            f"{(result.stderr or result.stdout).strip()[-300:]}",
+            "check the bundle, the repository identity and your trust "
+            "configuration; never disable verification to proceed")
 
 
 def _write_receipt(

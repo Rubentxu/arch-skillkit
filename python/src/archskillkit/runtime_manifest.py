@@ -28,6 +28,7 @@ class AttestationPolicy(BaseModel):
     required: bool = False
     bundle: str | None = None
     subject_sha256: str | None = None
+    repository: str | None = None  # owner/repo for GitHub attestation lookup
 
 
 class Artifact(BaseModel):
@@ -75,9 +76,11 @@ class Artifact(BaseModel):
 
     @model_validator(mode="after")
     def _attestation_shape(self) -> Artifact:
-        if self.attestation.required and not self.attestation.bundle:
+        if self.attestation.required and not (
+                self.attestation.bundle or self.attestation.repository):
             raise ValueError(
-                f"artifact {self.id!r} requires attestation but declares no bundle")
+                f"artifact {self.id!r} requires attestation but declares "
+                "neither a bundle nor a repository to look it up")
         return self
 
 

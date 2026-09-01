@@ -21,6 +21,7 @@ from archskillkit.context import Budget, ContextCompiler
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
+from archskillkit.projections.adapters.drawio import DrawioAdapter
 from archskillkit.projections.adapters.graphml import GraphMLAdapter
 from archskillkit.projections.adapters.jsoncanvas import JSONCanvasAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
@@ -91,7 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     p_proj.add_argument("--repo", required=True)
     p_proj.add_argument(
         "--format",
-        choices=["likec4", "arrows", "graphml", "jsoncanvas", "both"],
+        choices=["likec4", "arrows", "graphml", "jsoncanvas",
+                 "drawio", "all", "both"],
         default="both")
     p_proj.add_argument("--force", action="store_true",
                         help="overwrite a manually modified projection")
@@ -417,6 +419,7 @@ def _cmd_project(world: ArchitectureWorld, args: argparse.Namespace) -> int:
         "arrows": ArrowsAdapter(),
         "graphml": GraphMLAdapter(),
         "jsoncanvas": JSONCanvasAdapter(),
+        "drawio": DrawioAdapter(),
     }
     if args.format == "both":
         # "both" = the two canonical projections; graphml/jsoncanvas are

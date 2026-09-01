@@ -82,12 +82,16 @@ def file_digest(path: Path) -> tuple[str, int]:
 def artifact(
     artifact_id: str, kind: str, version: str, url: str, digest: str,
     size: int, *, executable: str | None, license_id: str,
-    install: list[str] | None = None,
+    install: list[str] | None = None, attested_by_us: bool = False,
+    attestation_repo: str | None = None,
 ) -> dict:
+    policy = ({"required": True, "repository": attestation_repo}
+              if attested_by_us and attestation_repo
+              else {"required": False})
     entry = {
         "id": artifact_id, "kind": kind, "version": version, "url": url,
         "sha256": digest, "size_bytes": size, "executable": executable,
-        "license": license_id, "attestation": {"required": False},
+        "license": license_id, "attestation": policy,
     }
     if install:
         entry["install"] = install
@@ -116,6 +120,7 @@ def local_asset_entry(
     assets_dir: Path | None, name: str, kind: str, version: str,
     os_name: str, arch: str, release_base: str, git_tag: str,
     *, executable: str | None, license_id: str, install: list[str] | None,
+    attestation_repo: str | None,
 ) -> dict | None:
     if assets_dir is None:
         return None
@@ -127,7 +132,8 @@ def local_asset_entry(
     url = f"{release_base}/{git_tag}/{path.name}"
     return artifact(name, kind, version, url, digest, size,
                     executable=executable, license_id=license_id,
-                    install=install)
+                    install=install, attested_by_us=True,
+                    attestation_repo=attestation_repo)
 
 
 def main() -> int:
@@ -136,6 +142,9 @@ def main() -> int:
     parser.add_argument("--commit", required=True, help="40-hex release commit")
     parser.add_argument("--node-version", default=DEFAULT_NODE_VERSION)
     parser.add_argument("--assets-dir", type=Path, default=None)
+    parser.add_argument("--attestation-repo",
+                        default="Rubentxu/arch-skillkit",
+                        help="owner/repo used for GitHub attestation lookup")
     parser.add_argument("--release-base",
                         default="https://github.com/Rubentxu/arch-skillkit"
                                 "/releases/download")
@@ -153,14 +162,16 @@ def main() -> int:
         likec4 = local_asset_entry(
             args.assets_dir, "likec4", "npm-bundle", versions["likec4"],
             os_name, arch, args.release_base, git_tag,
-            executable=None, license_id="MIT", install=None)
+            executable=None, license_id="MIT", install=None,
+            attestation_repo=args.attestation_repo)
         if likec4:
             entries.append(likec4)
         semgrep = local_asset_entry(
             args.assets_dir, "semgrep", "wheelhouse", versions["semgrep"],
             os_name, arch, args.release_base, git_tag,
             executable=None, license_id="LGPL-2.1",
-            install=[f"semgrep=={versions['semgrep']}"])
+            install=[f"semgrep=={versions['semgrep']}"],
+            attestation_repo=args.attestation_repo)
         if semgrep:
             entries.append(semgrep)
         platforms.append({"os": os_name, "arch": arch, "artifacts": entries})

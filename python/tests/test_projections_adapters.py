@@ -19,6 +19,7 @@ from archskillkit.projections import (
     VisualIntent,
 )
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
+from archskillkit.projections.adapters.drawio import DrawioAdapter
 from archskillkit.projections.adapters.graphml import GraphMLAdapter
 from archskillkit.projections.adapters.jsoncanvas import JSONCanvasAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
@@ -218,4 +219,29 @@ class TestJSONCanvasProjection:
         original = Path(first["path"]).read_bytes()
         Path(first["path"]).unlink()
         second = project_to_workspace(promoted, JSONCanvasAdapter())
+        assert Path(second["path"]).read_bytes() == original
+
+
+class TestDrawioProjection:
+    def test_generates_valid_mxgraph_xml(self, promoted):
+        import xml.etree.ElementTree as ET
+
+        result = project_to_workspace(promoted, DrawioAdapter())
+        root = ET.parse(result["path"]).getroot()
+        assert root.tag == "mxfile"
+        cells = root.findall(".//{*}mxCell")
+        nodes = [c for c in cells if c.get("vertex") == "1"]
+        edges = [c for c in cells if c.get("edge") == "1"]
+        assert result["metrics"]["nodes"] == len(nodes) == 10
+        assert result["metrics"]["edges"] == len(edges) == 5
+        node_ids = {c.get("id") for c in nodes}
+        for edge in edges:
+            assert edge.get("source") in node_ids
+            assert edge.get("target") in node_ids
+
+    def test_drawio_is_deterministic(self, promoted):
+        first = project_to_workspace(promoted, DrawioAdapter())
+        original = Path(first["path"]).read_bytes()
+        Path(first["path"]).unlink()
+        second = project_to_workspace(promoted, DrawioAdapter())
         assert Path(second["path"]).read_bytes() == original

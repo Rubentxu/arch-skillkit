@@ -311,3 +311,75 @@ class TestPreflight:
         with pytest.raises(SetupError) as excinfo:
             run_setup(paths, manifest)
         assert excinfo.value.code == "HOST_RAM_INSUFFICIENT"
+
+
+class TestSigstoreVerification:
+    """V2.3 follow-up: required attestations are cryptographically
+    verified (sigstore) — never silently passed. Prefetch already runs
+    verification, so fakes must be active before it."""
+
+    def _contract_manifest(self, tmp_path):
+        artifact = make_binary(tmp_path, "a")
+        artifact["attestation"] = {"required": True,
+                                   "repository": "rubentxu/fixture"}
+        return load_manifest(make_manifest([artifact])), artifact
+
+    def _fake_fetch(self, monkeypatch):
+        def fake_fetch(repository, digest, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text('{"mediaType": "fake-bundle"}')
+
+        monkeypatch.setattr(runtime, "_fetch_attestation_bundle", fake_fetch)
+
+    def _fake_sigstore(self, monkeypatch, holder):
+        import subprocess as subprocess_module
+
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = holder["rc"]
+                stderr = "boom" if holder["rc"] else ""
+                stdout = ""
+            return R()
+
+        monkeypatch.setattr(subprocess_module, "run", fake_run)
+
+    def test_sigstore_failure_hard_fails(self, paths, tmp_path, monkeypatch):
+        self._fake_fetch(monkeypatch)
+        holder = {"rc": 0}
+        self._fake_sigstore(monkeypatch, holder)
+        manifest, _ = self._contract_manifest(tmp_path)
+        run_setup(paths, manifest, prefetch=True)
+        holder["rc"] = 1
+        with pytest.raises(SetupError) as excinfo:
+            run_setup(paths, manifest)
+        assert excinfo.value.code == "ATTESTATION_INVALID"
+
+    def test_sigstore_missing_hard_fails(self, paths, tmp_path, monkeypatch):
+        import subprocess as subprocess_module
+
+        self._fake_fetch(monkeypatch)
+        holder = {"rc": 0}
+        self._fake_sigstore(monkeypatch, holder)
+        manifest, _ = self._contract_manifest(tmp_path)
+        run_setup(paths, manifest, prefetch=True)
+
+        def raise_fnf(cmd, **kwargs):
+            raise FileNotFoundError("sigstore")
+
+        monkeypatch.setattr(subprocess_module, "run", raise_fnf)
+        with pytest.raises(SetupError) as excinfo:
+            run_setup(paths, manifest)
+        assert excinfo.value.code == "ATTESTATION_INVALID"
+        assert "attestation" in excinfo.value.remedy
+
+    def test_verified_attestation_allows_install(self, paths, tmp_path,
+                                                 monkeypatch):
+        self._fake_fetch(monkeypatch)
+        holder = {"rc": 0}
+        self._fake_sigstore(monkeypatch, holder)
+        manifest, _ = self._contract_manifest(tmp_path)
+        run_setup(paths, manifest, prefetch=True)
+        receipt = run_setup(paths, manifest)
+        assert receipt["result"] == "installed"
+        key = f"{current_platform()[0]}/{current_platform()[1]}"
+        assert paths.runtime_dir("0.2.0", key).exists()

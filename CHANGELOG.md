@@ -24,6 +24,16 @@ fixes.
   `ArchitectureWorld`; `ArchitectureWorldPort` (ports.py) formalizes the
   domain surface — promotion/proposals use port methods and `.graph` has
   zero callsites outside world.py (ADR-0024 enforced by construction).
+- **Cryptographic attestation verification (docs/v2/24)**: required
+  attestations are fetched from the GitHub attestation API
+  (snappy-compressed bundles decompressed) and cryptographically verified
+  with sigstore (`uv tool install archskillkit --extra attestation`);
+  failure or absence is a hard failure (`ATTESTATION_INVALID` /
+  `ATTESTATION_MISSING`) — never a silent pass. The manifest generator
+  marks self-built artifacts `attestation.required: true` with repository
+  identity. draw.io completes the projector set (F10): mxGraph XML with
+  deterministic grid layout, opt-in via `project --format drawio` or
+  `--format all`.
 - **V2.3-F7 — real drift from scan-generation deltas (docs/v2/46 F7)**:
   generation rotation keeps the previous generation queryable
   (`code.prev.sqlite`); `CodeIndex.diff_previous_generation()` reports the

@@ -36,7 +36,7 @@ jobs:
 
       - name: Lint shell scripts
         run: |
-          (cd skills/architecture-discovery/scripts && shellcheck -x *.sh lib/common.sh)
+          (cd skills/architecture-discovery/scripts && shellcheck -x ./*.sh lib/common.sh)
           shellcheck tests/test_helper.bash
           shellcheck --shell=bash ./tests/*.bats
 
@@ -167,8 +167,10 @@ jobs:
       - name: Verify toolchain matrix matches mise.toml
         run: |
           for tool in ast-grep semgrep likec4; do
-            pinned="$(jq -r --arg t "$tool" '.toolchain[$t]' skills/architecture-discovery/version.json)"
-            if ! grep -q "\"[^\"]*$tool[^\"]*\" = \"$pinned\"" skills/architecture-discovery/runtime/mise.toml; then
+            pinned="$(jq -r --arg t "$tool" \
+              '.toolchain | to_entries[] | select(.key == $t) | .value' \
+              skills/architecture-discovery/version.json)"
+            if ! grep -q "\"[^\"]*${tool}[^\"]*\" = \"$pinned\"" skills/architecture-discovery/runtime/mise.toml; then
               echo "ERROR: $tool $pinned (version.json) not pinned in mise.toml"
               exit 1
             fi

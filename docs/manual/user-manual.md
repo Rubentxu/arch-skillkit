@@ -52,7 +52,7 @@ pipx install archskillkit==0.2.0
 ```
 
 Both isolate the application in its own environment and put the
-`archskillkit` command on your `PATH`.
+`archskillkit` command on your `PATH`.  For strict attestation verification add `--extra attestation`.
 
 ### From a GitHub Release
 

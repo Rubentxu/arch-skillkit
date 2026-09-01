@@ -24,6 +24,7 @@ ARTIFACT_PATHS = {
     "arrows": "arrows/architecture.arrows",
     "graphml": "graphs/dependencies.graphml",
     "jsoncanvas": "boards/architecture.canvas",
+    "drawio": "diagrams/architecture.drawio",
 }
 
 PREFERRED_INTENT = {
@@ -31,6 +32,7 @@ PREFERRED_INTENT = {
     "arrows": "exploration",
     "graphml": "dependency_graph",
     "jsoncanvas": "knowledge_map",
+    "drawio": "technical_diagram",
 }
 
 

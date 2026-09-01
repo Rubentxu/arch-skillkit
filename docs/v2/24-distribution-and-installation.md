@@ -4,8 +4,9 @@ Fecha: 2026-09-01. Estado: Fase 0 (contrato de release) y Fase 1 (`setup`/
 `doctor`) implementadas — ver `archskillkit.runtime_manifest`,
 `archskillkit.runtime`, subcomandos `setup`/`doctor` del CLI,
 `scripts/release/generate-runtime-manifest.py` y el workflow de release. La
-verificación Sigstore de attestations (sigstore-python) queda como trabajo
-abierto de Fase 0.
+verificación Sigstore de attestations está implementada (`_verify_sigstore`
+en runtime; extra `attestation`) y el generador marca `required: true` los
+artefactos construidos por el propio release.
 
 Revisión del mismo día: se descarta el bootstrap nativo (Go/Rust) y la UAT
 como comando de producto. El mecanismo de distribución es el wheel Python que
