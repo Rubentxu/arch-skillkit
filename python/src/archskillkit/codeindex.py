@@ -212,14 +212,18 @@ class CodeIndex:
 
         report = IngestReport()
         db = self._db
+        previous = self._meta_get("last_generation_run")
+        if previous is not None and previous != scan_run_id:
+            self._snapshot_previous()
         try:
             db.execute("BEGIN")
-            previous = self._meta_get("last_generation_run")
             if previous is not None and previous != scan_run_id:
                 # New generation: retire everything (edges first, then
-                # files — files cascade to symbols and their edges).
+                # files — files cascade to symbols and their edges). The
+                # retired generation stays queryable in code.prev.sqlite.
                 db.execute("DELETE FROM edges")
                 db.execute("DELETE FROM files")
+                self._meta_set("previous_generation_run", previous)
             db.execute("DELETE FROM edges WHERE scan_run_id=?", (scan_run_id,))
             db.execute("DELETE FROM files WHERE scan_run_id=?", (scan_run_id,))
             for rec in records:
@@ -541,6 +545,43 @@ class CodeIndex:
             "SELECT f.path AS path, s.start_line AS start_line FROM symbols s"
             " JOIN files f ON f.id = s.file_id WHERE s.start_line IS NOT NULL")
         return {(r["path"], r["start_line"]) for r in rows}
+
+    def previous_generation_run(self) -> str | None:
+        return self._meta_get("previous_generation_run")
+
+    def _snapshot_previous(self) -> None:
+        """Copy the current database to code.prev.sqlite (generation
+        rotation) — must run outside any transaction."""
+        prev_path = self.db_path.with_name("code.prev.sqlite")
+        if prev_path.exists():
+            prev_path.unlink()
+        self._db.execute("VACUUM INTO ?", (str(prev_path),))
+
+    def diff_previous_generation(self) -> dict:
+        """Semantic edge delta previous→current generation
+        (docs/v2/46 F7) — the input for real architecture drift."""
+        prev_run = self._meta_get("previous_generation_run")
+        current = self._meta_get("last_generation_run")
+        out = {"previous_generation": prev_run,
+               "current_generation": current,
+               "added": [], "removed": []}
+        prev_path = self.db_path.with_name("code.prev.sqlite")
+        if not prev_run or not current or not prev_path.exists():
+            return out
+
+        def keyset(rows) -> set[tuple[str, str, str, str]]:
+            return {(r["kind"], r["source_qualified"],
+                     r["target_qualified"], r["rule"]) for r in rows}
+
+        prev_index = CodeIndex(prev_path).open()
+        try:
+            prev_keys = keyset(prev_index.edges_of_run(prev_run))
+            cur_keys = keyset(self.edges_of_run(current))
+            out["added"] = sorted(cur_keys - prev_keys)
+            out["removed"] = sorted(prev_keys - cur_keys)
+        finally:
+            prev_index.close()
+        return out
 
     # ---- internals ------------------------------------------------------
 

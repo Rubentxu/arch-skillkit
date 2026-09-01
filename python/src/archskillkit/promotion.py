@@ -179,6 +179,29 @@ def propose_claims(world: ArchitectureWorldPort) -> int:
 # backward compatibility.
 
 
+def detect_generation_drift(world: ArchitectureWorldPort,
+                            index: CodeIndex) -> dict:
+    """Real architecture drift (docs/v2/46 F7): the semantic edge delta
+    between the previous and current scan generation is mapped through the
+    architecture relation vocabulary; every NEW code dependency that maps
+    becomes a persisted finding — no full-world rescan involved."""
+    diff = index.diff_previous_generation()
+    findings: list[dict] = []
+    for kind, source, target, rule in diff["added"]:
+        relation = PREDICATE_TO_RELATION.get(kind.lower())
+        if relation is None:
+            continue
+        findings.append({
+            "kind": "generation_drift", "severity": "high",
+            "target_id": f"{source}|{kind}|{target}",
+            "detail": (f"new {kind.lower()} dependency: {source} -> {target} "
+                       f"(rule: {rule})"),
+        })
+    persisted = world.persist_findings(findings)
+    return {"generation": diff["previous_generation"],
+            "findings": findings, "persisted": persisted}
+
+
 def _evidence_id(*, tool: str, rule: str, file: str,
                  match_start: int | None, match_end: int | None,
                  commit: str = "") -> str:

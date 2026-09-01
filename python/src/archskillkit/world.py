@@ -19,6 +19,7 @@ from typing import Self
 from activegraph import Graph, Runtime
 from activegraph.store import open_store
 
+from archskillkit.errors import PromotionError  # noqa: F401 (re-export)
 from archskillkit.ids import (
     ProjectContext,
     projects_root,
@@ -31,6 +32,12 @@ from archskillkit.packs.arch_core import (
     pack,
 )
 from archskillkit.packs.arch_model import pack as arch_model_pack
+from archskillkit.repositories import (
+    ArchitecturePolicyService,
+    ArchitectureRepository,
+    ClaimRepository,
+    ProposalService,
+)
 
 WORKSPACE_SUBDIRS = ("evidence", "knowledge", "likec4", "arrows", "reports", "exports")
 
@@ -46,10 +53,6 @@ class ReplayReport:
     objects: int
     relations: int
     events: int
-
-
-class PromotionError(Exception):
-    """A promotion precondition failed (claim lifecycle, M2-C2)."""
 
 
 class ArchitectureWorld:
@@ -73,6 +76,10 @@ class ArchitectureWorld:
         self.db_path = self.workspace / "activegraph.sqlite"
         self._runtime: Runtime | None = None
         self._graph: Graph | None = None
+        self.claims = ClaimRepository(self)
+        self.architecture = ArchitectureRepository(self)
+        self.policies = ArchitecturePolicyService(self)
+        self.proposals_service = ProposalService(self)
 
     # ---- construction -------------------------------------------------
 
@@ -141,11 +148,9 @@ class ArchitectureWorld:
         return self.graph.add_object("evidence", evidence.model_dump()).id
 
     def propose_claim(self, claim: ClaimData) -> str:
-        return self.graph.add_object("claim", claim.model_dump()).id
-
+        return self.claims.add(claim)
     def link_evidenced_by(self, claim_id: str, evidence_id: str) -> str:
-        return self.graph.add_relation(claim_id, evidence_id, "evidenced_by", {}).id
-
+        return self.claims.link_evidenced_by(claim_id, evidence_id)
     # ---- domain queries (used by the promotion services) ---------------
 
     def find_objects(self, obj_type: str, **data_match) -> list[dict]:
@@ -163,196 +168,57 @@ class ArchitectureWorld:
         return {"id": obj.id, "type": obj.type, "data": obj.data}
 
     def accept_claim(self, claim_id: str, actor: str = "user") -> None:
-        """Explicit acceptance (M2-C2): refused for claims without evidence
-        or with unresolved contradictions — never silent."""
-        claim = self.get_object(claim_id)
-        if claim["type"] != "claim":
-            raise PromotionError(f"{claim_id} is not a claim")
-        status = claim["data"].get("status")
-        if status == "accepted":
-            return
-        if status == "contradicted":
-            raise PromotionError(
-                f"claim {claim_id} is contradicted; resolve the conflict first")
-        if not claim["data"].get("evidence_refs"):
-            raise PromotionError(
-                f"claim {claim_id} has no evidence references")
-        self.graph.patch_object(claim_id, {"status": "accepted"}, actor=actor)
-
+        self.claims.accept(claim_id, actor=actor)
     def add_architecture_element(self, name: str, kind: str,
                                  origin: str = "DETECTED",
                                  confidence: str = "high") -> str:
-        """Idempotent by (name, kind) — returns the element id."""
-        existing = self.find_objects("architecture_element", name=name)
-        if existing:
-            return existing[0]["id"]
-        return self.graph.add_object("architecture_element", {
-            "name": name, "kind": kind, "origin": origin,
-            "confidence": confidence, "summary": "",
-        }).id
-
+        return self.architecture.add_element(name, kind, origin, confidence)
     def add_architecture_relation(self, kind: str, source_id: str,
                                   target_id: str,
                                   data: dict | None = None) -> str:
-        """Idempotent by (kind, source, target) — returns the edge id."""
-        for rel in self.graph.relations(source=source_id, target=target_id):
-            if rel.type == kind:
-                return rel.id
-        return self.graph.add_relation(
-            source_id, target_id, kind, data or {}).id
-
+        return self.architecture.add_relation(kind, source_id, target_id, data)
     def architecture_relations(self) -> list[dict]:
-        """Typed edges whose two endpoints are architecture elements —
-        the domain-level view of ArchitectureRelation (docs/v2/04)."""
-        elements = {o["id"] for o in self.find_objects("architecture_element")}
-        out = []
-        for rel in self.graph.relations():
-            if rel.source in elements and rel.target in elements:
-                out.append({"id": rel.id, "kind": rel.type,
-                            "source": rel.source, "target": rel.target,
-                            "data": rel.data})
-        return out
-
+        return self.architecture.relations()
     # ---- reactive architecture (Phase F: drift + stale model) ----------
 
     def record_architecture_rule(self, name: str, statement: str,
                                  forbidden_relation: str,
                                  source_category: str, target_category: str,
                                  severity: str = "high") -> str:
-        """Declare a structured boundary rule (ADR-0022): the
-        `source_category -[forbidden_relation]-> target_category` pattern
-        is drift. Idempotent by rule name."""
-        existing = self.find_objects("architecture_rule", name=name)
-        if existing:
-            return existing[0]["id"]
-        return self.graph.add_object("architecture_rule", {
-            "name": name, "statement": statement,
-            "forbidden_relation": forbidden_relation,
-            "source_category": source_category,
-            "target_category": target_category,
-            "severity": severity,
-        }).id
-
+        return self.policies.record_rule(name, statement, forbidden_relation,
+                                         source_category, target_category,
+                                         severity)
     # ---- domain port (docs/v2/45 §4, V2.3-F4) --------------------------
     # ActiveGraph stays behind these domain methods: promotion/proposals
     # must never touch `.graph` directly (ADR-0024).
 
     def observation_is_claimed(self, observation_id: str) -> bool:
-        existing = self.graph.relations(target=observation_id,
-                                        type="derived_from")
-        return any(self.get_object(r.source)["type"] == "claim"
-                   for r in existing)
-
+        return self.claims.observation_is_claimed(observation_id)
     def propose_derived_claim(self, claim: ClaimData,
                               observation_id: str) -> str:
-        claim_id = self.propose_claim(claim)
-        self.graph.add_relation(claim_id, observation_id, "derived_from", {})
-        return claim_id
-
+        return self.claims.propose_derived_claim(claim, observation_id)
     def claim_observation_ids(self, claim_id: str) -> list[str]:
-        return [r.target for r in
-                self.graph.relations(source=claim_id, type="derived_from")]
-
+        return self.claims.observation_ids_of_claim(claim_id)
     def link_contradicts(self, observation_id: str, claim_id: str,
                          reason: str) -> None:
-        self.graph.add_relation(observation_id, claim_id, "contradicts",
-                                {"reason": reason})
-
+        self.claims.link_contradicts(observation_id, claim_id, reason)
     def claim_is_contradicted(self, claim_id: str) -> bool:
-        return any(r.type == "contradicts"
-                   for r in self.graph.relations(target=claim_id))
-
+        return self.claims.is_contradicted(claim_id)
     def set_claim_status(self, claim_id: str, status: str) -> None:
-        self.graph.patch_object(claim_id, {"status": status})
-
+        self.claims.set_status(claim_id, status)
     def set_object_fields(self, object_id: str, fields: dict) -> None:
         self.graph.patch_object(object_id, fields)
 
     def remove_relation_by_id(self, relation_id: str) -> None:
-        self.graph.remove_relation(relation_id)
-
+        self.architecture.remove_relation(relation_id)
     def remove_object_by_id(self, object_id: str) -> None:
-        self.graph.remove_object(object_id)
-
+        self.architecture.remove_element(object_id)
     def persist_findings(self, findings: list[dict]) -> int:
-        """Persist findings as objects linked to a fresh review audit
-        object. Dedup key: (kind, target_id). Returns new findings count."""
-        review_id = self.graph.add_object("review", {
-            "reviewed_at": _utcnow(),
-            "summary": ", ".join(sorted({f["kind"] for f in findings})) or "clean",
-            "findings_count": len(findings),
-        }).id
-        persisted = 0
-        for finding in findings:
-            existing = self.find_objects("finding", kind=finding["kind"],
-                                         target_id=finding["target_id"])
-            if existing:
-                continue
-            finding_id = self.graph.add_object("finding", {
-                "kind": finding["kind"],
-                "severity": finding.get("severity", "medium"),
-                "target_id": finding.get("target_id", ""),
-                "detail": finding.get("detail", ""),
-            }).id
-            self.graph.add_relation(finding_id, review_id, "derived_from", {})
-            persisted += 1
-        return persisted
-
+        return self.policies.persist_findings(findings)
     def detect_drift(self) -> dict:
-        """Architecture drift (M2-F1): architecture relations matching a
-        declared boundary rule become findings — no LLM involved."""
-        rules = self.find_objects("architecture_rule")
-        findings: list[dict] = []
-        if rules:
-            elements = {o["id"]: o["data"]
-                        for o in self.find_objects("architecture_element")}
-            for rule in rules:
-                data = rule["data"]
-                for rel in self.architecture_relations():
-                    src = elements.get(rel["source"], {})
-                    dst = elements.get(rel["target"], {})
-                    if (rel["kind"] == data["forbidden_relation"]
-                        and src.get("kind") == data["source_category"]
-                        and dst.get("kind") == data["target_category"]):
-                        findings.append({
-                            "kind": "architecture_drift",
-                            "severity": data.get("severity", "high"),
-                            "target_id": rel["id"],
-                            "rule": data["name"],
-                            "detail": (f"[{data['name']}] {data['statement']}: "
-                                       f"{src.get('name')} -{rel['kind']}-> "
-                                       f"{dst.get('name')}"),
-                        })
-        persisted = self.persist_findings(findings)
-        return {"findings": findings, "persisted": persisted}
-
+        return self.policies.detect_drift()
     def detect_stale_model(self, index) -> dict:
-        """Stale model (M2-F3): evidence backing the accepted architecture
-        whose (file, line) location is absent from the current Code Index."""
-        locations = index.symbol_locations()
-        findings: list[dict] = []
-        checked: set[str] = set()
-        for rel in self.architecture_relations():
-            for ev_id in (rel["data"] or {}).get("evidence_ids", []):
-                if ev_id in checked:
-                    continue
-                checked.add(ev_id)
-                try:
-                    ev = self.get_object(ev_id)["data"]
-                except KeyError:
-                    continue
-                location = (ev.get("file", ""), ev.get("start_line"))
-                if location not in locations:
-                    findings.append({
-                        "kind": "stale_evidence", "severity": "medium",
-                        "target_id": ev_id,
-                        "detail": (f"{ev.get('file')}:{ev.get('start_line')} "
-                                   "is no longer reported by the current "
-                                   "code index"),
-                    })
-        persisted = self.persist_findings(findings)
-        return {"findings": findings, "persisted": persisted}
-
+        return self.policies.detect_stale_model(index)
     # ---- fork/diff of the architecture (Phase G, docs/v2/08) -----------
 
     def fork(self, name: str) -> ArchitectureWorld:
@@ -364,7 +230,7 @@ class ArchitectureWorld:
 
         fork_run_id = f"proposal-{name}"
         if self.db_path.exists() and _run_exists(self.db_path, fork_run_id):
-            return self._view(fork_run_id)
+            return self.view(fork_run_id)
         url = f"sqlite:///{self.db_path}"
         events = list(open_store(url, run_id=self.run_id).iter_events())
         if events:
@@ -372,46 +238,24 @@ class ArchitectureWorld:
                 str(self.db_path), parent_run_id=self.run_id,
                 new_run_id=fork_run_id, at_event_id=events[-1].id,
                 label=name, created_at=_utcnow())
-        return self._view(fork_run_id)
+        return self.view(fork_run_id)
 
-    def _view(self, run_id: str) -> ArchitectureWorld:
+    def has_run(self, run_id: str) -> bool:
+        return self.db_path.exists() and _run_exists(self.db_path, run_id)
+
+    def view(self, run_id: str) -> ArchitectureWorld:
         return ArchitectureWorld(
             project_id=self.project_id, name=self.project_name,
             root=self.root, remote=self.remote, run_id=run_id).open()
 
     def record_proposal(self, name: str, rationale: str = "") -> str:
-        """Register the proposal paperwork inside the fork (M2-G1).
-        Idempotent by proposal name."""
-        existing = self.find_objects("proposal", name=name)
-        if existing:
-            return existing[0]["id"]
-        return self.graph.add_object("proposal", {
-            "name": name, "status": "open", "rationale": rationale,
-            "fork_run": self.run_id, "created_at": _utcnow(),
-        }).id
-
+        return self.proposals_service.record(name, rationale)
     def _proposal(self, name: str) -> dict:
-        proposals = self.find_objects("proposal", name=name)
-        if not proposals:
-            raise PromotionError(f"no proposal named '{name}' in {self.run_id}")
-        return proposals[0]
-
+        return self.proposals_service.get(name)
     def approve_proposal(self, name: str, actor: str) -> None:
-        if not actor:
-            raise PromotionError("approval requires a named approver")
-        proposal = self._proposal(name)
-        if proposal["data"]["status"] == "rejected":
-            raise PromotionError(f"proposal '{name}' was rejected")
-        self.graph.patch_object(proposal["id"], {"status": "approved"},
-                                actor=actor)
-
+        self.proposals_service.approve(name, actor=actor)
     def reject_proposal(self, name: str, actor: str) -> None:
-        if not actor:
-            raise PromotionError("rejection requires a named actor")
-        proposal = self._proposal(name)
-        self.graph.patch_object(proposal["id"], {"status": "rejected"},
-                                actor=actor)
-
+        self.proposals_service.reject(name, actor=actor)
     # ---- reads --------------------------------------------------------
 
     def snapshot(self) -> dict:

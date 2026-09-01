@@ -22,6 +22,26 @@ fixes.
   `ArchitectureWorld`; `ArchitectureWorldPort` (ports.py) formalizes the
   domain surface — promotion/proposals use port methods and `.graph` has
   zero callsites outside world.py (ADR-0024 enforced by construction).
+- **V2.3-F7 — real drift from scan-generation deltas (docs/v2/46 F7)**:
+  generation rotation keeps the previous generation queryable
+  (`code.prev.sqlite`); `CodeIndex.diff_previous_generation()` reports the
+  semantic edge delta; `detect_generation_drift` maps new code
+  dependencies into persisted `generation_drift` findings — surfacing in
+  `archskillkit drift` output.
+- **V2.3-F6 — World split into repositories/services (docs/v2/46 F6)**:
+  `repositories.py` hosts `ClaimRepository`, `ArchitectureRepository`,
+  `ArchitecturePolicyService` and `ProposalService`; the world facade
+  delegates; CLI uses only public surface (`has_run`/`view`).
+- **V2.3-F7 — real drift from scan-generation deltas (docs/v2/46 F7)**:
+  generation rotation keeps the previous generation queryable
+  (`code.prev.sqlite`); `CodeIndex.diff_previous_generation()` reports the
+  semantic edge delta and `detect_generation_drift` maps new code
+  dependencies into persisted `generation_drift` findings (surfaced in
+  `archskillkit drift`); `FindingData.kind` gains `generation_drift`.
+- **V2.3-F6 — World split into repositories/services (docs/v2/46 F6)**:
+  `repositories.py` hosts `ClaimRepository`, `ArchitectureRepository`,
+  `ArchitecturePolicyService` and `ProposalService`; the world facade
+  delegates and the CLI uses only public surface (`has_run`/`view`).
 - **V2.3-F1 — semantic integrity property tests (docs/v2/46)**:
   `tests/test_properties.py` pins the five domain invariants PR-1…PR-5
   (directed paths, scan-generation replacement, promotion diff-fixpoint,

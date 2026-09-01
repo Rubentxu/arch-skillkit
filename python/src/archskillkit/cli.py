@@ -23,7 +23,7 @@ from archskillkit.packs.arch_core import ObservationData
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
 from archskillkit.projections.writer import ProjectionError, project_to_workspace
-from archskillkit.promotion import discover, review
+from archskillkit.promotion import detect_generation_drift, discover, review
 from archskillkit.proposals import (
     PromotionError,
     promote,
@@ -31,7 +31,7 @@ from archskillkit.proposals import (
 )
 from archskillkit.runtime import SetupError, load_manifest_for_setup, run_doctor, run_setup
 from archskillkit.runtime_manifest import ManifestError
-from archskillkit.world import ArchitectureWorld, _run_exists
+from archskillkit.world import ArchitectureWorld
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -433,16 +433,19 @@ def _cmd_drift(world: ArchitectureWorld) -> int:
         drift = world.detect_drift()
         db = world.workspace / "code.sqlite"
         stale = {"findings": [], "persisted": 0}
+        generation = {"generation": None, "findings": [], "persisted": 0}
         if db.exists():
             index = CodeIndex(db).open()
             try:
                 stale = world.detect_stale_model(index)
+                generation = detect_generation_drift(world, index)
             finally:
                 index.close()
     print(json.dumps({
         "drift": {"findings": drift["findings"], "persisted": drift["persisted"]},
         "stale_model": {"findings": stale["findings"],
                         "persisted": stale["persisted"]},
+        "generation_drift": generation,
     }, indent=2))
     return 0
 
@@ -469,12 +472,12 @@ def _cmd_diff(world: ArchitectureWorld, name: str) -> int:
     if _require_main_world(world):
         return 1
     fork_run = f"proposal-{name}"
-    if not _run_exists(world.db_path, fork_run):
+    if not world.has_run(fork_run):
         print(f"error: no fork run '{fork_run}' (run: archskillkit fork "
               f"--repo {world.root or '.'} --name {name})", file=sys.stderr)
         return 1
     with world:
-        fork = world._view(fork_run)
+        fork = world.view(fork_run)
         diff = structural_diff(world, fork)
     result = {k: v for k, v in vars(diff).items()}
     result["is_empty"] = diff.is_empty()
@@ -486,12 +489,12 @@ def _cmd_promote(world: ArchitectureWorld, name: str, approved_by: str) -> int:
     if _require_main_world(world):
         return 1
     fork_run = f"proposal-{name}"
-    if not _run_exists(world.db_path, fork_run):
+    if not world.has_run(fork_run):
         print(f"error: no fork run '{fork_run}' (run: archskillkit fork "
               f"--repo {world.root or '.'} --name {name})", file=sys.stderr)
         return 1
     with world:
-        fork = world._view(fork_run)
+        fork = world.view(fork_run)
         fork.record_proposal(name)
         try:
             fork.approve_proposal(name, actor=approved_by)
@@ -507,11 +510,11 @@ def _cmd_reject(world: ArchitectureWorld, name: str, actor: str) -> int:
     if _require_main_world(world):
         return 1
     fork_run = f"proposal-{name}"
-    if not _run_exists(world.db_path, fork_run):
+    if not world.has_run(fork_run):
         print(f"error: no fork run '{fork_run}'", file=sys.stderr)
         return 1
     with world:
-        fork = world._view(fork_run)
+        fork = world.view(fork_run)
         fork.record_proposal(name)
         try:
             fork.reject_proposal(name, actor=actor)
