@@ -1,0 +1,63 @@
+schema_version: 1
+kind: v2.1-uat-consolidated-report
+report_id: <release-or-run-group-id>
+plan_id: v2.1-mandatory-uat
+generated_at_utc: <YYYY-MM-DDTHH:MM:SSZ>
+execution_state: NOT_RUN
+traceability_contract:
+  required_chain: [requirement_ref, feature_id, scenario_id, session_id, manifest_id, provenance, evidence_refs]
+  session_manifest_rule: session_id must equal manifest_id
+  evidence_ref_fields: [manifest_id, session_id, path, media_type, sha256, source_kind, source_run_id, source_path, source_sha256]
+  mapping_rule: >-
+    Cada requisito obligatorio debe aparecer exactamente una vez bajo su
+    feature_id y scenario_id planificados, con una sesión y manifiesto propios.
+coverage:
+  mandatory_total: 16
+  covered: 0
+  uncovered: 16
+  coverage_pct: 0
+  rule: PASS session plus all planned canonical evidence_ref paths and hashes present in its own immutable manifest, with valid declared source provenance
+  formulas:
+    scenario_covered: "1 iff exactly one PASS session has matching session_id/manifest_id, every expected_evidence.evidence_ref_path is present with its hash, and every source link is valid; else 0"
+    requirement_coverage_pct: "100 * covered_mandatory_requirements / 16"
+    feature_coverage_pct: "100 * covered_feature_scenarios / mandatory_feature_scenarios"
+    overall_coverage_pct: "100 * covered_mandatory_scenarios / 16"
+overall_verdict: NOT_RUN # PASS | FAIL | BLOCKED | INCONCLUSIVE | NOT_RUN
+features: []
+# feature shape:
+# - id: F-01
+#   requirement_refs: [UAT2-001]
+#   scenarios:
+#     - scenario_id: UAT2-001
+#       requirement_ref: UAT2-001
+#       session_id: <run-id>
+#       manifest_id: <same-as-session_id>
+#       verdict: NOT_RUN
+#       evidence_complete: false
+#       evidence_refs:
+#         - manifest_id: <same-as-session_id>
+#           session_id: <same-as-manifest_id>
+#           path: artifacts/uat/v2.1/sessions/<session-id>/evidence/<file>
+#           media_type: application/json
+#           sha256: <64-lowercase-hex>
+#           source_kind: <declared-source-kind>
+#           source_run_id: <declared-source-run-id>
+#           source_path: <source-artifact-path>
+#           source_sha256: <64-lowercase-hex>
+#   coverage_pct: 0
+non_mandatory_gaps:
+  - scenario_id: UAT2-015
+    status: GAP_NOT_MANDATORY
+  - scenario_id: UAT2-016
+    status: GAP_NOT_MANDATORY
+integrity_checks:
+  orphan_sessions: []
+  missing_evidence: []
+  hash_mismatches: []
+  unapproved_evidence_paths: []
+  cross_session_references: []
+  manifest_session_mismatches: []
+  undeclared_evidence_sources: []
+  runner_run_id_mismatches: []
+  source_hash_mismatches: []
+notes: This template is intentionally not evidence of a successful UAT.

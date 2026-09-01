@@ -1,5 +1,38 @@
 # Guía de contribución
 
+## Baseline reproducible
+
+El repositorio expone una única interfaz operativa para desarrollo local:
+
+```bash
+mise trust mise.toml
+mise run bootstrap
+mise run doctor
+mise run ci
+```
+
+`bootstrap` instala el toolchain raíz fijado, reutiliza el runtime de scanners
+de la Skill y sincroniza `python/.venv` desde `python/uv.lock` con el extra
+`dev`. `doctor` separa dependencias requeridas de herramientas opcionales.
+`ci` ejecuta las suites Python y BATS. La receta compatible con GitHub Actions
+vive intencionalmente fuera de `.github/`, en `ci/github-actions/ci.yml`, por
+lo que GitHub no la detecta ni la ejecuta. Para correrla localmente con `act`:
+
+```bash
+just ci-github-local
+```
+
+Para ejecutar una sola suite:
+
+```bash
+mise run test:python
+mise run test:bats
+```
+
+Las versiones de ast-grep, Semgrep y LikeC4 pertenecen exclusivamente a
+`skills/architecture-discovery/runtime/mise.toml`; no deben duplicarse en la
+configuración raíz.
+
 ## Filosofía
 
 Una contribución debe preferir:
@@ -15,7 +48,7 @@ Una contribución debe preferir:
 Los scripts thin-glue se prueban con BATS:
 
 - suites en `tests/*.bats`, helpers compartidos en `tests/test_helper.bash`;
-- ejecutar la suite: `bats tests/`;
+- ejecutar la suite: `mise run test:bats`;
 - los tests cubren el **seam** del CLI de cada script: exit code, stdout y
   efectos bajo las raíces XDG resueltas; el repositorio fuente debe quedar
   intacto (UAT-001) y los tests no acceden a internos de los scripts;

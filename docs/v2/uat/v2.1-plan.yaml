@@ -1,0 +1,350 @@
+schema_version: 1
+plan_id: v2.1-mandatory-uat
+initiative: V2.1
+execution_state: NOT_RUN
+purpose: >-
+  Definir el gate UAT V2.1 sin declarar resultados. Un escenario sólo cuenta
+  como cubierto cuando una sesión con el mismo scenario_id tiene un verdict
+  admisible y cada evidencia requerida está registrada por hash en el
+  manifiesto inmutable.
+evidence_root: artifacts/uat/v2.1
+session_registry: v2.1-sessions.not-run.yaml
+evidence_contract:
+  session_boundary: >-
+    Cada sesión cubre exactamente un scenario_id y tiene un manifiesto propio:
+    manifest_id debe ser idéntico a session_id. Una entrada sólo es admisible
+    si declara ese session_id y su path comienza por
+    artifacts/uat/v2.1/sessions/<session-id>/evidence/.
+  required_ref_fields: [manifest_id, session_id, path, media_type, sha256, source_kind, source_run_id, source_path, source_sha256]
+  hash_algorithm: sha256
+  expected_evidence_fields: [source_path, evidence_ref_path, type]
+  canonical_source_kind_by_evidence_path_prefix:
+    artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/: runner
+    artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/: v2-orchestrator
+    artifacts/uat/v2.1/sessions/<session-id>/evidence/benchmark/: benchmark-harness
+  cross_run_rule: >-
+    No se permiten referencias a otro session_id, manifest_id, ni directorio
+    de sesión. `source_path` identifica el artefacto del productor;
+    `evidence_ref_path` identifica exclusivamente su copia canónica dentro de
+    la sesión y es la ruta que se evalúa para cobertura. Toda evidencia
+    importada conserva source_kind, source_run_id, source_path y source_sha256.
+  provenance_rule: >-
+    Una sesión que importe evidencia del runner debe declarar un único
+    source_runner_run_id y una entrada runner equivalente en allowed_sources.
+    Cada evidence_ref con source_kind=runner debe usar exactamente ese
+    source_run_id, una source_path bajo su source_path_prefix y el
+    source_sha256 del archivo de origen, igual al sha256 de la copia canónica.
+    Las fuentes no runner requieren su propia entrada en allowed_sources; no
+    se admiten fuentes implícitas ni mezclas no declaradas.
+runner_integration:
+  existing_runner: scripts/uat/uat.sh
+  applicable_to: [UAT2-001, UAT2-009, UAT2-010]
+  output_contract:
+    - runs/<run-id>/result.json
+    - runs/<run-id>/evidence/checkout-before.json
+    - runs/<run-id>/evidence/checkout-after.json
+    - runs/<run-id>/payloads/{scan,ingest,review-drift,project,validation,report}.json
+    - runs/<run-id>/payloads/replay.txt
+  export_handoff: >-
+    Tras una ejecución, copiar el árbol exacto desde
+    $UAT_STATE_BASE/runs/<runner-run-id>/ a
+    artifacts/uat/v2.1/runner-imports/<runner-run-id>/ con cp -a. Para cada
+    escenario, copiar únicamente los archivos seleccionados desde esa
+    importación a artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/;
+    crear un manifiesto cuyo manifest_id sea el session_id y registrar allí
+    los SHA-256 de las copias. El run_id de origen se conserva en
+    source_runner_run_id y no sustituye al session_id.
+  limitation: >-
+    El runner inspecciona un repositorio objetivo y no orquesta el dominio
+    ActiveGraph V2. Los escenarios marcados v2-orchestrator requieren un
+    ejecutor específico que produzca los artefactos indicados.
+features:
+  - id: F-01
+    name: Repository and project-store safety
+    requirements: [UAT2-001, UAT2-002, UAT2-003, UAT2-018]
+  - id: F-02
+    name: Event-sourced architecture and evidence promotion
+    requirements: [UAT2-004, UAT2-005, UAT2-006]
+  - id: F-03
+    name: Bounded context compilation
+    requirements: [UAT2-007, UAT2-008, UAT2-017]
+  - id: F-04
+    name: Regenerable projections and deterministic drift
+    requirements: [UAT2-009, UAT2-010, UAT2-011]
+  - id: F-05
+    name: Governed architecture proposals
+    requirements: [UAT2-012, UAT2-013, UAT2-014]
+scenarios:
+  - scenario_id: UAT2-001
+    feature_id: F-01
+    requirement_ref: UAT2-001
+    title: Repository remains read-only during analysis
+    orchestration: existing-runner
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/evidence/checkout-before.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/checkout-before.json
+        type: application/json; git-state snapshot
+      - source_path: runs/<run-id>/evidence/checkout-after.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/checkout-after.json
+        type: application/json; git-state snapshot
+      - source_path: runs/<run-id>/result.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/result.json
+        type: application/json; repository_unchanged=true
+  - scenario_id: UAT2-002
+    feature_id: F-01
+    requirement_ref: UAT2-002
+    title: Each project owns separate Code Index and Architecture World stores
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-002/store-layout.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/store-layout.json
+        type: application/json; project-id to absolute-store-path mapping
+      - source_path: runs/<run-id>/uat2-002/assertion.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/assertion.json
+        type: application/json; distinct paths assertion
+  - scenario_id: UAT2-003
+    feature_id: F-01
+    requirement_ref: UAT2-003
+    title: Code Index can be recreated without losing Architecture World
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-003/world-before.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/world-before.json
+        type: application/json; replayable-world digest
+      - source_path: runs/<run-id>/uat2-003/index-recreated.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/index-recreated.json
+        type: application/json; recreate operation result
+      - source_path: runs/<run-id>/uat2-003/world-after.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/world-after.json
+        type: application/json; replayable-world digest equal to before
+  - scenario_id: UAT2-004
+    feature_id: F-02
+    requirement_ref: UAT2-004
+    title: EventStore replay reproduces current state
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-004/event-log.jsonl
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/event-log.jsonl
+        type: application/x-ndjson; immutable event log
+      - source_path: runs/<run-id>/uat2-004/replay-comparison.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/replay-comparison.json
+        type: application/json; current and replay state digests
+  - scenario_id: UAT2-005
+    feature_id: F-02
+    requirement_ref: UAT2-005
+    title: Automatic high-confidence relations retain evidence provenance
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-005/relations.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/relations.json
+        type: application/json; high-confidence automatic relations
+      - source_path: runs/<run-id>/uat2-005/provenance-check.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/provenance-check.json
+        type: application/json; relation-to-evidence completeness result
+  - scenario_id: UAT2-006
+    feature_id: F-02
+    requirement_ref: UAT2-006
+    title: Contradictory observations are not silently promoted
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-006/observations.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/observations.json
+        type: application/json; contradictory inputs
+      - source_path: runs/<run-id>/uat2-006/promotion-decision.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/promotion-decision.json
+        type: application/json; withheld or conflict verdict
+  - scenario_id: UAT2-007
+    feature_id: F-03
+    requirement_ref: UAT2-007
+    title: Context Compiler enforces node edge and source-line budgets
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-007/request.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/request.json
+        type: application/json; requested budgets
+      - source_path: runs/<run-id>/uat2-007/context-pack.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/context-pack.json
+        type: application/json; emitted nodes edges and source lines
+      - source_path: runs/<run-id>/uat2-007/budget-check.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/budget-check.json
+        type: application/json; bounds assertion
+  - scenario_id: UAT2-008
+    feature_id: F-03
+    requirement_ref: UAT2-008
+    title: Context Compiler reads source only from resolved locations
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-008/resolved-locations.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/resolved-locations.json
+        type: application/json; eligible source locations
+      - source_path: runs/<run-id>/uat2-008/source-read-trace.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/source-read-trace.json
+        type: application/json; actual file-read trace
+      - source_path: runs/<run-id>/uat2-008/read-policy-check.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/read-policy-check.json
+        type: application/json; trace subset assertion
+  - scenario_id: UAT2-009
+    feature_id: F-04
+    requirement_ref: UAT2-009
+    title: LikeC4 projection regenerates with equivalent semantics
+    orchestration: existing-runner-plus-v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/payloads/project.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/project.json
+        type: application/json; runner projection payload when applicable
+      - source_path: runs/<run-id>/uat2-009/likec4-before.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/likec4-before.json
+        type: application/json; semantic projection digest
+      - source_path: runs/<run-id>/uat2-009/likec4-regenerated.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/likec4-regenerated.json
+        type: application/json; regenerated semantic digest and equality result
+  - scenario_id: UAT2-010
+    feature_id: F-04
+    requirement_ref: UAT2-010
+    title: Arrows projection regenerates with equivalent semantics
+    orchestration: existing-runner-plus-v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/payloads/project.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/project.json
+        type: application/json; runner projection payload when applicable
+      - source_path: runs/<run-id>/uat2-010/arrows-before.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/arrows-before.json
+        type: application/json; semantic projection digest
+      - source_path: runs/<run-id>/uat2-010/arrows-regenerated.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/arrows-regenerated.json
+        type: application/json; regenerated semantic digest and equality result
+  - scenario_id: UAT2-011
+    feature_id: F-04
+    requirement_ref: UAT2-011
+    title: Forbidden dependency yields a deterministic finding without an LLM
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-011/forbidden-dependency.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/forbidden-dependency.json
+        type: application/json; deterministic fixture
+      - source_path: runs/<run-id>/uat2-011/drift-findings.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/drift-findings.json
+        type: application/json; finding and no-LLM execution assertion
+  - scenario_id: UAT2-012
+    feature_id: F-05
+    requirement_ref: UAT2-012
+    title: Forked proposal cannot mutate main architecture
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-012/main-before.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/main-before.json
+        type: application/json; main state digest
+      - source_path: runs/<run-id>/uat2-012/fork-result.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/fork-result.json
+        type: application/json; proposal changes
+      - source_path: runs/<run-id>/uat2-012/main-after.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/main-after.json
+        type: application/json; unchanged main state digest
+  - scenario_id: UAT2-013
+    feature_id: F-05
+    requirement_ref: UAT2-013
+    title: Structural diff identifies added removed and changed elements
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-013/base.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/base.json
+        type: application/json; base structure fixture
+      - source_path: runs/<run-id>/uat2-013/proposal.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/proposal.json
+        type: application/json; proposal structure fixture
+      - source_path: runs/<run-id>/uat2-013/diff.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/diff.json
+        type: application/json; add remove and change results
+  - scenario_id: UAT2-014
+    feature_id: F-05
+    requirement_ref: UAT2-014
+    title: Promotion requires satisfied policy and recorded approval
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-014/promotion-without-approval.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/promotion-without-approval.json
+        type: application/json; rejected result
+      - source_path: runs/<run-id>/uat2-014/policy-and-approval.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/policy-and-approval.json
+        type: application/json; satisfied policy and approval record
+      - source_path: runs/<run-id>/uat2-014/promotion-with-approval.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/promotion-with-approval.json
+        type: application/json; accepted result
+  - scenario_id: UAT2-017
+    feature_id: F-03
+    requirement_ref: UAT2-017
+    title: Performance baseline persists ingest query context and memory metrics
+    orchestration: benchmark-harness
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: artifacts/benchmarks/context-compiler/<benchmark-run-id>.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/benchmark/context-compiler.json
+        type: application/json; benchmark record including source_file_reads and peak bytes
+      - source_path: runs/<run-id>/uat2-017/metric-review.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/metric-review.json
+        type: application/json; metric completeness and KPI verdict, if measurable
+  - scenario_id: UAT2-018
+    feature_id: F-01
+    requirement_ref: UAT2-018
+    title: Projects cannot exchange events or claims
+    orchestration: v2-orchestrator
+    execution_state: NOT_RUN
+    expected_evidence:
+      - source_path: runs/<run-id>/uat2-018/project-a.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/project-a.json
+        type: application/json; project A event and claim identifiers
+      - source_path: runs/<run-id>/uat2-018/project-b.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/project-b.json
+        type: application/json; project B event and claim identifiers
+      - source_path: runs/<run-id>/uat2-018/isolation-check.json
+        evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/isolation-check.json
+        type: application/json; disjointness assertion
+non_mandatory_gaps:
+  - scenario_id: UAT2-015
+    title: Replay requires no new LLM calls
+    status: GAP_NOT_MANDATORY
+    reason: Included in the catalog but excluded from the V2.1 mandatory gate.
+  - scenario_id: UAT2-016
+    title: Multi-agent detected layer is identical and inferred divergence visible
+    status: GAP_NOT_MANDATORY
+    reason: Included in the catalog but excluded from the V2.1 mandatory gate.
+coverage_rules:
+  admissible_verdicts: [PASS]
+  non_covering_verdicts: [NOT_RUN, BLOCKED, FAIL, INCONCLUSIVE]
+  scenario_coverage: >-
+    PASS session for a planned scenario plus hashes for every declared
+    expected_evidence.evidence_ref_path in the immutable manifest. Las rutas
+    de origen sólo verifican procedencia; no sustituyen a la copia canónica.
+    Missing, mismatched, orphan, or provenance-invalid evidence is NOT COVERED.
+  formulas:
+    scenario_covered: >-
+      1 si y sólo si existe exactamente una sesión PASS del scenario_id, su
+      manifest_id coincide con session_id, y todos los expected_evidence del
+      escenario tienen una evidence_ref con path igual a su
+      expected_evidence.evidence_ref_path, source_path, media_type y SHA-256
+      coincidentes en ese manifiesto, su source_kind coincide con el prefijo
+      canónico declarado, y pasan las reglas de procedencia; en otro caso 0.
+    requirement_coverage: >-
+      Un requirement_ref está cubierto cuando su único escenario obligatorio
+      está cubierto. requirement_coverage_pct = 100 * requirements_cubiertos
+      / requirements_obligatorios.
+    feature_coverage: >-
+      feature_coverage_pct = 100 * escenarios_cubiertos_de_la_feature /
+      escenarios_obligatorios_de_la_feature.
+    overall_coverage: >-
+      coverage_pct = 100 * escenarios_obligatorios_cubiertos / 16. No incluye
+      UAT2-015 ni UAT2-016.

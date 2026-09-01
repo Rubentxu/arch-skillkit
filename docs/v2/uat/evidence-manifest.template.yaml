@@ -1,0 +1,32 @@
+schema_version: 1
+kind: v2.1-uat-evidence-manifest
+manifest_id: <same-as-session_id>
+session_id: <same-as-manifest_id>
+plan_id: v2.1-mandatory-uat
+created_at_utc: <YYYY-MM-DDTHH:MM:SSZ>
+immutability:
+  algorithm: sha256
+  rule: >-
+    Append evidence entries after capture. Never replace an entry; a corrected
+    artifact receives a new path and hash and the prior entry remains present.
+entries: []
+# entry shape:
+# A manifest belongs to one session only. Every path must begin with
+# artifacts/uat/v2.1/sessions/<session-id>/evidence/.
+# - scenario_id: UAT2-001
+#   session_id: <same-as-manifest_id>
+#   manifest_id: <same-as-session_id>
+#   path: artifacts/uat/v2.1/sessions/<session-id>/evidence/checkout-before.json
+#   media_type: application/json
+#   sha256: <64-lowercase-hex>
+#   bytes: <non-negative-integer>
+#   captured_at_utc: <YYYY-MM-DDTHH:MM:SSZ>
+#   producer: <runner-or-executor>
+#   source_kind: runner|v2-orchestrator|benchmark-harness
+#   source_run_id: <must-match-session-provenance-allowed-source>
+#   source_path: <path-under-the-declared-source-path-prefix>
+#   source_sha256: <64-lowercase-hex-of-source-file>
+# Imported runner evidence additionally requires source_run_id to equal the
+# session-level source_runner_run_id. source_path/source_sha256 link the copy
+# at path to the exact immutable source artifact; path remains the canonical
+# per-session evidence path.

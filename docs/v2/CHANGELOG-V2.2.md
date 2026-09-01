@@ -1,5 +1,7 @@
 # Changelog V2.2
 
+> **Scope:** this changelog records changes to the V2.2 specification and design package. Entries here are not evidence that a production implementation exists. The authoritative implementation tracker is [`STATUS.md`](STATUS.md).
+
 ## Added
 
 - VisualIntent abstraction.

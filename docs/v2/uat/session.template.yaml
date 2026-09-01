@@ -1,0 +1,49 @@
+schema_version: 1
+kind: v2.1-uat-session
+session_id: <run-id>
+manifest_id: <same-as-session_id>
+plan_id: v2.1-mandatory-uat
+scenario_id: <UAT2-001>
+executor:
+  kind: human|automation
+  name: <responsible-person-or-tool>
+  version: <tool-version-or-na>
+executed_at_utc: <YYYY-MM-DDTHH:MM:SSZ>
+execution_state: NOT_RUN
+verdict: NOT_RUN # PASS | FAIL | BLOCKED | INCONCLUSIVE | NOT_RUN
+requirement_ref: <UAT2-001>
+feature_id: <F-01>
+environment:
+  repository_ref: <commit-or-immutable-source-reference>
+  platform: <os-and-architecture>
+  python: <version-or-na>
+  invocation: <argv-array-recorded-elsewhere>
+provenance:
+  # Required when any evidence_ref has source_kind=runner. All such references
+  # must use this exact ID; it is never a substitute for session_id.
+  source_runner_run_id: <runner-run-id-or-null>
+  # Every source used by evidence_refs must be declared here. A runner entry
+  # must repeat source_runner_run_id. source_path_prefix describes the producer
+  # path; imported_snapshot_root records any immutable handoff copy.
+  allowed_sources:
+    - source_kind: runner|v2-orchestrator|benchmark-harness
+      source_run_id: <run-id>
+      source_path_prefix: <producer-path-prefix>
+      imported_snapshot_root: <immutable-import-root-or-null>
+steps: []
+evidence_refs: []
+# Every evidence_ref is required to have this exact typed shape and to appear
+# identically in the manifest identified by manifest_id:
+# - manifest_id: <same-as-session_id>
+#   session_id: <same-as-session_id>
+#   path: artifacts/uat/v2.1/sessions/<session-id>/evidence/<relative-file>
+#   media_type: application/json|text/plain|application/x-ndjson
+#   sha256: <64-lowercase-hex>
+#   source_kind: runner|v2-orchestrator|benchmark-harness
+#   source_run_id: <must-match-an-allowed-source>
+#   source_path: <path-under-that-source-path-prefix>
+#   source_sha256: <64-lowercase-hex-of-source-file>
+# A reference outside this session directory, with another manifest/session ID,
+# or with a mismatched hash is invalid and cannot contribute to coverage. When
+# source_kind is runner, source_run_id must equal provenance.source_runner_run_id.
+notes: No UAT execution has been recorded by this template.

@@ -1,0 +1,34 @@
+schema_version: 1
+kind: v2.1-uat-session-registry
+plan_id: v2.1-mandatory-uat
+execution_state: NOT_RUN
+purpose: >-
+  Registro inicial completo de las 16 sesiones obligatorias. No representa
+  ejecuciones ni evidencia; cada registro debe sustituirse por una sesión
+  ejecutada con un ID de sesión y manifiesto iguales.
+session_contract:
+  one_scenario_per_session: true
+  manifest_id_must_equal_session_id: true
+  evidence_path_prefix: artifacts/uat/v2.1/sessions/<session-id>/evidence/
+  required_evidence_ref_fields: [manifest_id, session_id, path, media_type, sha256, source_kind, source_run_id, source_path, source_sha256]
+  source_provenance: >-
+    Ejecutadas: source_runner_run_id es obligatorio si hay referencias runner;
+    cada fuente debe estar declarada en provenance.allowed_sources y cada
+    evidencia debe enlazar source_path y source_sha256 de esa fuente.
+sessions:
+  - {scenario_id: UAT2-001, feature_id: F-01, requirement_ref: UAT2-001, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-002, feature_id: F-01, requirement_ref: UAT2-002, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-003, feature_id: F-01, requirement_ref: UAT2-003, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-004, feature_id: F-02, requirement_ref: UAT2-004, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-005, feature_id: F-02, requirement_ref: UAT2-005, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-006, feature_id: F-02, requirement_ref: UAT2-006, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-007, feature_id: F-03, requirement_ref: UAT2-007, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-008, feature_id: F-03, requirement_ref: UAT2-008, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-009, feature_id: F-04, requirement_ref: UAT2-009, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-010, feature_id: F-04, requirement_ref: UAT2-010, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-011, feature_id: F-04, requirement_ref: UAT2-011, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-012, feature_id: F-05, requirement_ref: UAT2-012, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-013, feature_id: F-05, requirement_ref: UAT2-013, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-014, feature_id: F-05, requirement_ref: UAT2-014, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-017, feature_id: F-03, requirement_ref: UAT2-017, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-018, feature_id: F-01, requirement_ref: UAT2-018, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}

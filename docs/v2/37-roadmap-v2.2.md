@@ -1,5 +1,21 @@
 # Roadmap V2.2
 
+Las especificaciones del bundle `arch-skillkit-v2.2-projection-applications/` ya fueron absorbidas en los documentos canónicos `docs/v2/24`–`43`. El bundle es histórico y no se gestiona como segunda fuente. Estado global: [`STATUS.md`](STATUS.md).
+
+| Workstream | Estado actual | Exit restante |
+|---|---|---|
+| P0 — Projection foundation | Implemented; local suite green | UAT |
+| P1 — LikeC4/Arrows normalization | Implemented; local suite green | UAT |
+| P2 — JSON Canvas | Pending | writer + fixtures + UAT |
+| P3 — GraphML | Pending | writer + compatibilidad + UAT |
+| P4 — draw.io | Pending | writer + IDs estables + UAT |
+| P5 — Routing | Partial | thresholds y política productiva |
+| P6 — Lifecycle | Partial | cerrar redacción y validación integrada |
+| P7 — Real-world validation | Pending | tres stacks y consumidores externos |
+| P8 — Projection checkpoint | Pending | métricas de uso de P2–P7 |
+
+La ejecución comienza después del gate V2.1 y cierra un slice antes de abrir el siguiente.
+
 ## Phase P0 — Projection foundation
 
 ### P0.1 VisualIntent schema
@@ -106,3 +122,14 @@ Decide based on usage:
 - add profiles;
 - consider bidirectional import;
 - consider new formats only with unmet intent.
+
+## Orden de entrega
+
+1. JSON Canvas.
+2. GraphML.
+3. draw.io.
+4. Redacción productiva.
+5. Thresholds/routing productivo.
+6. Validación real y checkpoint.
+
+El orden de P2–P4 puede cambiar si el checkpoint V2.1 aporta evidencia de mayor valor para otro consumidor.

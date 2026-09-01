@@ -1,27 +1,28 @@
 # Backlog V2.2
 
-## Must
+## Implemented — local suite green
 
-- VisualIntent schema
-- ProjectionAdapter protocol
-- ProjectionResult
-- LikeC4 adapter normalization
-- Arrows adapter normalization
-- JSON Canvas projector
-- GraphML projector
-- draw.io projector
-- routing policy
-- projection metadata
-- stale detection
-- manual edit protection
-- UAT
-- fixtures
+Verificación local reproducible aprobada el 2026-09-01; UAT y la ejecución del workflow local con `act` siguen pendientes.
 
-## Should
+- VisualIntent schema.
+- ProjectionAdapter protocol y ProjectionResult.
+- Projection metadata.
+- LikeC4 y Arrows adapter normalization.
+- Stale detection y manual-edit protection.
+- Routing inicial por intent y user override.
 
-- security profiles
+## Next — slices verticales
+
+1. JSON Canvas projector + fixtures + UAT.
+2. GraphML projector + perfiles de consumidor + UAT.
+3. draw.io projector + stable IDs + UAT.
+4. Security/redaction profiles verificados.
+5. Size thresholds y routing productivo.
+6. Validación real en Rust, Kotlin/Java y TypeScript.
+
+## Después del core
+
 - projection previews/reports
-- GraphML profiles
 - proposal projections
 - investigation canvas
 
@@ -41,3 +42,5 @@
 - Cytoscape-specific API integration
 - Gephi-specific API integration
 - yEd-specific API integration
+
+Este backlog gestiona las especificaciones absorbidas del bundle de integración; no se mantiene un backlog paralelo dentro del bundle. Estado global: [`STATUS.md`](STATUS.md).
