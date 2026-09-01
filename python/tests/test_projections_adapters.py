@@ -19,6 +19,8 @@ from archskillkit.projections import (
     VisualIntent,
 )
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
+from archskillkit.projections.adapters.graphml import GraphMLAdapter
+from archskillkit.projections.adapters.jsoncanvas import JSONCanvasAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
 from archskillkit.projections.writer import (
     ProjectionError,
@@ -56,7 +58,8 @@ class TestLikeC4Projection:
         assert result["metrics"]["edges"] == 5
         model = Path(result["path"]).read_text()
         assert "specification {" in model
-        assert "externalSystem" in model
+        assert "element interface" in model  # F9: interfaces, not externals
+        assert "#interface" in model
         assert "#detected" in model and "#confidence-high" in model
         assert "->" in model
         assert "exposes" in model
@@ -168,3 +171,51 @@ class TestWorldUntouched:
         project_to_workspace(promoted, ArrowsAdapter())
         assert promoted.snapshot() == before
         assert promoted.replay_verify().ok
+
+
+class TestGraphMLProjection:
+    def test_generates_valid_directed_graphml(self, promoted):
+        import xml.etree.ElementTree as ET
+
+        result = project_to_workspace(promoted, GraphMLAdapter())
+        root = ET.parse(result["path"]).getroot()
+        assert root.tag == "{http://graphml.graphdrawing.org/xmlns}graphml"
+        nodes = root.findall(".//{*}node")
+        edges = root.findall(".//{*}edge")
+        assert result["metrics"]["nodes"] == len(nodes) == 10
+        assert result["metrics"]["edges"] == len(edges) == 5
+        node_ids = [n.get("id") for n in nodes]
+        assert len(node_ids) == len(set(node_ids))
+        for edge in edges:
+            assert edge.get("source") in node_ids
+            assert edge.get("target") in node_ids
+
+    def test_graphml_is_deterministic(self, promoted):
+        first = project_to_workspace(promoted, GraphMLAdapter())
+        original = Path(first["path"]).read_bytes()
+        Path(first["path"]).unlink()
+        second = project_to_workspace(promoted, GraphMLAdapter())
+        assert Path(second["path"]).read_bytes() == original
+
+
+class TestJSONCanvasProjection:
+    def test_generates_valid_canvas(self, promoted):
+        result = project_to_workspace(promoted, JSONCanvasAdapter())
+        canvas = json.loads(Path(result["path"]).read_text())
+        assert canvas["version"] == "1.0"
+        assert len(canvas["nodes"]) == 10
+        assert len(canvas["edges"]) == 5
+        node_ids = {n["id"] for n in canvas["nodes"]}
+        for edge in canvas["edges"]:
+            assert edge["fromNode"] in node_ids
+            assert edge["toNode"] in node_ids
+            assert edge["label"]
+        for node in canvas["nodes"]:
+            assert "component" in node["text"] or "interface" in node["text"]
+
+    def test_canvas_is_deterministic(self, promoted):
+        first = project_to_workspace(promoted, JSONCanvasAdapter())
+        original = Path(first["path"]).read_bytes()
+        Path(first["path"]).unlink()
+        second = project_to_workspace(promoted, JSONCanvasAdapter())
+        assert Path(second["path"]).read_bytes() == original

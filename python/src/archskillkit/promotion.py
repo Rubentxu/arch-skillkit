@@ -36,11 +36,14 @@ from archskillkit.sensors import (
 from archskillkit.world import PromotionError
 
 # Code Index pseudo-kind → architecture element category (docs/v2/04).
+# Code Index pseudo-targets are INTERFACES of the analyzed system
+# (docs/v2/45 F9): an endpoint or datastore usage is not an external
+# system — it is an exposed/consumed interface of a component.
 PSEUDO_TO_CATEGORY = {
-    "endpoint": "external_system",
-    "topic": "topic",
-    "datastore": "datastore",
-    "http_client": "external_system",
+    "endpoint": "interface",
+    "topic": "interface",
+    "datastore": "interface",
+    "http_client": "interface",
 }
 
 # Observation predicate → architecture relation kind (docs/v2/04).

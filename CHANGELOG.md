@@ -42,6 +42,22 @@ fixes.
   `repositories.py` hosts `ClaimRepository`, `ArchitectureRepository`,
   `ArchitecturePolicyService` and `ProposalService`; the world facade
   delegates and the CLI uses only public surface (`has_run`/`view`).
+- **V2.3-F10 (partial) — GraphML and JSON Canvas projectors
+  (docs/v2/32/31)**: two new adapters behind the ProjectionAdapter
+  contract (deterministic output, architecture metadata as GraphML data
+  keys; JSON Canvas 1.0 with grid layout), wired into
+  `archskillkit project --format` and the intent routing preferences.
+  draw.io remains the last pending projector.
+- **V2.3-F9 — C4 structure vs interface (docs/v2/46 F9)**: endpoint,
+  topic, datastore and http_client pseudo-targets become `interface`
+  elements of the analyzed system — never external systems; LikeC4
+  renders them inside the target system with the `#interface` tag.
+- **V2.3-F8 — generated properties, coverage gate and self-architecture
+  fitness (docs/v2/46 F8)**: hypothesis-generated DAG properties for
+  directed-path semantics; coverage gate at 70 % (`mise run coverage`);
+  `tests/test_self_architecture.py` enforces the ADR-0024 boundary, the
+  port-only rule for promotion/proposals, the ProjectContext rule for
+  CodeIndex and the ProjectionAdapter contract.
 - **V2.3-F1 — semantic integrity property tests (docs/v2/46)**:
   `tests/test_properties.py` pins the five domain invariants PR-1…PR-5
   (directed paths, scan-generation replacement, promotion diff-fixpoint,

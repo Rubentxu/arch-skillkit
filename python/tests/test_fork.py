@@ -93,10 +93,11 @@ class TestStructuralDiff:
     def test_diff_detects_removal_and_confidence_change(self, main_world):
         fork = main_world.fork("trim")
         victim = next(o for o in fork.find_objects("architecture_element")
-                      if o["data"]["kind"] == "external_system")
+                      if o["data"]["kind"] == "interface")
         fork.graph.remove_object(victim["id"])
         other = next(o for o in fork.find_objects("architecture_element")
-                     if o["data"]["kind"] == "datastore")
+                     if o["data"]["kind"] == "interface"
+                     and o["id"] != victim["id"])
         fork.graph.patch_object(other["id"], {"confidence": "medium"})
         diff = structural_diff(main_world, fork)
         assert victim["data"]["name"] in diff.elements_removed

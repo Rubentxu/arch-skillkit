@@ -111,7 +111,7 @@ export XDG_STATE_HOME="$test_xdg/state"
 export XDG_CACHE_HOME="$test_xdg/cache"
 UV_CACHE_DIR=python/.cache/uv \
   uv run --project python --locked --extra dev pytest -q \
-  --cov=archskillkit --cov-report=term-missing
+  --cov=archskillkit --cov-report=term-missing --cov-fail-under=70
 '''
 
 [tasks.ci]

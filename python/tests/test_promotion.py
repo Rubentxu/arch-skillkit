@@ -161,9 +161,10 @@ class TestArchitectureMapper:
         for el in elements:
             kinds.setdefault(el["data"]["kind"], set()).add(el["data"]["name"])
         assert len(kinds.get("component", set())) == 5  # 5 handlers/repositories
-        assert len(kinds.get("external_system", set())) == 3  # endpoints
-        assert len(kinds.get("topic", set())) == 1
-        assert len(kinds.get("datastore", set())) == 1
+        # F9: endpoint/topic/datastore pseudo-targets are interfaces of
+        # the analyzed system, never external systems.
+        assert len(kinds.get("interface", set())) == 5
+        assert len(kinds.get("external_system", set())) == 0
 
     def test_relations_typed_and_evidenced(self, promoted):
         relations = promoted.architecture_relations()
@@ -215,7 +216,7 @@ class TestReviewer:
         # forge an unevidenced architecture relation directly
         els = world.find_objects("architecture_element")
         a = next(e for e in els if e["data"]["kind"] == "component")
-        b = next(e for e in els if e["data"]["kind"] == "datastore")
+        b = next(e for e in els if e["data"]["kind"] == "interface")
         world.add_architecture_relation("depends_on", a["id"], b["id"], data={
             "origin": "DETECTED", "confidence": "high", "rule": "forged",
             "evidence_ids": [],

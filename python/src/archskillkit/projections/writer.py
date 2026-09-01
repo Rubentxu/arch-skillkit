@@ -22,11 +22,15 @@ from archskillkit.world import ArchitectureWorld
 ARTIFACT_PATHS = {
     "likec4": "likec4/model.c4",
     "arrows": "arrows/architecture.arrows",
+    "graphml": "graphs/dependencies.graphml",
+    "jsoncanvas": "boards/architecture.canvas",
 }
 
 PREFERRED_INTENT = {
     "likec4": "architecture",
     "arrows": "exploration",
+    "graphml": "dependency_graph",
+    "jsoncanvas": "knowledge_map",
 }
 
 

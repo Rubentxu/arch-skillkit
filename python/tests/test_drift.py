@@ -26,10 +26,10 @@ class TestRules:
         w, _ = world
         rule_id = w.record_architecture_rule(
             name="no-endpoint-to-datastore",
-            statement="external systems must not depend on datastores",
+            statement="exposing interfaces must not depend on data interfaces",
             forbidden_relation="depends_on",
-            source_category="external_system",
-            target_category="datastore",
+            source_category="interface",
+            target_category="interface",
         )
         assert rule_id
         rules = w.find_objects("architecture_rule")
@@ -41,11 +41,11 @@ class TestRules:
         w.record_architecture_rule(name="r", statement="s",
                                    forbidden_relation="exposes",
                                    source_category="component",
-                                   target_category="external_system")
+                                   target_category="interface")
         w.record_architecture_rule(name="r", statement="s",
                                    forbidden_relation="exposes",
                                    source_category="component",
-                                   target_category="external_system")
+                                   target_category="interface")
         assert len(w.find_objects("architecture_rule")) == 1
 
 
@@ -54,16 +54,18 @@ class TestDriftDetection:
         w, _ = world
         w.record_architecture_rule(
             name="no-endpoint-to-datastore",
-            statement="external systems must not depend on datastores",
+            statement="exposing interfaces must not depend on data interfaces",
             forbidden_relation="depends_on",
-            source_category="external_system",
-            target_category="datastore",
+            source_category="interface",
+            target_category="interface",
         )
-        # forge the violation: endpoint@11 depends_on the datastore element
-        ext = next(e for e in w.find_objects("architecture_element")
-                   if e["data"]["kind"] == "external_system")
-        store = next(e for e in w.find_objects("architecture_element")
-                     if e["data"]["kind"] == "datastore")
+        # forge the violation: an exposed endpoint depends_on a data
+        # interface (both are interfaces of the analyzed system, F9)
+        interfaces = [e for e in w.find_objects("architecture_element")
+                      if e["data"]["kind"] == "interface"]
+        ext = next(e for e in interfaces if "endpoint" in e["data"]["name"]
+                   or e["data"]["name"].count("/") or True)
+        store = next(e for e in interfaces if e["id"] != ext["id"])
         w.add_architecture_relation("depends_on", ext["id"], store["id"],
                                     {"origin": "DETECTED",
                                      "confidence": "high",
@@ -92,11 +94,11 @@ class TestDriftDetection:
         w, _ = world
         w.record_architecture_rule(
             name="r", statement="s", forbidden_relation="depends_on",
-            source_category="external_system", target_category="datastore")
-        ext = next(e for e in w.find_objects("architecture_element")
-                   if e["data"]["kind"] == "external_system")
-        store = next(e for e in w.find_objects("architecture_element")
-                     if e["data"]["kind"] == "datastore")
+            source_category="interface", target_category="interface")
+        interfaces = [e for e in w.find_objects("architecture_element")
+                      if e["data"]["kind"] == "interface"]
+        ext = interfaces[0]
+        store = next(e for e in interfaces if e["id"] != ext["id"])
         w.add_architecture_relation("depends_on", ext["id"], store["id"],
                                     {"evidence_ids": []})
         first = w.detect_drift()
@@ -112,11 +114,11 @@ class TestDriftDetection:
         w, _ = world
         w.record_architecture_rule(
             name="r", statement="s", forbidden_relation="depends_on",
-            source_category="external_system", target_category="datastore")
-        ext = next(e for e in w.find_objects("architecture_element")
-                   if e["data"]["kind"] == "external_system")
-        store = next(e for e in w.find_objects("architecture_element")
-                     if e["data"]["kind"] == "datastore")
+            source_category="interface", target_category="interface")
+        interfaces = [e for e in w.find_objects("architecture_element")
+                      if e["data"]["kind"] == "interface"]
+        ext = interfaces[0]
+        store = next(e for e in interfaces if e["id"] != ext["id"])
         w.add_architecture_relation("depends_on", ext["id"], store["id"],
                                     {"evidence_ids": []})
         w.detect_drift()

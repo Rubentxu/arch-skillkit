@@ -150,3 +150,44 @@ def test_pr5_cardinality_gates_contradiction(kotlin_world_index):
                if c["data"]["statement"].startswith("svc.orders exposes")]
     assert len(exposes) == 3
     assert all(c["data"]["status"] == "proposed" for c in exposes)
+
+
+def test_pr1_hypothesis_random_dags(tmp_path):
+    """PR-1 (generated): in index-ordered DAGs, an edge i→j (i<j) never
+    yields a directed path j→i, and always yields i→j."""
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    @settings(max_examples=15, deadline=None)
+    @given(st.lists(st.tuples(st.integers(0, 7), st.integers(0, 7)),
+                    max_size=12))
+    def run(edges):
+        dag = sorted({(min(a, b), max(a, b)) for a, b in edges if a != b})
+        db = tmp_path / f"prop-{abs(hash(tuple(dag)))}.sqlite"
+        index = CodeIndex(db).open()
+        try:
+            index.ingest_astgrep(_astgrep_ndjson(
+                *[(f"v{i}.rs", "kotlin.function", f"sym{i}", 1)
+                  for i in range(9)]),
+                scan_run_id="gen", scan_root=tmp_path)
+            db_sql = index._db
+            for a, b in dag:
+                db_sql.execute(
+                    "INSERT OR IGNORE INTO edges (source_id, target_id,"
+                    " kind, origin, rule, confidence, scan_run_id)"
+                    " VALUES ((SELECT id FROM symbols WHERE name=?),"
+                    " (SELECT id FROM symbols WHERE name=?),"
+                    " 'CALLS', 'DETECTED', 'prop', 'high', 'gen')",
+                    (f"sym{a}", f"sym{b}"))
+            db_sql.commit()
+
+            ids = [index.resolve(f"v{i}.rs::sym{i}@1")["id"]
+                   for i in range(9)]
+            for a, b in dag:
+                assert index.path(ids[a], ids[b]) is not None
+                path_back = index.path(ids[b], ids[a])
+                assert path_back is None, (dag, a, b)
+        finally:
+            index.close()
+
+    run()

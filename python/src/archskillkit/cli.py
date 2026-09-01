@@ -21,6 +21,8 @@ from archskillkit.context import Budget, ContextCompiler
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
+from archskillkit.projections.adapters.graphml import GraphMLAdapter
+from archskillkit.projections.adapters.jsoncanvas import JSONCanvasAdapter
 from archskillkit.projections.adapters.likec4 import LikeC4Adapter
 from archskillkit.projections.writer import ProjectionError, project_to_workspace
 from archskillkit.promotion import detect_generation_drift, discover, review
@@ -87,8 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     p_proj = sub.add_parser("project",
                             help="project the world to LikeC4/Arrows artifacts")
     p_proj.add_argument("--repo", required=True)
-    p_proj.add_argument("--format", choices=["likec4", "arrows", "both"],
-                        default="both")
+    p_proj.add_argument(
+        "--format",
+        choices=["likec4", "arrows", "graphml", "jsoncanvas", "both"],
+        default="both")
     p_proj.add_argument("--force", action="store_true",
                         help="overwrite a manually modified projection")
 
@@ -408,8 +412,18 @@ def _cmd_project(world: ArchitectureWorld, args: argparse.Namespace) -> int:
               f"(run: archskillkit discover --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    adapters = {"likec4": LikeC4Adapter(), "arrows": ArrowsAdapter()}
-    targets = list(adapters) if args.format == "both" else [args.format]
+    adapters = {
+        "likec4": LikeC4Adapter(),
+        "arrows": ArrowsAdapter(),
+        "graphml": GraphMLAdapter(),
+        "jsoncanvas": JSONCanvasAdapter(),
+    }
+    if args.format == "both":
+        # "both" = the two canonical projections; graphml/jsoncanvas are
+        # opt-in formats (F10).
+        targets = ["likec4", "arrows"]
+    else:
+        targets = [args.format]
     results = []
     with world:
         for fmt in targets:

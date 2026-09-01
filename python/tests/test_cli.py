@@ -156,7 +156,7 @@ class TestPromotionCli:
         report = json.loads(proc.stdout)
         assert report["observations"] == 1
         assert report["claims_accepted"] == 1
-        assert report["elements"] == 2  # component + external_system
+        assert report["elements"] == 2  # component + interface
         assert report["relations"] == 1
         assert report["findings"] == 0
 

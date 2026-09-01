@@ -26,6 +26,7 @@ ElementCategory = Literal[
     "external_system",
     "datastore",
     "topic",
+    "interface",
 ]
 
 

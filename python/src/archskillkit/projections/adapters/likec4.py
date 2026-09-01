@@ -25,11 +25,13 @@ _KIND_TO_LIKEC4 = {
     "bounded_context": "container",
     "system": "system",
     "external_system": "externalSystem",
-    "datastore": "datastore",
-    "topic": "queue",
+    "datastore": "interface",
+    "topic": "interface",
+    "interface": "interface",
 }
 
-_INTERNAL = {"component", "container", "bounded_context", "system", "datastore"}
+_INTERNAL = {"component", "container", "bounded_context", "system",
+             "datastore", "topic", "interface"}
 
 _ORIGIN_TAG = {"DETECTED": "#detected", "INFERRED": "#inferred",
                "DECLARED": "#declared", "OBSERVED": "#detected"}
@@ -44,6 +46,8 @@ specification {
   element externalSystem
   element datastore
   element queue
+  element interface
+  tag interface
   tag detected
   tag inferred
   tag declared
@@ -94,7 +98,10 @@ class LikeC4Adapter:
             ids[element["name"]] = ident
             lines.append(f"    {ident} = {_KIND_TO_LIKEC4[element['kind']]}"
                          f" '{_quote(element['name'])}' {{")
-            lines.append(f"      {_ORIGIN_TAG.get(element['origin'], '#detected')}"
+            interface_tag = "#interface " \
+                if element["kind"] == "interface" else ""
+            lines.append(f"      {interface_tag}"
+                         f"{_ORIGIN_TAG.get(element['origin'], '#detected')}"
                          f" {_CONFIDENCE_TAG.get(element['confidence'], '#confidence-high')}")
             lines.append("    }")
         lines.append("  }")
