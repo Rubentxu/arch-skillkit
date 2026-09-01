@@ -47,19 +47,15 @@ jobs:
         run: |
           curl -fsSL https://mise.run | MISE_VERSION=v2026.8.6 sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
 
-      - name: Install pinned toolchain
+      - name: Bootstrap reproducible environment
         run: |
-          mise trust skills/architecture-discovery/runtime/mise.toml
-          mise install -C skills/architecture-discovery/runtime
+          mise run bootstrap
+          mise run doctor
 
-      - name: Install bats-core (pinned)
-        run: |
-          git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core "$HOME/.bats-core"
-          echo "$HOME/.bats-core/bin" >> "$GITHUB_PATH"
-
-      - name: Run BATS suite
-        run: bats tests/
+      - name: Run BATS suite (locked project interpreter)
+        run: mise run test:bats
 
   runtime-assets:
     name: Runtime assets (${{ matrix.arch }})
