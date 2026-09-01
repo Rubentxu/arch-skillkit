@@ -164,11 +164,42 @@ def propose_claims(world: ArchitectureWorld) -> int:
     return proposed
 
 
+# ---- SensorContract v0: predicate cardinality ------------------------
+
+# Cardinality of the fact a predicate expresses. `one` means a subject
+# holds at most one object at a time — two distinct objects then form a
+# contradiction. `many` predicates never contradict (SensorContract,
+# docs/v2/45 §2.2; full metadata-driven contract lands in V2.3-F5).
+PREDICATE_CARDINALITY: dict[str, str] = {
+    "belongs_to": "one",
+    "part_of": "one",
+    "deployed_on": "one",
+    "implemented_by": "many",
+    "depends_on": "many",
+    "uses": "many",
+    "exposes": "many",
+    "publishes": "many",
+    "consumes": "many",
+    "reads": "many",
+    "writes": "many",
+    "calls": "many",
+}
+
+DEFAULT_CARDINALITY = "many"
+
+
+def predicate_cardinality(predicate: str) -> str:
+    return PREDICATE_CARDINALITY.get(predicate.strip().lower(),
+                                     DEFAULT_CARDINALITY)
+
+
 def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
     """Deterministic claim evaluation (behavior: claim_evaluator).
 
     1. Link contradictions: two observations sharing subject+predicate
-       with different objects contradict every claim derived from them.
+       with different objects contradict every claim derived from them —
+       only when the predicate's cardinality is `one`. `many` predicates
+       legitimately hold several objects at once.
     2. Transition: contradiction → `contradicted`; otherwise DETECTED /
        high claims with resolvable evidence auto-accept; the rest stay
        `proposed` for explicit review.
@@ -180,6 +211,8 @@ def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
                    world.graph.relations(source=claim["id"], type="derived_from")]
         for obs_id in derived:
             obs = world.get_object(obs_id)["data"]
+            if predicate_cardinality(obs["predicate"]) != "one":
+                continue
             for other in world.find_objects(
                 "observation", subject=obs["subject"],
                 predicate=obs["predicate"],
@@ -189,7 +222,7 @@ def evaluate_claims(world: ArchitectureWorld) -> dict[str, int]:
                     continue
                 world.graph.add_relation(
                     other["id"], claim["id"], "contradicts",
-                    {"reason": "same subject+predicate, different object"})
+                    {"reason": "single-valued predicate holds two objects"})
 
     for claim in world.find_objects("claim", status="proposed"):
         contradicted = bool(claim["data"].get("contradiction_refs")) or \

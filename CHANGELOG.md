@@ -8,6 +8,32 @@ fixes.
 
 ## [Unreleased]
 
+### Added
+
+- **V2.3-F1 — semantic integrity property tests (docs/v2/46)**:
+  `tests/test_properties.py` pins the five domain invariants PR-1…PR-5
+  (directed paths, scan-generation replacement, promotion diff-fixpoint,
+  manual-edit detection, cardinality-gated contradictions). Verified red
+  against the previous code and green after the fixes.
+
+### Changed
+
+- **V2.3-F1 — domain fixes (docs/v2/44 P0-1…P0-5, docs/v2/46 F1)**:
+  - `CodeIndex`: scan generations — ingesting a new `scan_run_id`
+    atomically retires the previous generation; facts of retired scans no
+    longer survive (`INSERT OR IGNORE` staleness bug).
+  - `CodeIndex.path()` is now genuinely directed (separate
+    `_directed_adjacency()`); `neighborhood()` keeps undirected exploration.
+  - `promotion`: contradictions require a single-valued predicate
+    (`PREDICATE_CARDINALITY`, SensorContract v0); `many` predicates never
+    contradict.
+  - `proposals.promote`: removed relations are matched by semantic element
+    names, not runtime ids — removals are no longer silently skipped and
+    promotion is a diff fixpoint.
+  - `projections`: manual-edit protection is content-based — the sidecar
+    records `generated_sha256` and regeneration compares the artifact's
+    current hash (UAT-P12 is now enforced, not nominal).
+
 ## [0.2.0] - 2026-09-01
 
 ### Added

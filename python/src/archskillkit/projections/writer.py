@@ -89,7 +89,16 @@ def project_to_workspace(world: ArchitectureWorld, adapter: ProjectionAdapter,
 
     if artifact.exists() and meta_path.exists():
         old = json.loads(meta_path.read_text())
-        if old.get("manually_modified") and not force:
+        # Manual-edit detection is content-based (ADR-0030, UAT-P12): if
+        # the artifact on disk no longer matches what this generator last
+        # wrote, a hand edit happened — refuse to overwrite without force.
+        old_hash = old.get("generated_sha256")
+        hand_edited = (
+            (old_hash is not None
+             and hashlib.sha256(artifact.read_bytes()).hexdigest() != old_hash)
+            or bool(old.get("manually_modified"))
+        )
+        if hand_edited and not force:
             raise ProjectionError(
                 f"{rel_path} was manually modified; regenerate with force "
                 "or keep it as a new revision")
@@ -118,6 +127,9 @@ def project_to_workspace(world: ArchitectureWorld, adapter: ProjectionAdapter,
         adapter_version=adapter.version,
         status="generated",
         artifact_path=rel_path,
+        generated_sha256=(
+            hashlib.sha256(artifact.read_bytes()).hexdigest()
+            if artifact.exists() else None),
     )
     meta_path.write_text(meta.model_dump_json(indent=2) + "\n")
     return {

@@ -342,14 +342,18 @@ class TestQueries:
     def test_resolve_by_name_when_unique(self, net):
         assert net.resolve("archive")["name"] == "archive"
 
-    def test_resolve_ambiguous_raises_with_candidates(self, net):
-        # a second 'validate' in another file makes the bare name ambiguous
-        net.ingest_astgrep(
-            ndjson(outline_record("outline.kotlin.function", "validate",
-                                  "q.kt", 0, "Kotlin")),
-            scan_run_id="r2", scan_root=FX_ROOT)
+    def test_resolve_ambiguous_raises_with_candidates(self, index):
+        # a second 'validate' in another file (same generation) makes the
+        # bare name ambiguous. V2.3-F1: runs replace, they do not
+        # accumulate — cross-run accumulation was the staleness bug.
+        index.ingest_astgrep(ndjson(
+            outline_record("outline.rust.function", "validate",
+                           "p.rs", 1, "Rust"),
+            outline_record("outline.kotlin.function", "validate",
+                           "q.kt", 0, "Kotlin"),
+        ), scan_run_id="r1", scan_root=FX_ROOT)
         with pytest.raises(AmbiguousSymbolError) as exc:
-            net.resolve("validate")
+            index.resolve("validate")
         assert len(exc.value.candidates) == 2
 
     def test_resolve_unknown_raises(self, net):

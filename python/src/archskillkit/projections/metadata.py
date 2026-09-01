@@ -45,3 +45,4 @@ class ProjectionMetadata(BaseModel):
     manually_modified: bool = False
     stale: bool = False
     artifact_path: str
+    generated_sha256: str | None = None

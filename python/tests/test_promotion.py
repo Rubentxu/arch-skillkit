@@ -117,13 +117,13 @@ class TestClaimLifecycle:
             world.accept_claim(claim_id)
 
     def test_contradictions_block_silent_promotion(self, kotlin_world_index):
-        # UAT2-006: two observations with the same subject+predicate but
-        # different objects contradict each other; neither may be promoted.
+        # UAT2-006 refined (V2.3-F1): contradiction requires a single-valued
+        # predicate. `belongs_to` is ONE: two distinct objects contradict.
         world, _ = kotlin_world_index
         world.record_observation(inferred_observation(
-            subject="svc.payments", predicate="uses", obj="postgres"))
+            subject="svc.payments", predicate="belongs_to", obj="domain.payments"))
         world.record_observation(inferred_observation(
-            subject="svc.payments", predicate="uses", obj="mongodb"))
+            subject="svc.payments", predicate="belongs_to", obj="domain.billing"))
         propose_claims(world)
         counts = evaluate_claims(world)
         assert counts["contradicted"] == 2
@@ -132,6 +132,22 @@ class TestClaimLifecycle:
         assert statuses == {"contradicted"}
         with pytest.raises(PromotionError):
             world.accept_claim(world.find_objects("claim")[0]["id"])
+
+    def test_many_valued_predicates_never_contradict(self, kotlin_world_index):
+        # PR-5 / V2.3-F1: a `many` predicate legitimately holds several
+        # objects — `uses postgres` + `uses mongodb` are two facts, not a
+        # contradiction (the old behavior wrongly flagged this).
+        world, _ = kotlin_world_index
+        world.record_observation(inferred_observation(
+            subject="svc.payments", predicate="uses", obj="postgres"))
+        world.record_observation(inferred_observation(
+            subject="svc.payments", predicate="uses", obj="mongodb"))
+        propose_claims(world)
+        counts = evaluate_claims(world)
+        assert counts["contradicted"] == 0
+        assert counts["stayed"] == 2
+        statuses = {c["data"]["status"] for c in world.find_objects("claim")}
+        assert statuses == {"proposed"}
 
 
 class TestArchitectureMapper:

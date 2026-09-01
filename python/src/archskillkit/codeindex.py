@@ -203,7 +203,12 @@ class CodeIndex:
     def ingest_astgrep(self, payload: str, scan_run_id: str,
                        scan_root: str | Path) -> IngestReport:
         """Ingest one ast-grep outline run (`scan --json=stream` NDJSON).
-        Re-ingesting the same scan_run_id replaces its files and symbols."""
+
+        Generation semantics: the index holds exactly one scan generation.
+        Re-ingesting the same `scan_run_id` replaces its files and symbols;
+        ingesting a *different* run id atomically retires the previous
+        generation first, so facts of retired scans never survive (PR-2).
+        """
         records: list[dict] = []
         try:
             for line in payload.splitlines():
@@ -216,6 +221,12 @@ class CodeIndex:
         db = self._db
         try:
             db.execute("BEGIN")
+            previous = self._meta_get("last_generation_run")
+            if previous is not None and previous != scan_run_id:
+                # New generation: retire everything (edges first, then
+                # files — files cascade to symbols and their edges).
+                db.execute("DELETE FROM edges")
+                db.execute("DELETE FROM files")
             db.execute("DELETE FROM edges WHERE scan_run_id=?", (scan_run_id,))
             db.execute("DELETE FROM files WHERE scan_run_id=?", (scan_run_id,))
             for rec in records:
@@ -245,6 +256,7 @@ class CodeIndex:
         except Exception:
             db.rollback()
             raise
+        self._meta_set("last_generation_run", scan_run_id)
         report.files = db.execute(
             "SELECT COUNT(*) FROM files WHERE scan_run_id=?",
             (scan_run_id,)).fetchone()[0]
@@ -397,10 +409,12 @@ class CodeIndex:
         }
 
     def path(self, src_id: int, dst_id: int) -> list[int] | None:
-        """Shortest directed path as a list of symbol ids; None if none."""
+        """Shortest *directed* path (following edges source→target) as a
+        list of symbol ids; None when no directed path exists. Inverse
+        traversal needs `impact()` — PR-1 guards this contract."""
         if src_id == dst_id:
             return [src_id]
-        adjacency, _ = self._adjacency()
+        adjacency = self._directed_adjacency()
         parents: dict[int, int] = {}
         queue = [src_id]
         visited = {src_id}
@@ -579,6 +593,8 @@ class CodeIndex:
         return [dict(r) for r in rows]
 
     def _adjacency(self) -> tuple[dict[int, set[int]], list[dict]]:
+        """Undirected adjacency — exploration only (`neighborhood`).
+        Directed traversal MUST use `_directed_adjacency()` (PR-1)."""
         rows = self._db.execute(
             "SELECT id, source_id, target_id, kind, rule FROM edges").fetchall()
         edge_list = [dict(r) for r in rows]
@@ -587,6 +603,24 @@ class CodeIndex:
             adjacency.setdefault(e["source_id"], set()).add(e["target_id"])
             adjacency.setdefault(e["target_id"], set()).add(e["source_id"])
         return adjacency, edge_list
+
+    def _directed_adjacency(self) -> dict[int, set[int]]:
+        rows = self._db.execute(
+            "SELECT source_id, target_id FROM edges").fetchall()
+        adjacency: dict[int, set[int]] = {}
+        for src, dst in rows:
+            adjacency.setdefault(src, set()).add(dst)
+        return adjacency
+
+    def _meta_get(self, key: str) -> str | None:
+        row = self._db.execute(
+            "SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def _meta_set(self, key: str, value: str) -> None:
+        self._db.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
 
     def _rebuild_fts(self) -> None:
         try:

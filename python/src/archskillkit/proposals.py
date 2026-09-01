@@ -134,9 +134,16 @@ def promote(main: ArchitectureWorld, proposal: ArchitectureWorld) -> dict:
         if len(main.architecture_relations()) > before:
             summary["relations_added"] += 1
 
+    # diff.relations_removed carries semantic element NAMES; architecture
+    # relations carry runtime ids. Resolve before matching, or removed
+    # relations whose endpoints still exist are silently skipped (PR-3).
+    main_element_names = {o["id"]: o["data"]["name"]
+                          for o in main.find_objects("architecture_element")}
     for rel in diff.relations_removed:
         victim = next((r for r in main.architecture_relations()
-                       if (r["kind"], r["source"], r["target"])
+                       if (r["kind"],
+                           main_element_names.get(r["source"], r["source"]),
+                           main_element_names.get(r["target"], r["target"]))
                        == (rel["kind"], rel["source"], rel["target"])), None)
         if victim is not None:
             main.graph.remove_relation(victim["id"])
