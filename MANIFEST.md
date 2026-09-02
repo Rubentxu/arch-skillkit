@@ -158,6 +158,8 @@ Inventario de los ficheros de documentación y diseño del repositorio.
 - `skills/architecture-discovery/references/workflow.md`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/kotlin/type.yml`
+- `skills/architecture-discovery/rules/ast-grep/python/class.yml`
+- `skills/architecture-discovery/rules/ast-grep/python/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/rust/enum.yml`
 - `skills/architecture-discovery/rules/ast-grep/rust/function.yml`
 - `skills/architecture-discovery/rules/ast-grep/rust/struct.yml`
