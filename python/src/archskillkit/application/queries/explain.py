@@ -50,7 +50,7 @@ def _safe_get(world: ArchitectureQueryPort, object_id: str) -> dict | None:
 
 def _resolve(world: ArchitectureQueryPort, subject: str) -> dict | None:
     """ById first, then by name/content across the interesting types.
-    Evidence objects resolve by id only — they carry no name."""
+    Evidence objects resolve by id only; relations resolve by id."""
     obj = _safe_get(world, subject)
     if obj:
         return obj
@@ -63,6 +63,13 @@ def _resolve(world: ArchitectureQueryPort, subject: str) -> dict | None:
                      (c["data"].get("subjects") or [])]
         if found:
             return found[0]
+    # relations last: ids live outside the object store (rel_001 …)
+    for rel in world.architecture_relations():
+        if rel["id"] == subject:
+            return {"id": rel["id"], "type": "architecture_relation",
+                    "data": {"kind": rel["kind"], "source": rel["source"],
+                             "target": rel["target"],
+                             **(rel.get("data") or {})}}
     return None
 
 
@@ -140,6 +147,22 @@ def explain(world: ArchitectureQueryPort, subject: str) -> Explanation:
         return Explanation(**base,
                            claims=[_claim_summary(world, c) for c in claims],
                            evidence=evidence, gaps=gaps)
+
+    if obj_type == "architecture_relation":
+        def _name(endpoint: str) -> str:
+            endpoint_obj = _safe_get(world, endpoint)
+            if endpoint_obj:
+                return endpoint_obj["data"].get("name") or endpoint
+            return endpoint
+
+        title = (f"{_name(obj['data']['source'])}"
+                 f" -[{obj['data']['kind']}]->"
+                 f" {_name(obj['data']['target'])}")
+        return Explanation(subject_id=obj["id"],
+                           subject_type="architecture_relation",
+                           title=title, summary=obj["data"],
+                           relations=[obj["data"]],
+                           gaps=["relation has no claim lineage recorded"])
 
     # evidence
     claims = [c for c in world.find_objects("claim")

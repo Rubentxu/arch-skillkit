@@ -181,6 +181,18 @@ class TestExplain:
         assert exp.subject_type == "evidence"
         assert exp.claims[0]["id"] == populated["claim"]
 
+    def test_relation_by_id(self, world, populated):
+        relations = world.architecture_relations()
+        assert relations, "populated world has one exposes relation"
+        rel = relations[0]
+        exp = explain(world, rel["id"])
+        assert exp.subject_type == "architecture_relation"
+        assert exp.subject_id == rel["id"]
+        assert "Orders API" in exp.title and "Billing" in exp.title
+        assert exp.title == "Orders API -[exposes]-> Billing"
+        assert exp.relations[0]["kind"] == "exposes"
+        assert exp.gaps == ["relation has no claim lineage recorded"]
+
     def test_unknown_subject_raises_stable_code(self, world):
         with pytest.raises(SubjectNotFound) as exc:
             explain(world, "no-such-thing")
