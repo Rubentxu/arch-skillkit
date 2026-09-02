@@ -56,7 +56,13 @@ def initialized(sandbox, repo, capsys):
 def _fake_binary(directory: Path, name: str, body: str = "exit 0\n") -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
-    path.write_text(f"#!/bin/sh\n{body}")
+    # advertise the managed-server capability so the likec4 probe
+    # (which checks --help for the `start` subcommand) accepts it, and
+    # exit immediately on --help so the probe never hits its timeout
+    path.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--help\" ]; then echo 'start serve export'; exit 0; fi\n"
+        f"{body}")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return path
 
