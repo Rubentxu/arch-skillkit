@@ -35,6 +35,7 @@ ADMIN_TOOLS: Final = (
     "arch_propose_reject",
     "arch_prompt_registry",
     "arch_skill_registry",
+    "arch_simulate",
 )
 
 

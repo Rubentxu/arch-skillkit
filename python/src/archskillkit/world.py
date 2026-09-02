@@ -66,8 +66,9 @@ class ArchitectureWorld:
 
     DEFAULT_RUN_ID = "world"
 
-    def __init__(self, project_id: str, name: str = "", root: str = "",
-                 remote: str = "", run_id: str = ""):
+    def __init__(
+        self, project_id: str, name: str = "", root: str = "", remote: str = "", run_id: str = ""
+    ):
         self.project_id = project_id
         self.project_name = name or project_id.rsplit("-", 1)[0]
         self.root = root
@@ -88,8 +89,7 @@ class ArchitectureWorld:
     @classmethod
     def for_repo(cls, repo_path: str | Path) -> ArchitectureWorld:
         ctx = ProjectContext.for_repo(repo_path)
-        return cls(project_id=ctx.project_id, name=ctx.name,
-                   root=str(ctx.root), remote=ctx.remote)
+        return cls(project_id=ctx.project_id, name=ctx.name, root=str(ctx.root), remote=ctx.remote)
 
     # ---- lifecycle ----------------------------------------------------
 
@@ -151,8 +151,10 @@ class ArchitectureWorld:
 
     def propose_claim(self, claim: ClaimData) -> str:
         return self.claims.add(claim)
+
     def link_evidenced_by(self, claim_id: str, evidence_id: str) -> str:
         return self.claims.link_evidenced_by(claim_id, evidence_id)
+
     # ---- domain queries (used by the promotion services) ---------------
 
     def find_objects(self, obj_type: str, **data_match) -> list[dict]:
@@ -171,56 +173,75 @@ class ArchitectureWorld:
 
     def accept_claim(self, claim_id: str, actor: str = "user") -> None:
         self.claims.accept(claim_id, actor=actor)
-    def add_architecture_element(self, name: str, kind: str,
-                                 origin: str = "DETECTED",
-                                 confidence: str = "high") -> str:
+
+    def add_architecture_element(
+        self, name: str, kind: str, origin: str = "DETECTED", confidence: str = "high"
+    ) -> str:
         return self.architecture.add_element(name, kind, origin, confidence)
-    def add_architecture_relation(self, kind: str, source_id: str,
-                                  target_id: str,
-                                  data: dict | None = None) -> str:
+
+    def add_architecture_relation(
+        self, kind: str, source_id: str, target_id: str, data: dict | None = None
+    ) -> str:
         return self.architecture.add_relation(kind, source_id, target_id, data)
+
     def architecture_relations(self) -> list[dict]:
         return self.architecture.relations()
+
     # ---- reactive architecture (Phase F: drift + stale model) ----------
 
-    def record_architecture_rule(self, name: str, statement: str,
-                                 forbidden_relation: str,
-                                 source_category: str, target_category: str,
-                                 severity: str = "high") -> str:
-        return self.policies.record_rule(name, statement, forbidden_relation,
-                                         source_category, target_category,
-                                         severity)
+    def record_architecture_rule(
+        self,
+        name: str,
+        statement: str,
+        forbidden_relation: str,
+        source_category: str,
+        target_category: str,
+        severity: str = "high",
+    ) -> str:
+        return self.policies.record_rule(
+            name, statement, forbidden_relation, source_category, target_category, severity
+        )
+
     # ---- domain port (docs/v2/45 §4, V2.3-F4) --------------------------
     # ActiveGraph stays behind these domain methods: promotion/proposals
     # must never touch `.graph` directly (ADR-0024).
 
     def observation_is_claimed(self, observation_id: str) -> bool:
         return self.claims.observation_is_claimed(observation_id)
-    def propose_derived_claim(self, claim: ClaimData,
-                              observation_id: str) -> str:
+
+    def propose_derived_claim(self, claim: ClaimData, observation_id: str) -> str:
         return self.claims.propose_derived_claim(claim, observation_id)
+
     def claim_observation_ids(self, claim_id: str) -> list[str]:
         return self.claims.observation_ids_of_claim(claim_id)
-    def link_contradicts(self, observation_id: str, claim_id: str,
-                         reason: str) -> None:
+
+    def link_contradicts(self, observation_id: str, claim_id: str, reason: str) -> None:
         self.claims.link_contradicts(observation_id, claim_id, reason)
+
     def claim_is_contradicted(self, claim_id: str) -> bool:
         return self.claims.is_contradicted(claim_id)
+
     def set_claim_status(self, claim_id: str, status: str) -> None:
         self.claims.set_status(claim_id, status)
+
     def set_object_fields(self, object_id: str, fields: dict) -> None:
         self.graph.patch_object(object_id, fields)
 
     def remove_relation_by_id(self, relation_id: str) -> None:
         self.architecture.remove_relation(relation_id)
+
     def remove_object_by_id(self, object_id: str) -> None:
         self.architecture.remove_element(object_id)
+
     def persist_findings(self, findings: list[dict]) -> int:
         return self.policies.persist_findings(findings)
+
     def detect_drift(self) -> dict:
         return self.policies.detect_drift()
+
     def detect_stale_model(self, index) -> dict:
         return self.policies.detect_stale_model(index)
+
     # ---- fork/diff of the architecture (Phase G, docs/v2/08) -----------
 
     def fork(self, name: str) -> ArchitectureWorld:
@@ -237,9 +258,13 @@ class ArchitectureWorld:
         events = list(open_store(url, run_id=self.run_id).iter_events())
         if events:
             SQLiteEventStore.fork_run(
-                str(self.db_path), parent_run_id=self.run_id,
-                new_run_id=fork_run_id, at_event_id=events[-1].id,
-                label=name, created_at=_utcnow())
+                str(self.db_path),
+                parent_run_id=self.run_id,
+                new_run_id=fork_run_id,
+                at_event_id=events[-1].id,
+                label=name,
+                created_at=_utcnow(),
+            )
         return self.view(fork_run_id)
 
     def has_run(self, run_id: str) -> bool:
@@ -249,19 +274,68 @@ class ArchitectureWorld:
         """All distinct run_ids present in this project's store."""
         return _list_runs(self.db_path)
 
+    def drop_run(self, run_id: str) -> bool:
+        """Delete every row belonging to ``run_id`` from the project's
+        sqlite store (events, archive, runs meta). Other runs are
+        untouched.
+
+        Used by ``simulate`` to remove the throwaway ``simulation-*``
+        fork after the counterfactual has been evaluated. Returns
+        True when the run existed (and was removed), False when no
+        rows matched. Refuses to drop the main run id (every
+        ArchitectureWorld is rooted on ``world``).
+
+        If the runtime is currently open, flushes its background
+        sinks first so a freshly-pinned read transaction does not
+        keep the fork's writes from being visible to a follow-up
+        reader (SQLite WAL pins the live read tx until the parent
+        connection is closed).
+        """
+        if run_id == self.run_id:
+            raise ValueError(
+                f"refusing to drop the main run {run_id!r}; "
+                "drop only throwaway simulation-/proposal-forks"
+            )
+        import sqlite3
+
+        if self._runtime is not None:
+            self._runtime.flush_sinks(timeout=2.0)
+        if not self.db_path.exists():
+            return False
+        with sqlite3.connect(self.db_path) as conn:
+            existed = (
+                conn.execute("SELECT 1 FROM events WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
+                is not None
+            )
+            if not existed:
+                return False
+            conn.execute("DELETE FROM events WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM events_archive WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+            conn.commit()
+        return True
+
     def view(self, run_id: str) -> ArchitectureWorld:
         return ArchitectureWorld(
-            project_id=self.project_id, name=self.project_name,
-            root=self.root, remote=self.remote, run_id=run_id).open()
+            project_id=self.project_id,
+            name=self.project_name,
+            root=self.root,
+            remote=self.remote,
+            run_id=run_id,
+        ).open()
 
     def record_proposal(self, name: str, rationale: str = "") -> str:
         return self.proposals_service.record(name, rationale)
+
     def _proposal(self, name: str) -> dict:
         return self.proposals_service.get(name)
+
     def approve_proposal(self, name: str, actor: str) -> None:
         self.proposals_service.approve(name, actor=actor)
+
     def reject_proposal(self, name: str, actor: str) -> None:
         self.proposals_service.reject(name, actor=actor)
+
     # ---- reads --------------------------------------------------------
 
     def snapshot(self) -> dict:
@@ -272,8 +346,7 @@ class ArchitectureWorld:
             objects[obj.id] = {"type": obj.type, "data": obj.data}
             counts[obj.type] = counts.get(obj.type, 0) + 1
         relations = [
-            {"id": r.id, "type": r.type, "source": r.source,
-             "target": r.target, "data": r.data}
+            {"id": r.id, "type": r.type, "source": r.source, "target": r.target, "data": r.data}
             for r in sorted(self.graph.relations(), key=lambda r: r.id)
         ]
         return {"counts": counts, "objects": objects, "relations": relations}
@@ -298,12 +371,16 @@ class ArchitectureWorld:
 
     # ---- knowledge gaps (V2.4 M2) --------------------------------------
 
-    def record_knowledge_gap(self, question: str, impact: str = "medium",
-                             related_refs: list[str] | None = None,
-                             evidence_needed: list[str] | None = None) -> str:
-        return self.gaps.record(question, impact=impact,
-                                related_refs=related_refs,
-                                evidence_needed=evidence_needed)
+    def record_knowledge_gap(
+        self,
+        question: str,
+        impact: str = "medium",
+        related_refs: list[str] | None = None,
+        evidence_needed: list[str] | None = None,
+    ) -> str:
+        return self.gaps.record(
+            question, impact=impact, related_refs=related_refs, evidence_needed=evidence_needed
+        )
 
     def knowledge_gaps(self, status: str | None = None) -> list[dict]:
         return self.gaps.list(status=status)
@@ -318,35 +395,52 @@ class ArchitectureWorld:
         reloaded = Runtime.load(url, run_id=self.run_id)
         replayed_graph = reloaded.graph
         replayed = json.dumps(
-            {"counts": _counts_of(replayed_graph),
-             "objects": {o.id: {"type": o.type, "data": o.data}
-                         for o in sorted(replayed_graph.all_objects(), key=lambda o: o.id)},
-             "relations": [{"id": r.id, "type": r.type, "source": r.source,
-                            "target": r.target, "data": r.data}
-                           for r in sorted(replayed_graph.relations(), key=lambda r: r.id)]},
+            {
+                "counts": _counts_of(replayed_graph),
+                "objects": {
+                    o.id: {"type": o.type, "data": o.data}
+                    for o in sorted(replayed_graph.all_objects(), key=lambda o: o.id)
+                },
+                "relations": [
+                    {
+                        "id": r.id,
+                        "type": r.type,
+                        "source": r.source,
+                        "target": r.target,
+                        "data": r.data,
+                    }
+                    for r in sorted(replayed_graph.relations(), key=lambda r: r.id)
+                ],
+            },
             sort_keys=True,
         )
         events = len(list(open_store(url, run_id=self.run_id).iter_events()))
         ok = live == replayed
         n_objects = len(json.loads(replayed)["objects"])
         n_relations = len(json.loads(replayed)["relations"])
-        detail = "replay reproduces current state" if ok else (
-            "replay diverged from current state")
-        return ReplayReport(ok=ok, detail=detail, objects=n_objects,
-                            relations=n_relations, events=events)
+        detail = "replay reproduces current state" if ok else ("replay diverged from current state")
+        return ReplayReport(
+            ok=ok, detail=detail, objects=n_objects, relations=n_relations, events=events
+        )
 
     # ---- helpers ------------------------------------------------------
 
     def _write_project_json(self, project: ProjectData) -> None:
         path = self.workspace / "project.json"
-        path.write_text(json.dumps({
-            "schema_version": 1,
-            "project_id": project.project_id,
-            "name": project.name,
-            "root": project.root,
-            "remote": project.remote,
-            "created_at": project.created_at,
-        }, indent=2) + "\n")
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "project_id": project.project_id,
+                    "name": project.name,
+                    "root": project.root,
+                    "remote": project.remote,
+                    "created_at": project.created_at,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
 
 def _counts_of(graph: Graph) -> dict[str, int]:
@@ -360,8 +454,7 @@ def _run_exists(db_path: Path, run_id: str) -> bool:
     import sqlite3
 
     with sqlite3.connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT 1 FROM events WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
+        row = conn.execute("SELECT 1 FROM events WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
     return row is not None
 
 
@@ -372,6 +465,5 @@ def _list_runs(db_path: Path) -> list[str]:
     if not db_path.exists():
         return []
     with sqlite3.connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT run_id FROM events ORDER BY run_id").fetchall()
+        rows = conn.execute("SELECT DISTINCT run_id FROM events ORDER BY run_id").fetchall()
     return [r[0] for r in rows]

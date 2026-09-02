@@ -169,6 +169,44 @@ def _handle_admin_skill_registry(
     }
 
 
+def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) -> dict[str, Any]:
+    """Apply a counterfactual change to a throwaway fork.
+
+    Delegates to ``delivery.cli.simulate.run`` so wire calls reuse
+    the same logic (fork, apply verb, evaluate gate, drop fork,
+    assert base digest unchanged). On SimulationError (unknown
+    element, invalid category, base-mutated), raises McpError so
+    the wire layer marks ``isError=True`` with a stable code in the
+    envelope data.
+    """
+    from archskillkit.delivery.cli.simulate import SimulationError, run
+
+    verb = arguments.get("verb", "")
+    payload: dict[str, Any] = {"verb": verb}
+    if verb == "relation_add":
+        payload["source"] = arguments.get("source", "")
+        payload["target"] = arguments.get("target", "")
+        payload["kind"] = arguments.get("kind", "depends_on")
+    elif verb == "move":
+        payload["element"] = arguments.get("element", "")
+        payload["to"] = arguments.get("to", "")
+    elif verb == "delete":
+        payload["element"] = arguments.get("element", "")
+    else:
+        envelope = {
+            "schema": "arch-skillkit/simulation-result-v1",
+            "error": "INVALID_VERB",
+            "message": f"unknown verb {verb!r}; expected one of relation_add, move, delete",
+        }
+        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+    try:
+        result = run(world, verb, **{k: v for k, v in payload.items() if k != "verb"})
+    except SimulationError as exc:
+        envelope = exc.to_envelope()
+        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+    return result.model_dump()
+
+
 def _call_proposals_handler(handler, world: ArchitectureWorld, **kwargs: Any) -> dict[str, Any]:
     """Drive a proposals handler with a synthetic namespace; the
     handler returns 0/1 and prints to stdout. We don't want stdout
@@ -335,6 +373,31 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
             "Admin tool.",
             {"type": "object", "properties": {}, "additionalProperties": False},
         ),
+        "arch_simulate": _tool(
+            "arch_simulate",
+            "Apply a counterfactual change (relation_add | move | "
+            "delete) to a throwaway fork, evaluate the policy gate "
+            "and fitness drift, and throw the fork away. The base "
+            "world is byte-identical before and after — enforced as "
+            "an internal assertion, not just a test. Admin tool.",
+            {
+                "type": "object",
+                "properties": {
+                    "verb": {
+                        "type": "string",
+                        "enum": ["relation_add", "move", "delete"],
+                        "description": "What counterfactual to apply",
+                    },
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "element": {"type": "string"},
+                    "to": {"type": "string"},
+                },
+                "required": ["verb"],
+                "additionalProperties": False,
+            },
+        ),
     }
 
     @server.list_tools()
@@ -500,6 +563,8 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 return _envelope(_handle_admin_prompt_registry(arguments, world))
             if name == "arch_skill_registry":
                 return _envelope(_handle_admin_skill_registry(arguments, world))
+            if name == "arch_simulate":
+                return _envelope(_handle_admin_simulate(arguments, world))
             return _envelope({"error": f"unknown tool {name!r}"})
         finally:
             if index is not None:

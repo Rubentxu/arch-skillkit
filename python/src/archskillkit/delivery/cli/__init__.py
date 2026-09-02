@@ -16,13 +16,14 @@ from archskillkit.delivery.cli import (
     mcp,
     proposals,
     schema,
+    simulate,
     status,
     view,
     viewers,
 )
 
 COMMANDS = (status, explain, viewers, schema, view, ask, delta, gate,
-            proposals, mcp)
+            proposals, simulate, mcp)
 
 __all__ = ["COMMANDS", "ask", "delta", "explain", "gate", "mcp",
-           "proposals", "schema", "status", "view", "viewers"]
+           "proposals", "schema", "simulate", "status", "view", "viewers"]
