@@ -272,6 +272,24 @@ class ArchitectureWorld:
         ]
         return {"counts": counts, "objects": objects, "relations": relations}
 
+    def last_event_id(self) -> str:
+        """Position of the event log (V2.4 ArchitectureSnapshot,
+        ADR-0033). Deterministic for the same log."""
+        events = self.graph.events
+        return events[-1].id if events else "evt_000"
+
+    def architecture_rules(self) -> list[dict]:
+        """Declared boundary rules (ADR-0022) — governance read."""
+        return self.find_objects("architecture_rule")
+
+    def findings(self) -> list[dict]:
+        """Persisted review/drift findings — governance read."""
+        return self.find_objects("finding")
+
+    def proposals(self) -> list[dict]:
+        """Recorded proposals — governance read."""
+        return self.find_objects("proposal")
+
     def replay_verify(self) -> ReplayReport:
         """Prove the log reproduces current state with a fresh projection."""
         live = json.dumps(self.snapshot(), sort_keys=True)

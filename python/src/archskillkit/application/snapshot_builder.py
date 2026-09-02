@@ -3,7 +3,8 @@
 Revisions only — the graph is never copied (ADR-0033). Everything here
 is deterministic for the same (event log, code generation, git state):
 no timestamps, no wall clock, no environment probes beyond the analyzed
-repository itself.
+repository itself. The world is consumed through the narrow
+ArchitectureQueryPort; ActiveGraph stays behind world.py (ADR-0024).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from archskillkit.application.models.snapshot import (
     ArchitectureSnapshot,
@@ -20,6 +22,11 @@ from archskillkit.application.models.snapshot import (
     ProjectRevision,
     WorldRevision,
 )
+
+if TYPE_CHECKING:
+    from archskillkit.application.ports.architecture_query import (
+        ArchitectureQueryPort,
+    )
 
 _EMPTY_REVISION = "none"
 
@@ -47,16 +54,14 @@ def _dirty_digest(root: str | Path) -> str | None:
     return hashlib.sha256(porcelain.encode("utf-8")).hexdigest()
 
 
-def _world_revision(world) -> WorldRevision:
-    events = world.graph.events
-    event_id = events[-1].id if events else "evt_000"
+def _world_revision(world: ArchitectureQueryPort) -> WorldRevision:
     projection = world.snapshot()
     digest = hashlib.sha256(
         json.dumps(projection, sort_keys=True).encode("utf-8")).hexdigest()
-    return WorldRevision(event_id=event_id, digest=digest)
+    return WorldRevision(event_id=world.last_event_id(), digest=digest)
 
 
-def _policy_revision(world) -> str:
+def _policy_revision(world: ArchitectureQueryPort) -> str:
     """Digest over the declared architecture rules (ADR-0022)."""
     rules = world.find_objects("architecture_rule")
     if not rules:
@@ -73,7 +78,7 @@ def _policy_revision(world) -> str:
         json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _sensor_revisions(world) -> list[str]:
+def _sensor_revisions(world: ArchitectureQueryPort) -> list[str]:
     """`tool@revision` pairs from the latest recorded scan run, if any."""
     runs = world.find_objects("scan_run")
     if not runs:
@@ -83,7 +88,7 @@ def _sensor_revisions(world) -> list[str]:
     return sorted(f"{name}@{rev}" for name, rev in tools.items())
 
 
-def build_snapshot(world, code_index=None,
+def build_snapshot(world: ArchitectureQueryPort, code_index=None,
                    artifact_manifest_digest: str | None = None,
                    ) -> ArchitectureSnapshot:
     """Gather revisions from an open world (+ optional CodeIndex) into a
@@ -92,7 +97,10 @@ def build_snapshot(world, code_index=None,
     counts = projection.get("counts", {})
     knowledge = KnowledgeSummary(
         elements=counts.get("architecture_element", 0),
-        relations=len(projection.get("relations", [])),
+        # Architecture edges only — evidence lineage relations
+        # (derived_from, evidenced_by, …) are provenance, not
+        # architecture (docs/v2/04).
+        relations=len(world.architecture_relations()),
     )
     generation = _EMPTY_REVISION
     if code_index is not None:
