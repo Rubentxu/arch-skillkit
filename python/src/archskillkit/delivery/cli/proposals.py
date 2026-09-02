@@ -2,19 +2,19 @@
 
 The candidate -> review -> promote path:
 
-  fork  ->  review  ->  promote  (or reject-proposal)
+  create  ->  diff  ->  review  ->  promote  (or reject)
 
-  archskillkit fork               --repo PATH --name NAME   create candidate
-  archskillkit proposals list     --repo PATH                list candidates
-  archskillkit proposals review   --repo PATH --name NAME    evaluate gate
-                                                            against the
-                                                            candidate vs main
-  archskillkit promote            --repo PATH --name NAME --approved-by WHO
-  archskillkit reject-proposal    --repo PATH --name NAME --actor WHO
+  archskillkit proposals create   --repo PATH --name NAME   fork base world
+  archskillkit proposals list     --repo PATH               list candidates
+  archskillkit proposals diff     --repo PATH --name NAME   structural diff
+  archskillkit proposals review   --repo PATH --name NAME   fitness gate +
+                                                            structural diff
+  archskillkit proposals promote  --repo PATH --name NAME --approved-by WHO
+  archskillkit proposals reject   --repo PATH --name NAME --actor WHO
 
-fork / promote / reject-proposal already live in cli.py (legacy path);
-this module adds the missing list and review verbs and gives the
-workflow a single, schema-bound surface.
+Every action returns a schema-bound JSON envelope. The MCP delivery
+adapter (delivery/cli/mcp.py) delegates to these helpers so wire
+calls reuse exactly the same logic and envelopes as the CLI.
 """
 
 from __future__ import annotations
@@ -31,6 +31,8 @@ from archskillkit.application.queries.report import render_json
 from archskillkit.application.snapshot_builder import build_snapshot
 from archskillkit.codeindex import CodeIndex
 from archskillkit.proposals import (
+    PromotionError,
+    promote,
     structural_diff,
 )
 from archskillkit.runtime_state.run_ledger import RunLedger
@@ -41,23 +43,45 @@ NAME = "proposals"
 NEEDS_WORLD = True
 PROPOSAL_PREFIX = "proposal-"
 
+SCHEMA_LIST = "arch-skillkit/proposals-list-v1"
+SCHEMA_CREATE = "arch-skillkit/proposal-create-v1"
+SCHEMA_DIFF = "arch-skillkit/proposal-diff-v1"
+SCHEMA_REVIEW = "arch-skillkit/proposal-review-v1"
+SCHEMA_PROMOTE = "arch-skillkit/proposal-promote-v1"
+SCHEMA_REJECT = "arch-skillkit/proposal-reject-v1"
+
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    p = subparsers.add_parser(
-        NAME, help="candidate -> review -> promote workflow")
+    p = subparsers.add_parser(NAME, help="candidate -> review -> promote workflow")
     p.add_argument("--repo", required=True)
     sub = p.add_subparsers(dest="proposals_action", required=True)
     sub.add_parser("list", help="list candidate (proposal-*) runs")
-    pr = sub.add_parser("review",
-                        help="review a candidate against the fitness"
-                        " gate + structural diff")
+    pc = sub.add_parser(
+        "create", help="fork the base world into a candidate (alias of `archskillkit fork`)"
+    )
+    pc.add_argument("--name", required=True)
+    pd = sub.add_parser("diff", help="structural diff between base and the candidate")
+    pd.add_argument("--name", required=True)
+    pr = sub.add_parser(
+        "review", help="review a candidate against the fitness gate + structural diff"
+    )
     pr.add_argument("--name", required=True)
     pr.add_argument("--min-coverage", type=float, default=0.8)
     pr.add_argument("--max-unknowns", type=int, default=0)
     pr.add_argument("--max-findings", type=int, default=0)
     pr.add_argument("--max-run-age-days", type=int, default=30)
-    pr.add_argument("--require-pass", action="store_true",
-                    help="exit 1 if the gate verdict is not pass")
+    pr.add_argument(
+        "--require-pass", action="store_true", help="exit 1 if the gate verdict is not pass"
+    )
+    pp = sub.add_parser("promote", help="promote a candidate to base")
+    pp.add_argument("--name", required=True)
+    pp.add_argument("--approved-by", required=True)
+    pj = sub.add_parser("reject", help="mark a candidate as rejected")
+    pj.add_argument("--name", required=True)
+    pj.add_argument("--actor", required=True)
+
+
+# ---------- shared helpers ----------
 
 
 def _candidate_runs(world: ArchitectureWorld) -> list[str]:
@@ -78,8 +102,7 @@ def _candidate_status(world: ArchitectureWorld, run_id: str) -> str:
     try:
         fork = world.view(run_id)
     except (KeyError, RuntimeError) as exc:
-        print(f"warning: cannot inspect candidate '{run_id}':"
-              f" {exc}", file=sys.stderr)
+        print(f"warning: cannot inspect candidate '{run_id}': {exc}", file=sys.stderr)
         return "open"
     try:
         for obj in fork.find_objects("proposal"):
@@ -92,45 +115,108 @@ def _candidate_status(world: ArchitectureWorld, run_id: str) -> str:
     return "open"
 
 
-def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+def _require_main_world(world: ArchitectureWorld) -> dict | None:
+    """Return a base-world-missing error envelope or None."""
     if not world.db_path.exists():
-        print(f"error: no Architecture World for {world.project_id}",
-              file=sys.stderr)
+        return {
+            "error": "BASE_WORLD_MISSING",
+            "message": f"no Architecture World for {world.project_id}"
+            f" (run: archskillkit discover --repo"
+            f" {world.root or '.'})",
+        }
+    return None
+
+
+def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None, dict | None]:
+    """Return (run_id, error_envelope). Exactly one is None."""
+    run_id = f"{PROPOSAL_PREFIX}{name}"
+    if not world.has_run(run_id):
+        return None, {
+            "error": "CANDIDATE_NOT_FOUND",
+            "message": f"no candidate '{name}' (run: archskillkit proposals create --name {name})",
+            "name": name,
+            "run_id": run_id,
+        }
+    return run_id, None
+
+
+# ---------- actions ----------
+
+
+def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
         return 1
     rows = []
     for run_id in sorted(_candidate_runs(world)):
         name = run_id.removeprefix(PROPOSAL_PREFIX)
-        rows.append({"name": name, "run_id": run_id,
-                     "status": _candidate_status(world, run_id)})
-    print(json.dumps({"schema": "arch-skillkit/proposals-list-v1",
-                      "project_id": world.project_id,
-                      "candidates": rows}, indent=2))
+        rows.append({"name": name, "run_id": run_id, "status": _candidate_status(world, run_id)})
+    envelope = {"schema": SCHEMA_LIST, "project_id": world.project_id, "candidates": rows}
+    print(json.dumps(envelope, indent=2))
     return 0
 
 
-def handle_review(args: argparse.Namespace,
-                  world: ArchitectureWorld) -> int:
-    if not world.db_path.exists():
-        print(f"error: no Architecture World for {world.project_id}",
-              file=sys.stderr)
+def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    """Fork the base world into a candidate run."""
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
         return 1
     name = args.name
-    run_id = f"{PROPOSAL_PREFIX}{name}"
-    if not world.has_run(run_id):
-        print(f"error: no candidate '{name}' (run: archskillkit fork "
-              f"--repo {world.root or '.'} --name {name})",
-              file=sys.stderr)
+    with world:
+        fork = world.fork(name)
+    envelope = {
+        "schema": SCHEMA_CREATE,
+        "name": name,
+        "run_id": fork.run_id,
+        "project_id": world.project_id,
+    }
+    print(json.dumps(envelope, indent=2))
+    return 0
+
+
+def handle_diff(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    """Return the structural diff between base and the candidate."""
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    run_id, err = _require_candidate(world, args.name)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    with world:
+        fork = world.view(run_id)
+        diff = structural_diff(world, fork)
+    diff_dict = {k: v for k, v in vars(diff).items()}
+    diff_dict["is_empty"] = diff.is_empty()
+    envelope = {
+        "schema": SCHEMA_DIFF,
+        "name": args.name,
+        "run_id": run_id,
+        "structural_diff": diff_dict,
+    }
+    print(json.dumps(envelope, indent=2))
+    return 0
+
+
+def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    """Evaluate fitness gate + structural diff against the candidate."""
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    run_id, err = _require_candidate(world, args.name)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
         return 1
 
     with world:
         fork = world.view(run_id)
         diff = structural_diff(world, fork)
-        # The gate is evaluated against the FORK view of the world:
-        # a candidate can only be promoted if, after merge, the gate
-        # would still pass against that snapshot.
         index_path = fork.workspace / "code.sqlite"
-        index = (CodeIndex(index_path).open()
-                 if index_path.exists() else None)
+        index = CodeIndex(index_path).open() if index_path.exists() else None
         try:
             snapshot = build_snapshot(fork, code_index=index)
             thresholds = FitnessThresholds(
@@ -139,10 +225,9 @@ def handle_review(args: argparse.Namespace,
                 max_findings=args.max_findings,
                 max_run_age_days=args.max_run_age_days,
             )
-            result = evaluate_gate(fork, snapshot,
-                                   thresholds=thresholds,
-                                   ledger=RunLedger(),
-                                   waivers=WaiverLedger())
+            result = evaluate_gate(
+                fork, snapshot, thresholds=thresholds, ledger=RunLedger(), waivers=WaiverLedger()
+            )
         finally:
             if index is not None:
                 index.close()
@@ -151,8 +236,8 @@ def handle_review(args: argparse.Namespace,
     diff_dict["is_empty"] = diff.is_empty()
 
     envelope = {
-        "schema": "arch-skillkit/proposal-review-v1",
-        "candidate": name,
+        "schema": SCHEMA_REVIEW,
+        "candidate": args.name,
         "run_id": run_id,
         "structural_diff": diff_dict,
         "gate": json.loads(render_json(result)),
@@ -163,11 +248,76 @@ def handle_review(args: argparse.Namespace,
     return 0
 
 
+def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    """Promote a candidate to base; records approval first."""
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    name = args.name
+    run_id, err = _require_candidate(world, name)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    with world:
+        fork = world.view(run_id)
+        fork.record_proposal(name)
+        try:
+            fork.approve_proposal(name, actor=args.approved_by)
+            summary = promote(world, fork)
+        except PromotionError as exc:
+            err = {"error": "PROMOTION_FAILED", "message": str(exc), "name": name, "run_id": run_id}
+            print(json.dumps(err), file=sys.stderr)
+            return 1
+    envelope = {"schema": SCHEMA_PROMOTE, **summary}
+    print(json.dumps(envelope, indent=2))
+    return 0
+
+
+def handle_reject(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    """Mark a candidate as rejected; does not mutate base."""
+    err = _require_main_world(world)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    name = args.name
+    run_id, err = _require_candidate(world, name)
+    if err is not None:
+        print(json.dumps(err), file=sys.stderr)
+        return 1
+    with world:
+        fork = world.view(run_id)
+        fork.record_proposal(name)
+        try:
+            fork.reject_proposal(name, actor=args.actor)
+        except PromotionError as exc:
+            err = {"error": "REJECTION_FAILED", "message": str(exc), "name": name, "run_id": run_id}
+            print(json.dumps(err), file=sys.stderr)
+            return 1
+    envelope = {
+        "schema": SCHEMA_REJECT,
+        "name": name,
+        "run_id": run_id,
+        "actor": args.actor,
+        "status": "rejected",
+    }
+    print(json.dumps(envelope, indent=2))
+    return 0
+
+
 def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
-    if args.proposals_action == "list":
+    action = args.proposals_action
+    if action == "list":
         return handle_list(args, world)
-    if args.proposals_action == "review":
+    if action == "create":
+        return handle_create(args, world)
+    if action == "diff":
+        return handle_diff(args, world)
+    if action == "review":
         return handle_review(args, world)
-    print(f"error: unknown proposals action: {args.proposals_action!r}",
-          file=sys.stderr)
+    if action == "promote":
+        return handle_promote(args, world)
+    if action == "reject":
+        return handle_reject(args, world)
+    print(f"error: unknown proposals action: {action!r}", file=sys.stderr)
     return 2

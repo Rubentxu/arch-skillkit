@@ -1,17 +1,15 @@
 """MCP server adapter for archskillkit (V2.4 M4, docs/v2/55 §3).
 
 Exposes read-only architecture knowledge to MCP-capable clients
-(LLM agents, control plane, IDE integrations). The tools here are
-deliberately read-only — proposing mutations goes through the
-candidate -> review -> promote path on the CLI side, never through
-MCP write tools (slice 14).
+(LLM agents, control plane, IDE integrations). The base tools here
+are read-only.
 
-Admin tools (those that read or write the candidate state) are
-gated behind ARCH_SKILLKIT_ADMIN=1 / --admin (V2.4 M4, docs/v2/59
-M4 acceptance: "admin disabled by default"). When the gate is
-off, admin tools are not listed AND any call to them returns the
-stable ADMIN_DISABLED code via McpError so the wire layer marks
-isError=True.
+Admin tools implement the candidate -> review -> promote workflow
+and are gated behind ARCH_SKILLKIT_ADMIN=1 / --admin (V2.4 M4,
+docs/v2/59 M4 acceptance: "admin disabled by default"). When the
+gate is off, admin tools are not listed AND any call to them
+returns the stable ADMIN_DISABLED code via McpError so the wire
+layer marks isError=True.
 
 Every tool emits a schema-bound JSON envelope. Tool names are
 namespaced with `arch_` so an LLM agent can pick them without
@@ -41,7 +39,14 @@ from archskillkit.delivery.admin import (
     AdminDisabledError,
     admin_enabled,
 )
-from archskillkit.delivery.cli.proposals import _candidate_status
+from archskillkit.delivery.cli.proposals import (
+    _candidate_status,
+    handle_create,
+    handle_diff,
+    handle_promote,
+    handle_reject,
+    handle_review,
+)
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.world import ArchitectureWorld
 
@@ -55,9 +60,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--admin",
         action="store_true",
-        help="enable admin tools (propose list, future "
-        "propose write tools). Default: disabled. "
-        "Equivalent to ARCH_SKILLKIT_ADMIN=1.",
+        help="enable admin tools (candidate workflow:"
+        " propose list/create/diff/review/promote/reject)."
+        " Default: disabled. Equivalent to"
+        " ARCH_SKILLKIT_ADMIN=1.",
     )
 
 
@@ -70,13 +76,34 @@ def _envelope(payload: dict | list | str) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
 
 
+# ---------- admin tool helpers (delegate to proposals.py) ----------
+
+
+def _envelope_or_error(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Pass through the proposal envelope; raise McpError on `error`
+    field so wire layer reports isError=True with a stable code."""
+    if "error" in envelope:
+        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+    return envelope
+
+
+class _ArgNamespace:
+    """Minimal argparse.Namespace stand-in for the proposals handlers.
+
+    The proposals handlers are wired through argparse on the CLI
+    side; from MCP we drive them with a tiny namespace so the
+    handlers stay single-source-of-truth and never duplicate
+    validation logic."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 def _handle_admin_propose_list(
     arguments: dict[str, Any], world: ArchitectureWorld
 ) -> dict[str, Any]:
-    """List candidate proposals (proposal-* runs).
-
-    Reuses the CLI helper so the wire shape matches
-    `archskillkit proposals list --format json`."""
+    """List candidate proposals (proposal-* runs)."""
     rows = []
     for run_id in world.list_runs():
         if not run_id.startswith("proposal-"):
@@ -90,6 +117,49 @@ def _handle_admin_propose_list(
     }
 
 
+def _call_proposals_handler(handler, world: ArchitectureWorld, **kwargs: Any) -> dict[str, Any]:
+    """Drive a proposals handler with a synthetic namespace; the
+    handler returns 0/1 and prints to stdout. We don't want stdout
+    noise on the wire, so we capture the JSON envelope via a
+    lightweight in-process call.
+
+    The proposals handlers print the envelope to stdout, then
+    return an exit code. We re-run them with stdout AND stderr
+    redirected to a buffer and parse the envelope back. This keeps
+    the handlers single-source-of-truth without rewriting them as
+    return-value functions (a bigger refactor we don't need today).
+
+    Precedence on failure: try stderr first (the error path), then
+    stdout (the success path that nonetheless failed at a later
+    step)."""
+    import contextlib
+    import io
+
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    ns = _ArgNamespace(**kwargs)
+    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+        rc = handler(ns, world)
+    out_text = out_buf.getvalue().strip()
+    err_text = err_buf.getvalue().strip()
+    if rc != 0:
+        # Error path: handler writes envelope to stderr. Fall back
+        # to stdout if a future handler writes to stdout on failure.
+        text = err_text or out_text
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            payload = {"error": "HANDLER_FAILED", "message": text or "handler returned non-zero"}
+        return _envelope_or_error(payload)
+    try:
+        return json.loads(out_text)
+    except json.JSONDecodeError:
+        return {"error": "BAD_ENVELOPE", "message": out_text}
+
+
+# ---------- server ----------
+
+
 def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
     """Build an MCP server instance.
 
@@ -99,6 +169,93 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
         admin = admin_enabled()
 
     server = Server("archskillkit")
+
+    # Tool descriptors for admin tools. Centralised so the listing
+    # gate and the call gate stay in sync.
+    admin_tool_descriptors = {
+        "arch_propose_list": _tool(
+            "arch_propose_list",
+            "List candidate proposals (proposal-* runs) with "
+            "their current status (open|approved|rejected). "
+            "Admin tool — requires --admin.",
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        ),
+        "arch_propose_create": _tool(
+            "arch_propose_create",
+            "Fork the base world into a candidate run. The "
+            "candidate is a sibling run prefixed with proposal-; "
+            "the base world is never mutated. Admin tool.",
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string", "minLength": 1}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        ),
+        "arch_propose_diff": _tool(
+            "arch_propose_diff",
+            "Structural diff between the base world and a candidate. Admin tool.",
+            {
+                "type": "object",
+                "properties": {"name": {"type": "string", "minLength": 1}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        ),
+        "arch_propose_review": _tool(
+            "arch_propose_review",
+            "Evaluate the fitness gate against a candidate's "
+            "snapshot, plus the structural diff. Returns the gate "
+            "verdict (pass/warn/fail), the diff, and per-dimension "
+            "fitness. Admin tool.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1},
+                    "min_coverage": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "default": 0.8,
+                    },
+                    "max_unknowns": {"type": "integer", "minimum": 0, "default": 0},
+                    "max_findings": {"type": "integer", "minimum": 0, "default": 0},
+                    "max_run_age_days": {"type": "integer", "minimum": 0, "default": 30},
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        ),
+        "arch_propose_promote": _tool(
+            "arch_propose_promote",
+            "Promote a candidate to base. Records approval, then "
+            "merges. Idempotent only by record; a second call on "
+            "an already-approved candidate returns PROMOTION_FAILED. "
+            "Admin tool.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1},
+                    "approved_by": {"type": "string", "minLength": 1},
+                },
+                "required": ["name", "approved_by"],
+                "additionalProperties": False,
+            },
+        ),
+        "arch_propose_reject": _tool(
+            "arch_propose_reject",
+            "Mark a candidate as rejected. Does NOT mutate base. Admin tool.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1},
+                    "actor": {"type": "string", "minLength": 1},
+                },
+                "required": ["name", "actor"],
+                "additionalProperties": False,
+            },
+        ),
+    }
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -157,16 +314,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
             ),
         ]
         if admin:
-            for admin_tool in ADMIN_TOOLS:
-                tools.append(
-                    _tool(
-                        "arch_propose_list",
-                        "List candidate proposals (proposal-* runs) with "
-                        "their current status (open|merged|dropped). Admin "
-                        "tool — requires --admin or ARCH_SKILLKIT_ADMIN=1.",
-                        {"type": "object", "properties": {}, "additionalProperties": False},
-                    )
-                )
+            tools.extend(admin_tool_descriptors[t] for t in ADMIN_TOOLS)
         return tools
 
     def _world() -> tuple[ArchitectureWorld, CodeIndex | None]:
@@ -226,6 +374,42 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 return _envelope(history.model_dump())
             if name == "arch_propose_list":
                 return _envelope(_handle_admin_propose_list(arguments, world))
+            if name == "arch_propose_create":
+                return _envelope(
+                    _call_proposals_handler(handle_create, world, name=arguments["name"])
+                )
+            if name == "arch_propose_diff":
+                return _envelope(
+                    _call_proposals_handler(handle_diff, world, name=arguments["name"])
+                )
+            if name == "arch_propose_review":
+                return _envelope(
+                    _call_proposals_handler(
+                        handle_review,
+                        world,
+                        name=arguments["name"],
+                        min_coverage=arguments.get("min_coverage", 0.8),
+                        max_unknowns=arguments.get("max_unknowns", 0),
+                        max_findings=arguments.get("max_findings", 0),
+                        max_run_age_days=arguments.get("max_run_age_days", 30),
+                        require_pass=arguments.get("require_pass", False),
+                    )
+                )
+            if name == "arch_propose_promote":
+                return _envelope(
+                    _call_proposals_handler(
+                        handle_promote,
+                        world,
+                        name=arguments["name"],
+                        approved_by=arguments["approved_by"],
+                    )
+                )
+            if name == "arch_propose_reject":
+                return _envelope(
+                    _call_proposals_handler(
+                        handle_reject, world, name=arguments["name"], actor=arguments["actor"]
+                    )
+                )
             return _envelope({"error": f"unknown tool {name!r}"})
         finally:
             if index is not None:

@@ -26,7 +26,14 @@ ADMIN_DISABLED_CODE: Final = "ADMIN_DISABLED"
 
 # Admin tool names. Adding a new admin tool means adding it here
 # AND wiring the gate in the delivery adapter.
-ADMIN_TOOLS: Final = ("arch_propose_list",)
+ADMIN_TOOLS: Final = (
+    "arch_propose_list",
+    "arch_propose_create",
+    "arch_propose_diff",
+    "arch_propose_review",
+    "arch_propose_promote",
+    "arch_propose_reject",
+)
 
 
 class AdminDisabledError(Exception):
