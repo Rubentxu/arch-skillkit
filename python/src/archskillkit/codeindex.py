@@ -593,6 +593,12 @@ class CodeIndex:
     def previous_generation_run(self) -> str | None:
         return self._meta_get("previous_generation_run")
 
+    @property
+    def current_generation(self) -> str | None:
+        """Public read of the last scan generation id (V2.4 snapshot
+        builder). None until the first ingest of this index."""
+        return self._meta_get("last_generation_run")
+
     def _snapshot_previous(self) -> None:
         """Copy the current database to code.prev.sqlite (generation
         rotation) — must run outside any transaction."""
