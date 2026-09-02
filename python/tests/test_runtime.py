@@ -227,6 +227,158 @@ class TestSetup:
         assert excinfo.value.code == "ATTESTATION_MISSING"
 
 
+def _sha256(data: bytes) -> str:
+    import hashlib
+    return hashlib.sha256(data).hexdigest()
+
+
+VALID_TRUST_ROOT = b'{"mediaType": "application/vnd.dev.sigstore.clienttrustconfig.v0.1+json"}'
+
+
+class TestTrustRoot:
+    """Hermetic Sigstore verification (docs/v2/24 §5, air-gap)."""
+
+    def _ref(self, tmp_path: Path, content: bytes = VALID_TRUST_ROOT) -> dict:
+        f = tmp_path / "sigstore-trust-root.json"
+        f.write_bytes(content)
+        return {"url": f.as_uri(), "sha256": _sha256(content)}
+
+    def test_manifest_parses_trust_root(self, tmp_path):
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")],
+            trust_root=self._ref(tmp_path)))
+        assert manifest.trust_root is not None
+        assert manifest.trust_root.sha256 == _sha256(VALID_TRUST_ROOT)
+
+    def test_manifest_rejects_malformed_trust_root_digest(self, tmp_path):
+        ref = self._ref(tmp_path)
+        ref["sha256"] = "nothex"
+        with pytest.raises(ManifestError):
+            load_manifest(make_manifest([make_binary(tmp_path, "a")],
+                                        trust_root=ref))
+
+    def test_offline_without_cached_trust_root_is_actionable(
+            self, paths, tmp_path):
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=self._ref(tmp_path)))
+        with pytest.raises(SetupError) as excinfo:
+            runtime._ensure_trust_root(paths, manifest, offline=True)
+        assert excinfo.value.code == "ATTESTATION_MISSING"
+        assert "prefetch" in excinfo.value.remedy
+
+    def test_online_download_pins_digest_and_caches(self, paths, tmp_path):
+        ref = self._ref(tmp_path)
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=ref))
+        out = runtime._ensure_trust_root(paths, manifest, offline=False)
+        assert out == runtime._trust_root_path(paths)
+        assert out.read_bytes() == VALID_TRUST_ROOT
+
+    def test_cached_trust_root_matching_digest_is_reused(self, paths, tmp_path):
+        ref = self._ref(tmp_path)
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=ref))
+        cached = runtime._trust_root_path(paths)
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(VALID_TRUST_ROOT)
+        assert runtime._ensure_trust_root(
+            paths, manifest, offline=True) == cached
+
+    def test_corrupt_cached_trust_root_offline_fails(self, paths, tmp_path):
+        ref = self._ref(tmp_path)
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=ref))
+        cached = runtime._trust_root_path(paths)
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(b"tampered")
+        with pytest.raises(SetupError) as excinfo:
+            runtime._ensure_trust_root(paths, manifest, offline=True)
+        assert excinfo.value.code == "ATTESTATION_INVALID"
+
+    def test_corrupt_cached_trust_root_online_refreshes(self, paths, tmp_path):
+        ref = self._ref(tmp_path)
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=ref))
+        cached = runtime._trust_root_path(paths)
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(b"tampered")
+        assert runtime._ensure_trust_root(
+            paths, manifest, offline=False) == cached
+        assert cached.read_bytes() == VALID_TRUST_ROOT
+
+    def test_downloaded_trust_root_digest_mismatch_fails(self, paths, tmp_path):
+        other = self._ref(tmp_path, b"different-bytes")
+        ref = {"url": other["url"], "sha256": _sha256(VALID_TRUST_ROOT)}
+        manifest = load_manifest(make_manifest(
+            [make_binary(tmp_path, "a")], trust_root=ref))
+        with pytest.raises(SetupError) as excinfo:
+            runtime._ensure_trust_root(paths, manifest, offline=False)
+        assert excinfo.value.code == "ATTESTATION_INVALID"
+        assert not runtime._trust_root_path(paths).exists()
+
+    def test_setup_prefetch_seeds_trust_root(self, paths, tmp_path,
+                                             monkeypatch):
+        seen: dict = {}
+
+        def fake_verify(artifact, artifact_file, bundle_path,
+                        trust_config=None):
+            seen["trust_config"] = trust_config
+
+        artifact = make_binary(tmp_path, "a")
+        bundle = tmp_path / "a.bundle.json"
+        bundle.write_text("{}")
+        artifact["attestation"] = {"required": True,
+                                   "bundle": bundle.as_uri()}
+        manifest = load_manifest(make_manifest(
+            [artifact], trust_root=self._ref(tmp_path)))
+        monkeypatch.setattr(runtime, "_verify_sigstore", fake_verify)
+        run_setup(paths, manifest, prefetch=True)
+        assert seen["trust_config"] == runtime._trust_root_path(paths)
+        assert runtime._trust_root_path(paths).is_file()
+
+
+class TestSigstoreVerificationCommand:
+    def _artifact(self) -> runtime.Artifact:
+        return runtime.Artifact(
+            id="a", kind="binary", version="1", url="https://x/a",
+            sha256="0" * 64, size_bytes=1, license="MIT",
+            attestation={"required": True, "bundle": "https://x/a.bundle",
+                         "repository": "Rubentxu/arch-skillkit"})
+
+    def test_hermetic_verification_flags(self, tmp_path, monkeypatch):
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(runtime.subprocess, "run", fake_run)
+        trust = tmp_path / "trust.json"
+        trust.write_text("{}")
+        runtime._verify_sigstore(self._artifact(), tmp_path / "a",
+                                 tmp_path / "b", trust_config=trust)
+        cmd = captured["cmd"]
+        assert cmd[cmd.index("--trust-config") + 1] == str(trust)
+        assert cmd.index("--trust-config") < cmd.index("verify")
+        assert cmd[-1] == "--offline"
+
+    def test_without_trust_config_command_unchanged(self, tmp_path,
+                                                    monkeypatch):
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(runtime.subprocess, "run", fake_run)
+        runtime._verify_sigstore(self._artifact(), tmp_path / "a",
+                                 tmp_path / "b")
+        cmd = captured["cmd"]
+        assert "--trust-config" not in cmd
+        assert "--offline" not in cmd
+        assert cmd[2] == "sigstore" and cmd[3:5] == ["verify", "github"]
+
+
 class TestDoctor:
     def test_no_manifest_is_incomplete(self, paths):
         diagnosis, exit_code = run_doctor(paths, None)

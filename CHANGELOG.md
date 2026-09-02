@@ -8,6 +8,20 @@ fixes.
 
 ## [Unreleased]
 
+### Added
+
+- **Sigstore trust root for strict air-gap verification (docs/v2/24 §5)**:
+  the release now ships `sigstore-trust-root.json` (client trust
+  configuration snapshot: Fulcio CAs, CTFE keyring, Rekor keys) and pins
+  its digest in the manifest's optional `trust_root` field. `setup`
+  downloads and digest-validates the trust root before verifying any
+  attestation; verification then runs hermetically
+  (`sigstore --trust-config <cache> … --offline`) — no TUF network
+  bootstrap, no silent fallback. Offline with a missing or digest-
+  mismatched trust root is a hard, actionable failure. Proven against
+  the real v0.3.1 wheel attestation; `run-verify.sh` exercises the
+  no-network verification in container B from the next release on.
+
 ## [0.3.1] - 2026-09-02
 
 ### Added

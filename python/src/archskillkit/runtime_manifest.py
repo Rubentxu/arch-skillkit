@@ -122,11 +122,28 @@ class Requirements(BaseModel):
     network: str = "required-for-setup"
 
 
+class TrustRootRef(BaseModel):
+    """Sigstore client trust configuration snapshot shipped with the
+    release (docs/v2/24 §5, air-gap): lets verification run without the
+    sigstore TUF network bootstrap."""
+
+    url: str
+    sha256: str
+
+    @field_validator("sha256")
+    @classmethod
+    def _digest_shape(cls, value: str) -> str:
+        if not _SHA256_RE.match(value):
+            raise ValueError(f"malformed sha256 digest: {value!r}")
+        return value
+
+
 class RuntimeManifest(BaseModel):
     schema_version: int
     release: ReleaseIdentity
     platforms: list[PlatformEntry]
     requirements: Requirements = Requirements()
+    trust_root: TrustRootRef | None = None
 
     @model_validator(mode="after")
     def _schema_and_platforms(self) -> RuntimeManifest:

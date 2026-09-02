@@ -122,15 +122,23 @@ jobs:
           path: dist
 
       - name: Install manifest generator dependency
-        run: python3 -m pip install --quiet pydantic
+        run: python3 -m pip install --quiet pydantic sigstore
+
+      - name: Snapshot sigstore trust root (air-gap asset)
+        run: |
+          python3 scripts/release/generate-trust-root.py \
+            --out dist/sigstore-trust-root.json
+          sha256sum dist/sigstore-trust-root.json
 
       - name: Generate pinned runtime manifest
         run: |
           version="${GITHUB_REF_NAME#v}"
+          trust_sha="$(sha256sum dist/sigstore-trust-root.json | cut -d' ' -f1)"
           python3 scripts/release/generate-runtime-manifest.py \
             --version "$version" --commit "$GITHUB_SHA" \
             --assets-dir dist \
             --release-base "https://github.com/${{ github.repository }}/releases/download" \
+            --trust-root-sha256 "$trust_sha" \
             --out "dist/archskillkit-runtime-v${version}.manifest.json"
 
       - name: Sum runtime artifacts

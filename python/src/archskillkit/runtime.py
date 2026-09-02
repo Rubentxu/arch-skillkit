@@ -22,6 +22,7 @@ import os
 import shutil
 import socket
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -666,9 +667,11 @@ def run_setup(
                                      already=True)
             return _with_warnings(receipt, warnings)
 
+        trust_config = _ensure_trust_root(paths, manifest, offline=offline)
         for artifact in platform_entry.artifacts:
             cached = ensure_cached(paths, artifact, offline=offline)
-            _ensure_attestation(paths, artifact, cached, offline=offline)
+            _ensure_attestation(paths, artifact, cached, offline=offline,
+                                trust_config=trust_config)
         if prefetch:
             receipt = _write_receipt(paths, manifest, key, result="prefetched",
                                      already=False)
@@ -714,16 +717,66 @@ def run_setup(
         return _with_warnings(receipt, warnings)
 
 
+def _trust_root_path(paths: Paths) -> Path:
+    return paths.cache / "attestations" / "sigstore-trust-root.json"
+
+
+def _ensure_trust_root(
+    paths: Paths, manifest: RuntimeManifest, *, offline: bool
+) -> Path | None:
+    """Sigstore trust root for hermetic verification (docs/v2/24 §5,
+    air-gap). Returns the cached trust-config path when the manifest
+    declares one; None otherwise (verification then relies on the
+    sigstore client's own TUF trust, as before). The cached copy is
+    validated against the manifest digest — a stale or corrupted trust
+    root never silently verifies anything."""
+    ref = manifest.trust_root
+    if ref is None:
+        return None
+    path = _trust_root_path(paths)
+    if path.exists():
+        if sha256_file(path) == ref.sha256:
+            return path
+        if offline:
+            raise SetupError(
+                "ATTESTATION_INVALID",
+                "the cached sigstore trust root does not match the digest "
+                f"declared by the manifest ({ref.sha256[:12]}…)",
+                "refresh the air-gapped bundle: prefetch or re-ship "
+                "sigstore-trust-root.json")
+        path.unlink()
+    if offline:
+        raise SetupError(
+            "ATTESTATION_MISSING",
+            "the sigstore trust root required for offline attestation "
+            "verification is not cached",
+            "run setup --prefetch on a connected host or ship "
+            "sigstore-trust-root.json with the air-gapped bundle")
+    download(ref.url, path)
+    if sha256_file(path) != ref.sha256:
+        path.unlink(missing_ok=True)
+        raise SetupError(
+            "ATTESTATION_INVALID",
+            f"downloaded sigstore trust root does not match the manifest "
+            f"digest ({ref.sha256[:12]}…)",
+            "verify the release integrity; never trust a mismatched "
+            "trust root")
+    return path
+
+
 def _ensure_attestation(
-    paths: Paths, artifact: Artifact, cached: Path, *, offline: bool
+    paths: Paths, artifact: Artifact, cached: Path, *, offline: bool,
+    trust_config: Path | None = None,
 ) -> None:
     """Policy for required attestations (docs/v2/24, V2.3 hardening):
 
     1. Resolve the bundle — cached (offline/air-gap) or fetched from the
        GitHub attestation API (snappy-compressed).
     2. Cryptographically verify it with sigstore (`python -m sigstore
-       verify github --bundle --repository`). A bundle that cannot be
-       verified is a HARD failure — never a silent pass.
+       verify github --bundle --repository`). When a trust root is
+       available the verification is hermetic (`--trust-config
+       --offline`): no TUF network bootstrap, no silent fallback.
+       A bundle that cannot be verified is a HARD failure.
     Non-required policies only ensure presence when a bundle is declared.
     """
     if not artifact.attestation.required:
@@ -757,7 +810,7 @@ def _ensure_attestation(
                     "prefetch on a connected host or ship the air-gapped "
                     "bundle")
             _fetch_attestation_bundle(repository, digest, bundle_path)
-    _verify_sigstore(artifact, cached, bundle_path)
+    _verify_sigstore(artifact, cached, bundle_path, trust_config=trust_config)
 
 
 def _fetch_attestation_bundle(repository: str, digest: str,
@@ -809,17 +862,24 @@ def _fetch_attestation_bundle(repository: str, digest: str,
 
 
 def _verify_sigstore(artifact: Artifact, artifact_file: Path,
-                     bundle_path: Path) -> None:
+                     bundle_path: Path,
+                     trust_config: Path | None = None) -> None:
     """Cryptographic Sigstore verification via the sigstore CLI (the
-    `attestation` extra). Online or offline — bundles carry their own
-    verification material."""
-    import subprocess
-
+    `attestation` extra). With a trust config the verification is
+    hermetic (`--trust-config` + `--offline`: the bundle carries its own
+    certificate chain and Rekor inclusion proof); without one the CLI
+    resolves trust through its own TUF cache as before."""
     repository = artifact.attestation.repository
-    cmd = [sys.executable, "-m", "sigstore", "verify", "github",
-           str(artifact_file), "--bundle", str(bundle_path)]
+    cmd = [sys.executable, "-m", "sigstore"]
+    if trust_config is not None:
+        # `--trust-config` is a global option — it precedes the subcommand.
+        cmd += ["--trust-config", str(trust_config)]
+    cmd += ["verify", "github", str(artifact_file),
+            "--bundle", str(bundle_path)]
     if repository:
         cmd += ["--repository", repository]
+    if trust_config is not None:
+        cmd += ["--offline"]
     try:
         result = subprocess.run(cmd, check=False, capture_output=True,
                                 text=True)

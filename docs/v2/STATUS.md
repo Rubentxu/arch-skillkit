@@ -72,4 +72,4 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
 2. **Ranking del Context Compiler — completado:** proximidad a ficheros cambiados (`CodeIndex.changed_files()`) y delta de grafo reciente (`recent_delta_names()`) integrados en el ranking por relevancia; primera generación degrada a no-op.
 3. **Validación real V2.2 (P7):** evidencia en consumidores externos (Cytoscape/Gephi/yEd, Obsidian, draw.io) y revisión visual humana del layout draw.io.
 4. **Decidir SCIP con datos:** adoptar, mantener opcional o rechazar (spike condicional, sin fecha).
-5. **Distribución offline estricta:** trust root Sigstore para air-gap; matriz ARM del verify-release (qemu) si hay demanda.
+5. **Distribución offline estricta — trust root Sigstore implementado:** snapshot de la client trust configuration como asset de release, digest fijado en el manifest (`trust_root`) y verificación hermética (`--trust-config --offline`) probada contra el release v0.3.1; la suites `verify-release` la ejercita en el contenedor sin red a partir del release que la incluya. Pendiente: matriz ARM del verify-release (qemu) si hay demanda.

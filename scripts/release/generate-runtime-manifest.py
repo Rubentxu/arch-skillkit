@@ -148,6 +148,13 @@ def main() -> int:
     parser.add_argument("--release-base",
                         default="https://github.com/Rubentxu/arch-skillkit"
                                 "/releases/download")
+    parser.add_argument("--trust-root-name",
+                        default="sigstore-trust-root.json",
+                        help="release asset holding the Sigstore client "
+                             "trust configuration snapshot")
+    parser.add_argument("--trust-root-sha256", default=None,
+                        help="sha256 of the trust root asset; enables "
+                             "hermetic offline attestation verification")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
 
@@ -184,6 +191,11 @@ def main() -> int:
         "requirements": {"min_ram_mib": 1024, "min_disk_mib": 2048,
                          "network": "required-for-setup"},
     }
+    if args.trust_root_sha256:
+        manifest["trust_root"] = {
+            "url": f"{args.release_base}/{git_tag}/{args.trust_root_name}",
+            "sha256": args.trust_root_sha256,
+        }
 
     load_manifest(json.dumps(manifest))
     rendered = json.dumps(manifest, indent=2) + "\n"

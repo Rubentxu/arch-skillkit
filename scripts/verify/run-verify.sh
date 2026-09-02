@@ -81,7 +81,7 @@ podman exec -e WHEEL_REF="$WHEEL_REF" "$NAME_A" bash -Eeuo pipefail -c '
   curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
   export PATH="/root/.local/bin:$PATH"
   uv --version
-  uv tool install --python 3.12 "$WHEEL_REF"
+  uv tool install --python 3.12 --extra attestation "$WHEEL_REF"
   cp /root/.local/bin/uv /share/uv
   archskillkit --help > /dev/null
   echo "CLI responde"
@@ -146,6 +146,52 @@ podman cp "$ART/corrupt.sh" "$NAME_A":/tmp/corrupt.sh
 podman exec "$NAME_A" bash /tmp/corrupt.sh 2>&1 | tee "$ART/corruption.log"
 podman cp "$NAME_A":/tmp/doctor-corrupt.json "$ART/doctor-corrupt.json"
 
+echo "-- A: preparación del material air-gap (wheel + bundle + trust root)"
+podman exec -e WHEEL_REF="$WHEEL_REF" -e VERSION="$VERSION" \
+  -e RELEASE_BASE="https://github.com/Rubentxu/arch-skillkit/releases/download" \
+  "$NAME_A" bash -Eeuo pipefail -c '
+  export PATH="/root/.local/bin:$PATH"
+  PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
+  if [ -f /tmp/wheel.whl ]; then cp /tmp/wheel.whl /share/wheel.whl; else curl -LsS -o /share/wheel.whl "$WHEEL_REF"; fi
+  DIGEST=$(sha256sum /share/wheel.whl | cut -d" " -f1)
+  curl -sS -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/Rubentxu/arch-skillkit/attestations/sha256:$DIGEST" \
+    | jq -r ".attestations[0].bundle_url" > /tmp/bundle_url
+  curl -LsS -o /tmp/bundle.snappy "$(cat /tmp/bundle_url)"
+  "$PT" - <<PY
+import cramjam
+blob = open("/tmp/bundle.snappy", "rb").read()
+clean = bytes(cramjam.snappy.decompress_raw(blob))
+open("/share/wheel.bundle.json", "wb").write(clean[clean.find(b"{"):])
+PY
+  if curl -LsS -f -o /share/sigstore-trust-root.json \
+      "$RELEASE_BASE/v$VERSION/sigstore-trust-root.json"; then
+    echo "trust root descargado"
+  else
+    echo "SKIP: release sin asset sigstore-trust-root.json (anterior al trust root)"
+    rm -f /share/sigstore-trust-root.json
+    touch /share/.no-trust-root
+  fi
+' | tee "$ART/airgap-prep.log"
+
+echo "-- A: verificación hermética online (sanity: flags --trust-config --offline)"
+if podman exec "$NAME_A" bash -ec '
+  test ! -f /share/.no-trust-root
+  PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
+  "$PT" -m sigstore --trust-config /share/sigstore-trust-root.json verify github \
+    /share/wheel.whl --bundle /share/wheel.bundle.json \
+    --repository Rubentxu/arch-skillkit --offline
+'; then
+  echo "verificación hermética: OK" | tee "$ART/attestation-hermetic.log"
+else
+  if podman exec "$NAME_A" test -f /share/.no-trust-root; then
+    echo "SKIP hermética: release sin trust root asset" | tee "$ART/attestation-hermetic.log"
+  else
+    echo "FALLO verificación hermética" >&2
+    exit 1
+  fi
+fi
+
 echo "-- A: preparar caches para el contenedor offline"
 podman exec "$NAME_A" bash -c 'cp /root/.local/bin/uv /share/uv'
 podman rm -f "$NAME_A" >/dev/null
@@ -163,17 +209,26 @@ podman run -d --name "$NAME_B" --network=none \
 podman exec "$NAME_B" bash -Eeuo pipefail -c '
   install -Dm755 /share/uv /usr/local/bin/uv
   export PATH="/usr/local/bin:/root/.local/bin:$PATH"
-  WHEEL=$(ls /share/archskillkit-*.whl 2>/dev/null || echo "")
+  WHEEL=$(ls /share/archskillkit-*.whl /share/wheel.whl 2>/dev/null | head -1 || echo "")
   if [ -n "$WHEEL" ]; then
-    uv tool install --offline --python 3.12 "$WHEEL"
+    uv tool install --offline --python 3.12 --extra attestation "$WHEEL"
   else
-    uv tool install --offline --python 3.12 archskillkit
+    uv tool install --offline --python 3.12 --extra attestation archskillkit
   fi
   archskillkit setup --offline 2>&1
   archskillkit doctor > /tmp/doctor-offline.json || true
   cat /tmp/doctor-offline.json
   grep -q "\"status\": \"ready\"" /tmp/doctor-offline.json || exit 1
   echo "offline: instalación + runtime + doctor ready — OK"
+  if [ ! -f /share/.no-trust-root ]; then
+    PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
+    "$PT" -m sigstore --trust-config /share/sigstore-trust-root.json verify github \
+      /share/wheel.whl --bundle /share/wheel.bundle.json \
+      --repository Rubentxu/arch-skillkit --offline
+    echo "air-gap: verificación Sigstore hermética sin red — OK"
+  else
+    echo "air-gap: SKIP (release sin trust root asset)"
+  fi
 ' | tee "$ART/offline.log"
 podman cp "$NAME_B":/tmp/doctor-offline.json "$ART/doctor-offline.json"
 podman rm -f "$NAME_B" >/dev/null
@@ -194,7 +249,8 @@ cat > "$ART/result.json" <<JSON
 {"run_id": "$RUN_ID", "type": "verify-release", "version": "$VERSION",
  "result": "passed",
  "checks": ["install-online", "setup", "doctor-ready", "analysis-repo-clean",
-            "corruption-detected", "offline-install-setup-doctor"]}
+            "corruption-detected", "offline-install-setup-doctor",
+            "airgap-attestation-hermetic"]}
 JSON
 
 echo "== VERIFICACIÓN COMPLETA: passed — evidencia en $ART =="

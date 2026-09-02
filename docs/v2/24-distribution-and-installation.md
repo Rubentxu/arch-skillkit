@@ -151,9 +151,23 @@ URL o ruta offline, tamaño, SHA-256, campo `executable` (`null` permitido para
 artefactos sin binario propio; ruta relativa al runtime en caso contrario),
 licencia y política de attestation/firma. Los assets se verifican primero
 contra el manifest y después contra su attestation cuando la política la
-exija. Para instalaciones air-gapped se distribuyen bundle JSONL y raíz de
-confianza; si la política exige attestation y no está, no hay degradación
-silenciosa a PASS. [Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
+exija. Para instalaciones air-gapped, el release distribuye además
+`sigstore-trust-root.json` (snapshot de la client trust configuration de
+Sigstore: CAs de Fulcio, keyring CTFE y claves de Rekor) y el manifest lo
+declara en el campo opcional `trust_root` (`url` + `sha256`); si la política
+exige attestation y no está, no hay degradación silenciosa a PASS.
+[Attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
+
+**Verificación hermética (air-gap estricto).** El release genera el snapshot
+de la raíz de confianza en el job del manifest
+(`scripts/release/generate-trust-root.py`) y fija su digest en
+`trust_root.sha256`. En `setup`, la raíz se descarga y se valida contra ese
+digest antes de verificar attestation alguna; con ella presente, la
+verificación Sigstore es hermética (`sigstore --trust-config <cache>
+verify … --offline`): ni bootstrap TUF ni acceso a red, sin cambiar de raíz
+de confianza. En `--offline`, una raíz ausente o con digest incorrecto es
+fallo duro (`ATTESTATION_MISSING`/`ATTESTATION_INVALID` accionable), nunca
+un salto silencioso a la raíz TUF en red.
 
 `setup` valida **completitud**: todo `id` requerido por la plataforma debe
 estar presente y verificado antes de activar el runtime; un artefacto ausente
@@ -178,7 +192,9 @@ por la ruta distribuida.
 
 - `setup`: requiere red sólo si faltan artefactos. Preflight antes de
   descargar; staging; validación; recién entonces activación atómica.
-- `setup --prefetch`: deja el cache completo y un recibo verificable.
+- `setup --prefetch`: deja el cache completo (artefactos, bundles de
+  attestation y raíz de confianza Sigstore cuando el manifest la declara)
+  y un recibo verificable.
 - `setup --offline`: no abre red; falla de forma accionable si falta un
   digest o bundle de attestation exigido.
 - `doctor`: nunca descarga ni repara. Recorre manifest, runtime, cache y
