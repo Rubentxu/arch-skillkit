@@ -204,10 +204,15 @@ class TestRouting:
         # reopening a world appends pack.loaded events; measure inside a
         # single session so the baseline is meaningful
         before = len(world.graph.events)
+        # the SystemDefaultViewer spawns xdg-open which complains when
+        # the artifact does not exist on disk; create an empty file so
+        # the subprocess exits cleanly and CI logs stay quiet
+        artifact = tmp_path / "model.c4"
+        artifact.write_text("")
         registry = ViewerRegistry()
         registry.status()
         registry.route("likec4")
-        launch(SystemDefaultViewer(), tmp_path / "model.c4")
+        launch(SystemDefaultViewer(), artifact)
         assert len(world.graph.events) == before
         world.close()
 

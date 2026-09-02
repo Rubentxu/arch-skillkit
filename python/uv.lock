@@ -41,6 +41,7 @@ dependencies = [
 [package.optional-dependencies]
 attestation = [
     { name = "cramjam" },
+    { name = "cryptography" },
     { name = "sigstore" },
 ]
 dev = [
@@ -59,6 +60,7 @@ requires-dist = [
     { name = "activegraph", specifier = ">=1.10,<2" },
     { name = "cramjam", marker = "extra == 'attestation'", specifier = ">=2.8" },
     { name = "cramjam", marker = "extra == 'dev'", specifier = ">=2.8" },
+    { name = "cryptography", marker = "extra == 'attestation'", specifier = ">=42" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "lxml", specifier = ">=6.1.2" },
