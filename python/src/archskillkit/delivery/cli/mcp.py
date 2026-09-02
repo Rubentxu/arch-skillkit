@@ -455,6 +455,32 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                     "additionalProperties": False,
                 },
             ),
+            _tool(
+                "arch_replay_fixture",
+                "Replay a captured scanner-payload fixture end to end"
+                " and compare the resulting snapshot against the"
+                " golden. Drift (pack revision, schema bump, scanner"
+                " version) shows up as FIXTURE_DRIFT. No API key"
+                " needed.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "fixture_dir": {
+                            "type": "string",
+                            "description": "Path to the fixture directory.",
+                        },
+                        "write_golden": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Overwrite golden.json with the"
+                            " replayed snapshot. Use when an"
+                            " intentional drift lands in the same PR.",
+                        },
+                    },
+                    "required": ["fixture_dir"],
+                    "additionalProperties": False,
+                },
+            ),
         ]
         if admin:
             tools.extend(admin_tool_descriptors[t] for t in ADMIN_TOOLS)
@@ -481,6 +507,27 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
         # the only enforcement point. Calling require_admin(admin,
         # name) here would block the read-only tools, which is the
         # opposite of the documented behaviour.
+
+        # arch_replay_fixture does not need the world: it operates
+        # on a captured fixture dir. Handle it before opening the
+        # world so the sandbox repo (built by the replay) stays
+        # isolated from the live project.
+        if name == "arch_replay_fixture":
+            from archskillkit.delivery.cli.replay_fixture import (
+                ReplayFixtureError,
+            )
+            from archskillkit.delivery.cli.replay_fixture import (
+                run as replay_run,
+            )
+
+            fixture_dir = arguments.get("fixture_dir", "")
+            write_golden = bool(arguments.get("write_golden", False))
+            try:
+                result = replay_run(fixture_dir, write_golden=write_golden)
+            except ReplayFixtureError as exc:
+                envelope = exc.to_envelope()
+                raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+            return _envelope(result.model_dump())
 
         world, index = _world()
         try:

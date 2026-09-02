@@ -1,0 +1,9 @@
+{
+  "schema": "arch-skillkit/replay-fixture-payload-v1",
+  "astgrep_path": "payloads/astgrep.json",
+  "semgrep_path": "payloads/semgrep.json",
+  "scanner_versions": {
+    "astgrep": "0.39.x",
+    "semgrep": "1.x"
+  }
+}

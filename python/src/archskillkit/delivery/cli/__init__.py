@@ -15,6 +15,8 @@ from archskillkit.delivery.cli import (
     gate,
     mcp,
     proposals,
+    replay_candidate,
+    replay_fixture,
     schema,
     simulate,
     status,
@@ -22,8 +24,35 @@ from archskillkit.delivery.cli import (
     viewers,
 )
 
-COMMANDS = (status, explain, viewers, schema, view, ask, delta, gate,
-            proposals, simulate, mcp)
+COMMANDS = (
+    status,
+    explain,
+    viewers,
+    schema,
+    view,
+    ask,
+    delta,
+    gate,
+    proposals,
+    simulate,
+    replay_fixture,
+    replay_candidate,
+    mcp,
+)
 
-__all__ = ["COMMANDS", "ask", "delta", "explain", "gate", "mcp",
-           "proposals", "schema", "simulate", "status", "view", "viewers"]
+__all__ = [
+    "COMMANDS",
+    "ask",
+    "delta",
+    "explain",
+    "gate",
+    "mcp",
+    "proposals",
+    "replay_candidate",
+    "replay_fixture",
+    "schema",
+    "simulate",
+    "status",
+    "view",
+    "viewers",
+]

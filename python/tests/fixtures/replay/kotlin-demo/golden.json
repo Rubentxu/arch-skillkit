@@ -1,0 +1,6 @@
+{
+  "schema": "arch-skillkit/replay-fixture-golden-v1",
+  "snapshot_id": "58e7e623e13816becd02242acb580391888f83304d784122e2b099b4a462f8ab",
+  "policy_revision": "none",
+  "code_revision": "{\"generation\":\"replay\",\"sensor_revisions\":[]}"
+}
