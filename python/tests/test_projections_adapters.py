@@ -198,6 +198,20 @@ class TestGraphMLProjection:
         second = project_to_workspace(promoted, GraphMLAdapter())
         assert Path(second["path"]).read_bytes() == original
 
+    def test_graphml_round_trips_through_networkx(self, promoted):
+        # P7: Cytoscape/Gephi/yEd parse via the GraphML library that
+        # networkx wraps. A round-trip without loss proves the artifact
+        # is portable to those GUIs.
+        networkx = pytest.importorskip("networkx")
+        result = project_to_workspace(promoted, GraphMLAdapter())
+        graph = networkx.read_graphml(result["path"])
+        assert graph.number_of_nodes() == result["metrics"]["nodes"] == 10
+        assert graph.number_of_edges() == result["metrics"]["edges"] == 5
+        # Every node carries a label (kind) — porting to a GUI means the
+        # user sees the element kind, not a blank box.
+        kinds = [data.get("kind", "") for _, data in graph.nodes(data=True)]
+        assert all(kinds), f"nodes without kind: {[k for k in kinds if not k]}"
+
 
 class TestJSONCanvasProjection:
     def test_generates_valid_canvas(self, promoted):
