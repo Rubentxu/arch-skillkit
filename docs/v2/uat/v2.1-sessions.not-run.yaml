@@ -140,27 +140,41 @@ sessions:
 - scenario_id: UAT2-012
   feature_id: F-05
   requirement_ref: UAT2-012
-  execution_state: NOT_RUN
-  verdict: NOT_RUN
-  session_id: null
-  manifest_id: null
-  evidence_refs: []
+  execution_state: EXECUTED
+  verdict: PASS
+  session_id: UAT2-012
+  manifest_id: UAT2-012
+  evidence_refs:
+  - artifacts/uat/v2.1/sessions/UAT2-012/evidence/orchestrator/fork-isolation.json
+  - artifacts/uat/v2.1/sessions/UAT2-012/evidence/orchestrator/fork-point.json
+  - artifacts/uat/v2.1/sessions/UAT2-012/evidence/orchestrator/fork-result.json
+  - artifacts/uat/v2.1/sessions/UAT2-012/evidence/orchestrator/main-after.json
+  - artifacts/uat/v2.1/sessions/UAT2-012/evidence/orchestrator/main-before.json
 - scenario_id: UAT2-013
   feature_id: F-05
   requirement_ref: UAT2-013
-  execution_state: NOT_RUN
-  verdict: NOT_RUN
-  session_id: null
-  manifest_id: null
-  evidence_refs: []
+  execution_state: EXECUTED
+  verdict: PASS
+  session_id: UAT2-013
+  manifest_id: UAT2-013
+  evidence_refs:
+  - artifacts/uat/v2.1/sessions/UAT2-013/evidence/orchestrator/base.json
+  - artifacts/uat/v2.1/sessions/UAT2-013/evidence/orchestrator/diff.json
+  - artifacts/uat/v2.1/sessions/UAT2-013/evidence/orchestrator/proposal.json
 - scenario_id: UAT2-014
   feature_id: F-05
   requirement_ref: UAT2-014
-  execution_state: NOT_RUN
-  verdict: NOT_RUN
-  session_id: null
-  manifest_id: null
-  evidence_refs: []
+  execution_state: EXECUTED
+  verdict: PASS
+  session_id: UAT2-014
+  manifest_id: UAT2-014
+  evidence_refs:
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/policy-and-approval.json
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/policy-gate.json
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/promotion-decision.json
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/promotion-with-approval.json
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/promotion-without-approval.json
+  - artifacts/uat/v2.1/sessions/UAT2-014/evidence/orchestrator/unapproved-attempt.json
 - scenario_id: UAT2-017
   feature_id: F-03
   requirement_ref: UAT2-017

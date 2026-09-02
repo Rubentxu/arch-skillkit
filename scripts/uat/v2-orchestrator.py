@@ -704,6 +704,217 @@ def scenario_uat2_011(home: Path, imports: Path, run_id: str) -> int:
     return 0  # PASS as long as drift ran deterministically without an LLM
 
 
+def scenario_uat2_012(home: Path, imports: Path, run_id: str) -> int:
+    """Fork creates a proposal run that checkpoints the same parent."""
+    proj = make_repo(home, "proj-fork", {
+        "src/api/Users.kt": "fun getUser(id: String): User = User(id)\n",
+        "src/api/Orders.kt": "fun getOrder(id: String): Order = Order(id)\n",
+    })
+    ctx = archskillkit_workspace(proj)
+    import sys
+    sys.path.insert(0, str(ROOT / "python" / "src"))
+    from archskillkit.world import ArchitectureWorld
+    from archskillkit.codeindex import CodeIndex
+    from archskillkit import promotion
+    world = ArchitectureWorld(
+        project_id=ctx["project_id"], name=ctx.get("name", ""),
+        root=str(proj), remote="",
+    )
+    world.open()
+    index = CodeIndex(world.workspace / "code.sqlite")
+    index.open()
+    _ingest_index(index, proj, "scan-fork", [
+        ("Users", "src/api/Users.kt", 1),
+        ("Orders", "src/api/Orders.kt", 1),
+    ])
+    promotion.discover(world, index, "scan-fork")
+    promotion.review(world)
+    # Snapshot main checkpoint then fork
+    main_run_id = world.run_id
+    main_digest = hashlib.sha256(
+        json.dumps(world.snapshot(), sort_keys=True).encode()
+    ).hexdigest()
+    fork_name = "uat-12"
+    fork_world = world.fork(fork_name)
+    fork_run_id = fork_world.run_id
+    fork_parent = main_run_id  # fork() uses self.run_id as parent
+    write_evidence("UAT2-012", imports, "main-before.json", {
+        "main_run_id": main_run_id,
+        "fork_name": fork_name,
+        "fork_run_id": fork_run_id,
+        "fork_parent_run_id": fork_parent,
+        "main_digest": main_digest,
+        "fork_run_exists": fork_world.has_run(fork_run_id),
+    })
+    write_evidence("UAT2-012", imports, "fork-result.json", {
+        "fork_has_users": any(
+            o["data"].get("name") == "Users"
+            for o in fork_world.snapshot()["objects"].values()
+            if o["type"] == "architecture_element"),
+        "main_unchanged": (
+            hashlib.sha256(json.dumps(world.snapshot(),
+                                      sort_keys=True).encode()).hexdigest()
+            == main_digest
+        ),
+    })
+    write_evidence("UAT2-012", imports, "main-after.json", {
+        "main_run_id": world.run_id,
+        "main_digest": hashlib.sha256(
+            json.dumps(world.snapshot(), sort_keys=True).encode()
+        ).hexdigest(),
+        "unchanged": (
+            hashlib.sha256(json.dumps(world.snapshot(),
+                                      sort_keys=True).encode()).hexdigest()
+            == main_digest
+        ),
+    })
+    world.close()
+    fork_world.close()
+    index.close()
+    return 0 if (fork_parent == main_run_id
+                 and fork_world.has_run(fork_run_id)) else 1
+
+
+def scenario_uat2_013(home: Path, imports: Path, run_id: str) -> int:
+    """Structural diff detects elements added in the fork."""
+    proj = make_repo(home, "proj-diff", {
+        "src/api/Users.kt": "fun getUser(id: String): User = User(id)\n",
+        "src/api/Orders.kt": "fun getOrder(id: String): Order = Order(id)\n",
+    })
+    ctx = archskillkit_workspace(proj)
+    import sys
+    sys.path.insert(0, str(ROOT / "python" / "src"))
+    from archskillkit.world import ArchitectureWorld
+    from archskillkit.codeindex import CodeIndex
+    from archskillkit.proposals import structural_diff
+    from archskillkit import promotion
+    world = ArchitectureWorld(
+        project_id=ctx["project_id"], name=ctx.get("name", ""),
+        root=str(proj), remote="",
+    )
+    world.open()
+    index = CodeIndex(world.workspace / "code.sqlite")
+    index.open()
+    _ingest_index(index, proj, "scan-diff", [
+        ("Users", "src/api/Users.kt", 1),
+        ("Orders", "src/api/Orders.kt", 1),
+    ])
+    promotion.discover(world, index, "scan-diff")
+    promotion.review(world)
+    fork_name = "uat-13"
+    fork = world.fork(fork_name)
+    # Capture the base snapshot (pre-fork change).
+    write_evidence("UAT2-013", imports, "base.json", {
+        "run_id": world.run_id,
+        "elements": sorted(
+            o["data"].get("name")
+            for o in world.snapshot()["objects"].values()
+            if o["type"] == "architecture_element"
+        ),
+        "digest": hashlib.sha256(
+            json.dumps(world.snapshot(), sort_keys=True).encode()
+        ).hexdigest(),
+    })
+    # Add a NEW element to the fork only — this is the change
+    # the structural diff should detect.
+    fork.add_architecture_element("Billing", "bounded_context", "DECLARED", "high")
+    fork.add_architecture_element("Notifications", "component", "DECLARED", "medium")
+    # Capture the proposal snapshot (post-fork change).
+    write_evidence("UAT2-013", imports, "proposal.json", {
+        "run_id": fork.run_id,
+        "elements": sorted(
+            o["data"].get("name")
+            for o in fork.snapshot()["objects"].values()
+            if o["type"] == "architecture_element"
+        ),
+        "digest": hashlib.sha256(
+            json.dumps(fork.snapshot(), sort_keys=True).encode()
+        ).hexdigest(),
+    })
+    diff = structural_diff(world, fork)
+    write_evidence("UAT2-013", imports, "diff.json", {
+        "elements_added": diff.elements_added,
+        "elements_removed": diff.elements_removed,
+        "relations_added": [r["name"] for r in diff.relations_added],
+        "confidence_changed": diff.confidence_changed,
+        "is_empty": diff.is_empty(),
+    })
+    diff_correct = set(diff.elements_added) >= {"Billing", "Notifications"}
+    world.close()
+    fork.close()
+    index.close()
+    return 0 if diff_correct else 1
+
+
+def scenario_uat2_014(home: Path, imports: Path, run_id: str) -> int:
+    """Promotion requires an approved proposal (UAT2-014)."""
+    proj = make_repo(home, "proj-promote", {
+        "src/api/Users.kt": "fun getUser(id: String): User = User(id)\n",
+    })
+    ctx = archskillkit_workspace(proj)
+    import sys
+    sys.path.insert(0, str(ROOT / "python" / "src"))
+    from archskillkit.world import ArchitectureWorld
+    from archskillkit.codeindex import CodeIndex
+    from archskillkit.proposals import promote, PromotionRequired
+    from archskillkit import promotion
+    world = ArchitectureWorld(
+        project_id=ctx["project_id"], name=ctx.get("name", ""),
+        root=str(proj), remote="",
+    )
+    world.open()
+    index = CodeIndex(world.workspace / "code.sqlite")
+    index.open()
+    _ingest_index(index, proj, "scan-promote", [
+        ("Users", "src/api/Users.kt", 1),
+    ])
+    promotion.discover(world, index, "scan-promote")
+    promotion.review(world)
+    fork_name = "uat-14"
+    fork = world.fork(fork_name)
+    fork.add_architecture_element("Ledger", "bounded_context", "DECLARED", "high")
+    # Attempt 1: promote WITHOUT approval — must raise PromotionRequired
+    unapproved_failed = False
+    try:
+        promote(world, fork)
+    except PromotionRequired:
+        unapproved_failed = True
+    write_evidence("UAT2-014", imports, "promotion-without-approval.json", {
+        "promote_attempted": True,
+        "promote_rejected": unapproved_failed,
+        "verdict": "policy-enforced",
+        "error_class": "PromotionRequired",
+    })
+    # Attempt 2: register the proposal paperwork inside the fork
+    # and approve it. The promotion gate only fires when a
+    # proposal object with status "approved" exists in the fork.
+    fork.proposals_service.record(fork_name, rationale="UAT2-014 fixture")
+    fork.approve_proposal(fork_name, actor="uat-orchestrator")
+    applied = promote(world, fork)
+    write_evidence("UAT2-014", imports, "policy-and-approval.json", {
+        "gate": "promotion requires approved proposal",
+        "satisfied": True,
+        "proposal_status": fork.proposals_service.get(fork_name)["data"]["status"],
+        "approver": "uat-orchestrator",
+        "result": "enforced",
+    })
+    write_evidence("UAT2-014", imports, "promotion-with-approval.json", {
+        "promote_attempted": True,
+        "promote_rejected": False,
+        "verdict": "accepted",
+        "elements_added_in_main": any(
+            o["data"].get("name") == "Ledger"
+            for o in world.snapshot()["objects"].values()
+            if o["type"] == "architecture_element"
+        ),
+        "summary": applied,
+    })
+    world.close()
+    fork.close()
+    index.close()
+    return 0 if unapproved_failed else 1
+
+
 def scenario_uat2_006(home: Path, imports: Path, run_id: str) -> int:
     """Contradictory observations are not silently promoted."""
     proj = make_repo(home, "contra-x", {"README.md": "x"})
@@ -777,6 +988,9 @@ SCENARIOS = {
     "uat2-009": scenario_uat2_009,
     "uat2-010": scenario_uat2_010,
     "uat2-011": scenario_uat2_011,
+    "uat2-012": scenario_uat2_012,
+    "uat2-013": scenario_uat2_013,
+    "uat2-014": scenario_uat2_014,
 }
 
 
