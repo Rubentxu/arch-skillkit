@@ -114,6 +114,13 @@ UV_CACHE_DIR=python/.cache/uv \
   --cov=archskillkit --cov-report=term-missing --cov-fail-under=70
 '''
 
+[tasks.smoke]
+description = "Fast end-to-end smoke suite (Session A of the Real OSS plan)"
+run = '''
+export ARCHSKILLKIT_BATS_TARGET=tests/smoke.bats
+bats "${ARCHSKILLKIT_BATS_TARGET:-tests/}"
+'''
+
 [tasks.ci]
 description = "Run the same test recipe locally and in CI"
 depends = ["lint", "test:python", "test:bats"]

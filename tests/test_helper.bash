@@ -15,6 +15,44 @@ new_sandbox() {
   mkdir -p "$SB/config" "$SB/data" "$SB/state" "$SB/cache" "$SB/override" "$SB/emptybin"
 }
 
+# Resolve ast-grep from PATH or the mise-installed path. Returns the
+# absolute path or empty. Used by the smoke suite to invoke the
+# scanner binary without hard-coding the mise install location.
+find_ast_grep() {
+  if command -v ast-grep >/dev/null 2>&1; then
+    command -v ast-grep
+    return 0
+  fi
+  local guess
+  for guess in \
+    "$HOME/.local/share/mise/installs/github-ast-grep-ast-grep/"*/ast-grep \
+    "/usr/local/bin/ast-grep"; do
+    if [ -x "$guess" ]; then
+      echo "$guess"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Resolve likec4 similarly. Used by tests that validate the projection
+# output against the pinned likec4 CLI.
+find_likec4() {
+  if command -v likec4 >/dev/null 2>&1; then
+    command -v likec4
+    return 0
+  fi
+  local guess
+  for guess in \
+    "$HOME/.local/share/mise/installs/npm-likec4/"*/node_modules/.bin/likec4; do
+    if [ -x "$guess" ]; then
+      echo "$guess"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Runs workspace.sh inside the sandbox; extra args are forwarded.
 run_workspace() {
   local dir="$1"
