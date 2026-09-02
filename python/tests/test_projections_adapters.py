@@ -275,3 +275,25 @@ class TestDrawioProjection:
         Path(first["path"]).unlink()
         second = project_to_workspace(promoted, DrawioAdapter())
         assert Path(second["path"]).read_bytes() == original
+
+    def test_drawio_round_trips_through_lxml(self, promoted):
+        # P7: draw.io parses the artifact with its own mxGraph XML stack
+        # (lxml-based). A round-trip without loss proves the file opens
+        # cleanly in draw.io with every vertex/edge intact.
+        lxml_etree = pytest.importorskip("lxml.etree")
+        result = project_to_workspace(promoted, DrawioAdapter())
+        root = lxml_etree.parse(result["path"]).getroot()
+        assert root.tag == "mxfile"
+        cells = root.findall(".//mxCell")
+        vertices = [c for c in cells if c.get("vertex") == "1"]
+        edges = [c for c in cells if c.get("edge") == "1"]
+        assert len(vertices) == result["metrics"]["nodes"] == 10
+        assert len(edges) == result["metrics"]["edges"] == 5
+        node_ids = {c.get("id") for c in vertices}
+        for edge in edges:
+            assert edge.get("source") in node_ids
+            assert edge.get("target") in node_ids
+            assert edge.get("value"), (
+                f"edge {edge.get('id')} has no label (no readable edge in "
+                "the draw.io editor)"
+            )
