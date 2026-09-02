@@ -47,7 +47,7 @@ class ContextPack(BaseModel):
     source_snippets: list = Field(default_factory=list)
     uncertainties: list[str] = Field(default_factory=list)
     budget: Budget = Field(default_factory=Budget)
-    metrics: dict[str, int] = Field(default_factory=dict)
+    metrics: dict[str, float] = Field(default_factory=dict)
 
 
 def classify_intent(goal: str) -> str:
@@ -144,6 +144,13 @@ class ContextCompiler:
             uncertainties.append(
                 "no source snippets: resolved locations were unreadable")
 
+        # 7. evidence-backed relation ratio — Context KPI (V2.4 M2,
+        # docs/v2/56): how much of the served graph carries evidence
+        evidence_backed = sum(
+            1 for r in relations if (r.get("data") or {}).get("evidence_ids"))
+        evidence_density = (evidence_backed / len(relations)
+                            if relations else 0.0)
+
         pack = ContextPack(
             goal=goal,
             intent=intent,
@@ -187,6 +194,17 @@ class ContextCompiler:
                 len(pack.uncertainties) < 8:
                 pack.uncertainties.append(
                     f"low confidence element: {el['data']['name']}")
+
+        # 9. pack-level KPIs (V2.4 M2, docs/v2/56 §KPIs): served size and
+        # density, measured on the finished pack. Bytes measure the
+        # served payload with the metrics block excluded — the KPIs are
+        # diagnostics, not context, and excluding them keeps the
+        # measurement from feeding back into itself. Tokens are a
+        # documented ~4 chars/token estimate, never a promise.
+        pack_bytes = len(pack.model_dump_json(exclude={"metrics"}))
+        pack.metrics["pack_bytes"] = float(pack_bytes)
+        pack.metrics["pack_tokens"] = float(pack_bytes // 4)
+        pack.metrics["evidence_density"] = evidence_density
         return pack
 
     # ---- pipeline steps -------------------------------------------------
