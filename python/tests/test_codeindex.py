@@ -303,6 +303,57 @@ class TestScanLifecycle:
         b.close()
 
 
+class TestGenerationChangeDetection:
+    """changed_files + recent_delta_names — deterministic ranking inputs
+    for the Context Compiler (docs/v2/46 camino siguiente)."""
+
+    def test_first_generation_has_no_changes_or_delta(self, index):
+        assert index.changed_files() == []
+        assert index.recent_delta_names() == frozenset()
+
+    def test_same_run_reingest_does_not_rotate_generation(self, index):
+        ag = ndjson(outline_record("outline.kt.class", "Alpha", "a.kt", 0, "Kotlin"))
+        index.ingest_astgrep(ag, scan_run_id="r1", scan_root=FX_ROOT)
+        index.ingest_astgrep(ag, scan_run_id="r1", scan_root=FX_ROOT)
+        assert index.changed_files() == []
+        assert index.recent_delta_names() == frozenset()
+
+    def test_changed_files_reports_modified_added_removed(self, index):
+        gen1 = ndjson(
+            outline_record("outline.kt.class", "Alpha", "a.kt", 0, "Kotlin"),
+            outline_record("outline.kt.class", "Beta", "b.kt", 0, "Kotlin"),
+        )
+        index.ingest_astgrep(gen1, scan_run_id="g1", scan_root=FX_ROOT)
+        gen2 = ndjson(
+            outline_record("outline.kt.class", "Alpha2", "a.kt", 0, "Kotlin"),
+            outline_record("outline.kt.class", "Gamma", "c.kt", 0, "Kotlin"),
+        )
+        index.ingest_astgrep(gen2, scan_run_id="g2", scan_root=FX_ROOT)
+        assert index.changed_files() == ["a.kt", "b.kt", "c.kt"]
+
+    def test_recent_delta_names_cover_added_edges_only(self, index):
+        gen1_outline = ndjson(
+            outline_record("outline.kt.class", "Alpha", "a.kt", 0, "Kotlin"))
+        index.ingest_astgrep(gen1_outline, scan_run_id="g1", scan_root=FX_ROOT)
+        index.ingest_semgrep(
+            json.dumps({"results": [
+                semgrep_result("spring.endpoint", str(FX_ROOT / "a.kt"), 1)]}),
+            scan_run_id="g1", scan_root=FX_ROOT)
+        gen2_outline = ndjson(
+            outline_record("outline.kt.class", "Alpha", "a.kt", 0, "Kotlin"),
+            outline_record("outline.kt.class", "Gamma", "c.kt", 0, "Kotlin"),
+        )
+        index.ingest_astgrep(gen2_outline, scan_run_id="g2", scan_root=FX_ROOT)
+        index.ingest_semgrep(
+            json.dumps({"results": [
+                semgrep_result("spring.endpoint", str(FX_ROOT / "a.kt"), 1),
+                semgrep_result("spring.endpoint", str(FX_ROOT / "c.kt"), 1)]}),
+            scan_run_id="g2", scan_root=FX_ROOT)
+        names = index.recent_delta_names()
+        assert "Gamma" in names
+        assert "Alpha" not in names
+
+
 class TestQueries:
     """Synthetic call graph:
 

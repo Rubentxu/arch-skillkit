@@ -98,9 +98,16 @@ class ContextCompiler:
                      if e["id"] in {r["source"] for r in relations}
                      | {r["target"] for r in relations}
                      and e not in elements]
+        # 3b. recency signals — previous→current scan delta (docs/v2/46
+        # camino siguiente): recent graph delta + changed-file proximity
+        recent_names = frozenset(
+            n.lower() for n in self.index.recent_delta_names())
+        changed_files = frozenset(self.index.changed_files())
+        evidence_files = self._evidence_files(relations)
         elements = self._ranked(
             elements + neighbors, seeds=seed_ids, goal=goal,
-            relations=relations)
+            relations=relations, recent_names=recent_names,
+            changed_files=changed_files, evidence_files=evidence_files)
 
         # 8. budget: nodes first, then relations among the kept nodes
         elements = elements[:budget.max_nodes]
@@ -198,15 +205,22 @@ class ContextCompiler:
         return matched
 
     @staticmethod
-    @staticmethod
     def _ranked(elements: list[dict], *, seeds: set[str], goal: str,
-                relations: list[dict]) -> list[dict]:
+                relations: list[dict],
+                recent_names: frozenset[str] = frozenset(),
+                changed_files: frozenset[str] = frozenset(),
+                evidence_files: dict[str, frozenset[str]] | None = None,
+                ) -> list[dict]:
         """Deterministic relevance ranking (docs/v2/46, review P2):
         graph distance (seeds first), goal-term match, origin and
-        confidence, centrality (relation degree). Name as final
+        confidence, centrality (relation degree), evidence count, recent
+        graph delta (elements named by the previous→current scan diff)
+        and changed-file proximity (elements whose relation evidence
+        lives in files changed between generations). Name as final
         tiebreak keeps runs identical under replay."""
         import re
 
+        evidence_files = evidence_files or {}
         goal_terms = set(re.findall(r"\w+", goal.lower()))
         degree: dict[str, int] = {}
         evidence: dict[str, int] = {}
@@ -229,6 +243,10 @@ class ContextCompiler:
                 s += 50
             elif any(term in name for term in goal_terms):
                 s += 25
+            if name in recent_names:
+                s += 40
+            if evidence_files.get(e["id"], frozenset()) & changed_files:
+                s += 30
             s += origin_rank.get(data.get("origin"), 0) * 3
             s += conf_rank.get(data.get("confidence"), 0) * 2
             s += min(degree.get(e["id"], 0), 5) * 2
@@ -236,6 +254,23 @@ class ContextCompiler:
             return (-s, data["name"])
 
         return sorted(elements, key=score)
+
+    def _evidence_files(self, relations: list[dict]) -> dict[str, frozenset[str]]:
+        """Element id → evidence file paths, attributed to both endpoints
+        of each relation carrying evidence (changed-file proximity)."""
+        out: dict[str, set[str]] = {}
+        for rel in relations:
+            for ref in (rel["data"] or {}).get("evidence_ids", []):
+                try:
+                    obj = self.world.get_object(ref)
+                except KeyError:
+                    continue
+                file_path = obj["data"].get("file")
+                if not file_path:
+                    continue
+                for endpoint in (rel["source"], rel["target"]):
+                    out.setdefault(endpoint, set()).add(file_path)
+        return {k: frozenset(v) for k, v in out.items()}
 
     def _relations_touching(self, ids: set[str]) -> list[dict]:
         return [r for r in self.world.architecture_relations()

@@ -13,10 +13,32 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from archskillkit.codeindex import CodeIndex
 from archskillkit.context import Budget, ContextCompiler, classify_intent
 from archskillkit.promotion import discover
+from archskillkit.world import ArchitectureWorld
 
 HTTP_KT = "kotlin-spring/src/main/kotlin/demo/infra/Http.kt"
+
+
+def _element(elem_id: str, name: str) -> dict:
+    return {"id": elem_id, "data": {"name": name, "kind": "component",
+                                    "origin": "DETECTED", "confidence": "high"}}
+
+
+def _outline(name: str, file: str, root: Path) -> dict:
+    return {"ruleId": "outline.kt.class", "text": name,
+            "file": str(root / file),
+            "range": {"start": {"line": 0, "column": 0},
+                      "end": {"line": 0, "column": 10}},
+            "lines": f"{name}()", "language": "Kotlin",
+            "metaVariables": {"single": {}, "multi": {}}}
+
+
+def _semgrep(path: str, line: int) -> dict:
+    return {"check_id": "spring.endpoint", "path": path,
+            "start": {"line": line, "col": 1}, "end": {"line": line, "col": 30},
+            "extra": {"message": "m", "metavars": {}, "lines": "x"}}
 
 
 @pytest.fixture()
@@ -217,3 +239,67 @@ class TestDeterminism:
         world, index = repo_with_source
         pack = ContextCompiler(world, index).compile(goal="overview")
         assert json.loads(pack.model_dump_json())["goal"] == "overview"
+
+
+class TestRelevanceSignals:
+    """Recent graph delta + changed-file proximity (docs/v2/46,
+    camino siguiente) — the remaining review P2 ranking inputs."""
+
+    def test_recent_delta_name_boosts_element(self):
+        elements = [_element("a", "OrderService"), _element("b", "LegacyBatch")]
+        ranked = ContextCompiler._ranked(
+            elements, seeds=set(), goal="", relations=[],
+            recent_names=frozenset({"orderservice"}))
+        assert ranked[0]["data"]["name"] == "OrderService"
+
+    def test_changed_file_proximity_boosts_element(self):
+        elements = [_element("a", "OrderService"), _element("b", "LegacyBatch")]
+        ranked = ContextCompiler._ranked(
+            elements, seeds=set(), goal="", relations=[],
+            changed_files=frozenset({"src/OrderService.kt"}),
+            evidence_files={"a": frozenset({"src/OrderService.kt"})})
+        assert ranked[0]["data"]["name"] == "OrderService"
+
+    def test_without_signals_name_tiebreak_holds(self):
+        elements = [_element("a", "Beta"), _element("b", "Alpha")]
+        ranked = ContextCompiler._ranked(elements, seeds=set(), goal="",
+                                         relations=[])
+        assert [e["id"] for e in ranked] == ["b", "a"]
+
+    def test_delta_beats_partial_goal_match_but_not_exact(self):
+        ranked = ContextCompiler._ranked(
+            [_element("a", "OrderService"), _element("b", "PaymentGateway"),
+             _element("c", "Payment")],
+            seeds=set(), goal="payment", relations=[],
+            recent_names=frozenset({"orderservice"}))
+        assert [e["id"] for e in ranked] == ["c", "a", "b"]
+
+    def test_compile_ranks_recent_delta_element_first(self, repo):
+        world = ArchitectureWorld.for_repo(repo).open()
+        world.ensure_project()
+        index = CodeIndex(world.workspace / "code.sqlite").open()
+        try:
+            world.add_architecture_element("Alpha", "component",
+                                           "DETECTED", "high")
+            world.add_architecture_element("Gamma", "component",
+                                           "DETECTED", "high")
+            gen1 = json.dumps(_outline("Alpha", "a.kt", repo)) + "\n"
+            index.ingest_astgrep(gen1, scan_run_id="g1", scan_root=repo)
+            compiler = ContextCompiler(world, index, source_root=repo)
+            first = compiler.compile(goal="overview")
+            assert [e["name"] for e in first.architecture["elements"]] == \
+                ["Alpha", "Gamma"]  # tiebreak: alphabetical
+
+            gen2 = "\n".join(json.dumps(r) for r in (
+                _outline("Alpha", "a.kt", repo),
+                _outline("Gamma", "c.kt", repo))) + "\n"
+            index.ingest_astgrep(gen2, scan_run_id="g2", scan_root=repo)
+            index.ingest_semgrep(json.dumps({"results": [
+                _semgrep(str(repo / "c.kt"), 1)]}),
+                scan_run_id="g2", scan_root=repo)
+            second = compiler.compile(goal="overview")
+            assert [e["name"] for e in second.architecture["elements"]] == \
+                ["Gamma", "Alpha"]  # recent graph delta boost
+        finally:
+            index.close()
+            world.close()

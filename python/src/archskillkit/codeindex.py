@@ -538,6 +538,13 @@ class CodeIndex:
             (scan_run_id,)).fetchall()
         return [dict(r) for r in rows]
 
+    def files_of_run(self, scan_run_id: str) -> list[dict]:
+        """All files of a scan run (path, language, content hash)."""
+        rows = self._db.execute(
+            "SELECT * FROM files WHERE scan_run_id=? ORDER BY path",
+            (scan_run_id,)).fetchall()
+        return [dict(r) for r in rows]
+
     def symbol_locations(self) -> set[tuple[str, int]]:
         """Every (path, start_line) the current index knows about — the
         freshness reference for stale-model detection (M2-F3)."""
@@ -582,6 +589,41 @@ class CodeIndex:
         finally:
             prev_index.close()
         return out
+
+    def changed_files(self) -> list[str]:
+        """Repo-relative paths changed between the previous generation
+        snapshot and the current one — modified (content hash differs),
+        added and removed files; sorted. Empty on the first generation.
+        Deterministic input for context ranking (changed-file proximity,
+        docs/v2/46 camino siguiente)."""
+        prev_run = self._meta_get("previous_generation_run")
+        current = self._meta_get("last_generation_run")
+        prev_path = self.db_path.with_name("code.prev.sqlite")
+        if not prev_run or not current or not prev_path.exists():
+            return []
+        prev_index = CodeIndex(prev_path).open()
+        try:
+            prev = {r["path"]: r["hash"]
+                    for r in prev_index.files_of_run(prev_run)}
+        finally:
+            prev_index.close()
+        current_files = {r["path"]: r["hash"]
+                         for r in self.files_of_run(current)}
+        changed = [p for p, h in current_files.items() if prev.get(p) != h]
+        removed = [p for p in prev if p not in current_files]
+        return sorted(changed + removed)
+
+    def recent_delta_names(self) -> frozenset[str]:
+        """Plain symbol names touched by the previous→current semantic
+        edge delta (added + removed), parsed from the internal qualified
+        format. Deterministic input for context ranking (recent graph
+        delta). Empty on the first generation."""
+        delta = self.diff_previous_generation()
+        names: set[str] = set()
+        for key in delta["added"] + delta["removed"]:
+            for qualified in (key[1], key[2]):
+                names.add(qualified.rsplit("::", 1)[-1].rsplit("@", 1)[0])
+        return frozenset(names)
 
     # ---- internals ------------------------------------------------------
 
