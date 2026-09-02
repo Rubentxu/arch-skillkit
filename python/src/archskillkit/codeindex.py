@@ -427,6 +427,15 @@ class CodeIndex:
                 " ORDER BY s.name LIMIT ?", (like, like, limit)).fetchall()
         return [dict(r) for r in rows]
 
+    def symbols_in_file(self, path: str, limit: int = 500) -> list[dict]:
+        """All symbols of one repo-relative file, name-ordered
+        (V2.4 impact traversal, read-only)."""
+        rows = self._db.execute(
+            "SELECT s.*, f.path AS path FROM symbols s JOIN files f"
+            " ON f.id=s.file_id WHERE f.path=? ORDER BY s.name LIMIT ?",
+            (path, limit)).fetchall()
+        return [dict(r) for r in rows]
+
     def resolve(self, ref: str | int) -> dict:
         """Resolve an id, a qualified name (`path::name@line`), a
         `path::name` prefix, or a bare unique name."""

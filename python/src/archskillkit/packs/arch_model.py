@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Literal
 
 from activegraph.packs import ObjectType, Pack, RelationType
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from archskillkit.packs.arch_core import Confidence, Origin
 
@@ -64,13 +64,32 @@ class ProposalData(BaseModel):
     created_at: str = ""
 
 
+GapImpact = Literal["low", "medium", "high"]
+GapStatus = Literal["OPEN", "INVESTIGATING", "RESOLVED", "DEFERRED"]
+
+
+class KnowledgeGapData(BaseModel):
+    """An open question about the architecture (V2.4 M2,
+    design/schemas/v2.4/knowledge-gap.yaml). The ActiveGraph object id
+    IS the schema-level `id`. Persisted in the world so gaps are
+    auditable through the event log (ADR-0015)."""
+
+    question: str
+    impact: GapImpact = "medium"
+    status: GapStatus = "OPEN"
+    related_refs: list[str] = Field(default_factory=list)
+    evidence_needed: list[str] = Field(default_factory=list)
+    candidate_answers: list[dict] = Field(default_factory=list)
+
+
 def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] = (),
               description: str = "") -> RelationType:
     return RelationType(name=name, source_types=source, target_types=target,
                         description=description)
 
 
-ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule", "proposal")
+ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule", "proposal",
+                           "knowledge_gap")
 
 ARCH_MODEL_RELATION_TYPES = (
     "exposes", "consumes", "depends_on", "realizes",
@@ -79,8 +98,8 @@ ARCH_MODEL_RELATION_TYPES = (
 
 pack = Pack(
     name="arch_model",
-    version="0.3.0",
-    description="ArchSkillKit architecture elements, rules, proposals and relations.",
+    version="0.4.0",
+    description="ArchSkillKit architecture elements, rules, proposals, gaps and relations.",
     object_types=(
         ObjectType(name="architecture_element", schema=ArchitectureElementData,
                    description="A curated architectural building block."),
@@ -88,6 +107,8 @@ pack = Pack(
                    description="A deterministic boundary rule (drift detector input)."),
         ObjectType(name="proposal", schema=ProposalData,
                    description="An architectural proposal on a forked run."),
+        ObjectType(name="knowledge_gap", schema=KnowledgeGapData,
+                   description="An open question about the architecture (V2.4 M2)."),
     ),
     relation_types=(
         # Endpoints are typed at the object level ('architecture_element');

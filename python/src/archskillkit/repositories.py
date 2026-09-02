@@ -123,6 +123,46 @@ class ArchitectureRepository:
         self.world.graph.remove_object(element_id)
 
 
+class KnowledgeGapService:
+    """Open questions about the architecture, persisted as world
+    objects (V2.4 M2, ADR-0015): recording, listing and status
+    transitions are event-sourced and replayable. Dedup: an exact
+    OPEN question is returned, never duplicated."""
+
+    OPEN = "OPEN"
+
+    def __init__(self, world):
+        self.world = world
+
+    def record(self, question: str, impact: str = "medium",
+               related_refs: list[str] | None = None,
+               evidence_needed: list[str] | None = None) -> str:
+        for gap in self.world.find_objects("knowledge_gap",
+                                           question=question):
+            if gap["data"].get("status") == self.OPEN:
+                return gap["id"]
+        return self.world.graph.add_object("knowledge_gap", {
+            "question": question,
+            "impact": impact,
+            "status": self.OPEN,
+            "related_refs": list(related_refs or []),
+            "evidence_needed": list(evidence_needed or []),
+            "candidate_answers": [],
+        }).id
+
+    def set_status(self, gap_id: str, status: str) -> None:
+        gap = self.world.get_object(gap_id)
+        if gap["type"] != "knowledge_gap":
+            raise PromotionError(f"{gap_id} is not a knowledge gap")
+        self.world.graph.patch_object(gap_id, {"status": status})
+
+    def list(self, status: str | None = None) -> list[dict]:
+        gaps = self.world.find_objects("knowledge_gap")
+        if status is not None:
+            gaps = [g for g in gaps if g["data"].get("status") == status]
+        return sorted(gaps, key=lambda g: g["id"])
+
+
 class ArchitecturePolicyService:
     """Boundary rules, drift and findings persistence (Phase F, ADR-0022)."""
 

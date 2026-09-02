@@ -36,6 +36,7 @@ from archskillkit.repositories import (
     ArchitecturePolicyService,
     ArchitectureRepository,
     ClaimRepository,
+    KnowledgeGapService,
     ProposalService,
 )
 
@@ -79,6 +80,7 @@ class ArchitectureWorld:
         self.claims = ClaimRepository(self)
         self.architecture = ArchitectureRepository(self)
         self.policies = ArchitecturePolicyService(self)
+        self.gaps = KnowledgeGapService(self)
         self.proposals_service = ProposalService(self)
 
     # ---- construction -------------------------------------------------
@@ -289,6 +291,21 @@ class ArchitectureWorld:
     def proposals(self) -> list[dict]:
         """Recorded proposals — governance read."""
         return self.find_objects("proposal")
+
+    # ---- knowledge gaps (V2.4 M2) --------------------------------------
+
+    def record_knowledge_gap(self, question: str, impact: str = "medium",
+                             related_refs: list[str] | None = None,
+                             evidence_needed: list[str] | None = None) -> str:
+        return self.gaps.record(question, impact=impact,
+                                related_refs=related_refs,
+                                evidence_needed=evidence_needed)
+
+    def knowledge_gaps(self, status: str | None = None) -> list[dict]:
+        return self.gaps.list(status=status)
+
+    def set_knowledge_gap_status(self, gap_id: str, status: str) -> None:
+        self.gaps.set_status(gap_id, status)
 
     def replay_verify(self) -> ReplayReport:
         """Prove the log reproduces current state with a fresh projection."""
