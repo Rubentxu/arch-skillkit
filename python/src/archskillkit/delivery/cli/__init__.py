@@ -10,6 +10,7 @@ arrives with M1.
 
 from archskillkit.delivery.cli import (
     ask,
+    delta,
     explain,
     gate,
     schema,
@@ -18,7 +19,7 @@ from archskillkit.delivery.cli import (
     viewers,
 )
 
-COMMANDS = (status, explain, viewers, schema, view, ask, gate)
+COMMANDS = (status, explain, viewers, schema, view, ask, delta, gate)
 
-__all__ = ["COMMANDS", "ask", "explain", "gate", "schema", "status",
-           "view", "viewers"]
+__all__ = ["COMMANDS", "ask", "delta", "explain", "gate", "schema",
+           "status", "view", "viewers"]
