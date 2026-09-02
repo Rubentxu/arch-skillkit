@@ -85,12 +85,22 @@ class TestLikeC4Projection:
 
     def test_likec4_dsl_builds_with_likec4_cli(self, promoted):
         # P7: the adapter emits a `.c4` model the likec4 CLI parses,
-        # validates, and builds. Skip when the CLI is absent — the
-        # standalone validate_likec4.py script records the missing
-        # tool in reconciliation.json and continues.
+        # validates, and builds. Skip when the CLI is absent or the
+        # mise shim is broken — the standalone validate_likec4.py
+        # script records the missing/broken tool in reconciliation.json
+        # and continues.
         likec4 = shutil.which("likec4")
         if not likec4:
             pytest.skip("likec4 CLI not installed")
+        # Probe the binary: a mise shim left over after `mise use` was
+        # rolled back will resolve to a path that exits non-zero with
+        # "is not a valid shim". Treat that the same as missing.
+        probe = subprocess.run(
+            [likec4, "--version"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        if probe.returncode != 0:
+            pytest.skip(f"likec4 CLI not usable (rc={probe.returncode}): {probe.stderr[-200:]}")
         result = project_to_workspace(promoted, LikeC4Adapter())
         model_path = Path(result["path"])
         with tempfile.TemporaryDirectory(prefix="ark-test-likec4-") as tmp:
