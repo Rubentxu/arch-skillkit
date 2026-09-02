@@ -384,6 +384,160 @@ def scenario_uat2_005(home: Path, imports: Path, run_id: str) -> int:
     return 0  # PASS as long as the reviewer ran
 
 
+def _ingest_index(index: CodeIndex, proj: Path, scan_id: str,
+                  symbols: list[tuple[str, str, int]]) -> None:
+    """Build a small ast-grep NDJSON payload and ingest it into the
+    Code Index. Each entry is the shape the real scanner emits:
+    ``text``, ``ruleId``, ``file``, ``range`` and ``lines``.
+    """
+    lines = []
+    for sym, path, line_no in symbols:
+        rec = {
+            "text": sym,
+            "ruleId": f"fixture-{sym}",
+            "file": path,
+            "range": {
+                "start": {"line": line_no, "column": 0},
+                "end": {"line": line_no, "column": 20},
+            },
+            "lines": f"fun {sym}() = Unit",
+            "language": "kotlin",
+            "severity": "info",
+        }
+        lines.append(json.dumps(rec))
+    payload = "\n".join(lines) + "\n"
+    index.ingest_astgrep(payload, scan_id, proj)
+
+
+def scenario_uat2_007(home: Path, imports: Path, run_id: str) -> int:
+    """Context Compiler enforces node, edge and source-line budgets."""
+    files = {
+        "src/api/Users.kt": ("fun getUser(id: String): User = User(id)\n"
+                              + "fun listUsers(): List<User> = emptyList()\n"
+                              + "data class User(val id: String, val name: String)\n"),
+        "src/api/Orders.kt": ("fun getOrder(id: String): Order = Order(id)\n"
+                               + "fun listOrders(): List<Order> = emptyList()\n"),
+        "src/db/Postgres.kt": ("fun connect(url: String): Boolean = true\n"),
+        "src/queue/Jobs.kt": ("fun enqueue(name: String): Boolean = true\n"),
+    }
+    proj = make_repo(home, "ctx-budget", files)
+    ctx = archskillkit_workspace(proj)
+    import sys
+    sys.path.insert(0, str(ROOT / "python" / "src"))
+    from archskillkit.world import ArchitectureWorld
+    from archskillkit.codeindex import CodeIndex
+    from archskillkit.context import ContextCompiler, Budget
+    world = ArchitectureWorld(
+        project_id=ctx["project_id"], name=ctx.get("name", ""),
+        root=str(proj), remote="",
+    )
+    world.open()
+    index = CodeIndex(world.workspace / "code.sqlite")
+    index.open()
+    _ingest_index(index, proj, "scan-budget", [
+        ("Users", "src/api/Users.kt", 1),
+        ("Orders", "src/api/Orders.kt", 1),
+        ("Postgres", "src/db/Postgres.kt", 1),
+        ("Jobs", "src/queue/Jobs.kt", 1),
+    ])
+    # Tight budgets to make the budget enforcement observable.
+    budget = Budget(max_nodes=2, max_edges=2, max_source_lines=3)
+    request = {
+        "goal": "explain the API and persistence layer",
+        "subject": "Users",
+        "budget": budget.model_dump(),
+    }
+    write_evidence("UAT2-007", imports, "request.json", request)
+    compiler = ContextCompiler(world, index, source_root=proj)
+    pack = compiler.compile("explain the API and persistence layer",
+                            subject="Users", budget=budget)
+    write_evidence("UAT2-007", imports, "context-pack.json",
+                   json.loads(pack.model_dump_json()))
+    n_elements = len(pack.architecture.get("elements", []))
+    n_relations = len(pack.architecture.get("relations", []))
+    n_lines = 0
+    for s in pack.source_snippets:
+        text = s.get("text")
+        if isinstance(text, str):
+            n_lines += len(text.splitlines())
+        elif isinstance(text, list):
+            n_lines += len(text)
+    within_budget = (
+        n_elements <= budget.max_nodes
+        and n_relations <= budget.max_edges
+        and n_lines <= budget.max_source_lines
+    )
+    write_evidence("UAT2-007", imports, "budget-check.json", {
+        "within_budget": within_budget,
+        "max_nodes": budget.max_nodes, "actual_nodes": n_elements,
+        "max_edges": budget.max_edges, "actual_edges": n_relations,
+        "max_source_lines": budget.max_source_lines,
+        "actual_source_lines": n_lines,
+    })
+    world.close()
+    index.close()
+    return 0 if within_budget else 1
+
+
+def scenario_uat2_008(home: Path, imports: Path, run_id: str) -> int:
+    """Context Compiler reads source only from resolved locations."""
+    files = {
+        "src/api/Users.kt": ("fun getUser(id: String): User = User(id)\n"),
+        "src/api/Orders.kt": ("fun getOrder(id: String): Order = Order(id)\n"),
+        # A file that MUST NOT be read by the compiler — the index
+        # does not index it, so it is not in the resolved set.
+        "secrets/private.txt": "API_KEY=supersecret\n",
+    }
+    proj = make_repo(home, "ctx-readpolicy", files)
+    ctx = archskillkit_workspace(proj)
+    import sys
+    sys.path.insert(0, str(ROOT / "python" / "src"))
+    from archskillkit.world import ArchitectureWorld
+    from archskillkit.codeindex import CodeIndex
+    from archskillkit.context import ContextCompiler
+    world = ArchitectureWorld(
+        project_id=ctx["project_id"], name=ctx.get("name", ""),
+        root=str(proj), remote="",
+    )
+    world.open()
+    index = CodeIndex(world.workspace / "code.sqlite")
+    index.open()
+    _ingest_index(index, proj, "scan-readpolicy", [
+        ("Users", "src/api/Users.kt", 1),
+        ("Orders", "src/api/Orders.kt", 1),
+    ])
+    compiler = ContextCompiler(world, index, source_root=proj)
+    before = compiler._source_file_reads
+    pack = compiler.compile("explain the API surface", subject="Users")
+    after = compiler._source_file_reads
+    symbols = index.search_symbol("Users", limit=10) + \
+              index.search_symbol("Orders", limit=10)
+    resolved = sorted({s["path"] for s in symbols})
+    write_evidence("UAT2-008", imports, "resolved-locations.json", {
+        "resolved_paths": resolved,
+    })
+    resolved_set = set(resolved)
+    wrote_secrets = "secrets/private.txt" in resolved_set
+    source_reads = after - before
+    write_evidence("UAT2-008", imports, "source-read-trace.json", {
+        "source_file_reads": source_reads,
+        "files_in_resolved_set": resolved,
+        "files_NOT_in_resolved_set": [p for p in ["secrets/private.txt"]
+                                       if p not in resolved_set],
+    })
+    write_evidence("UAT2-008", imports, "read-policy-check.json", {
+        "subset_assertion": not wrote_secrets and source_reads >= 1,
+        "secrets_path_eligible": wrote_secrets,
+        "reads_performed": source_reads,
+        "resolved_paths_count": len(resolved),
+        "verdict": ("compliant" if (not wrote_secrets and source_reads >= 1)
+                    else "policy-violation"),
+    })
+    world.close()
+    index.close()
+    return 0 if (not wrote_secrets and source_reads >= 1) else 1
+
+
 def scenario_uat2_006(home: Path, imports: Path, run_id: str) -> int:
     """Contradictory observations are not silently promoted."""
     proj = make_repo(home, "contra-x", {"README.md": "x"})
@@ -452,6 +606,8 @@ SCENARIOS = {
     "uat2-004": scenario_uat2_004,
     "uat2-005": scenario_uat2_005,
     "uat2-006": scenario_uat2_006,
+    "uat2-007": scenario_uat2_007,
+    "uat2-008": scenario_uat2_008,
 }
 
 

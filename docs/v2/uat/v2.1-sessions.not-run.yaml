@@ -88,19 +88,25 @@ sessions:
 - scenario_id: UAT2-007
   feature_id: F-03
   requirement_ref: UAT2-007
-  execution_state: NOT_RUN
-  verdict: NOT_RUN
-  session_id: null
-  manifest_id: null
-  evidence_refs: []
+  execution_state: EXECUTED
+  verdict: PASS
+  session_id: UAT2-007
+  manifest_id: UAT2-007
+  evidence_refs:
+  - artifacts/uat/v2.1/sessions/UAT2-007/evidence/orchestrator/budget-check.json
+  - artifacts/uat/v2.1/sessions/UAT2-007/evidence/orchestrator/context-pack.json
+  - artifacts/uat/v2.1/sessions/UAT2-007/evidence/orchestrator/request.json
 - scenario_id: UAT2-008
   feature_id: F-03
   requirement_ref: UAT2-008
-  execution_state: NOT_RUN
-  verdict: NOT_RUN
-  session_id: null
-  manifest_id: null
-  evidence_refs: []
+  execution_state: EXECUTED
+  verdict: PASS
+  session_id: UAT2-008
+  manifest_id: UAT2-008
+  evidence_refs:
+  - artifacts/uat/v2.1/sessions/UAT2-008/evidence/orchestrator/read-policy-check.json
+  - artifacts/uat/v2.1/sessions/UAT2-008/evidence/orchestrator/resolved-locations.json
+  - artifacts/uat/v2.1/sessions/UAT2-008/evidence/orchestrator/source-read-trace.json
 - scenario_id: UAT2-009
   feature_id: F-04
   requirement_ref: UAT2-009
