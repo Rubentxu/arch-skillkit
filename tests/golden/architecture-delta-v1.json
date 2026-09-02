@@ -1,0 +1,35 @@
+{
+  "base_snapshot": "snap-base",
+  "drift": {
+    "delta": 0,
+    "findings_base": 0,
+    "findings_head": 0
+  },
+  "elements": {
+    "added": [
+      "Notifications"
+    ],
+    "changed": [
+      "Billing",
+      "Legacy Cron"
+    ],
+    "removed": []
+  },
+  "head_snapshot": "snap-head",
+  "policy_impacts": [],
+  "relations": {
+    "added": [
+      "Orders API -[exposes]-> Notifications"
+    ],
+    "changed": [],
+    "removed": [
+      "Orders API -[depends_on]-> Billing"
+    ]
+  },
+  "schema": "arch-skillkit/architecture-delta-v1",
+  "unknowns": {
+    "base": 3,
+    "delta": -1,
+    "head": 2
+  }
+}

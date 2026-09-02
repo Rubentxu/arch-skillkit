@@ -162,13 +162,13 @@ class RunLedger:
             raise LedgerError(f"unknown run id: {run_id}")
         return record
 
-    def list(self, limit: int = 50, *,
+    def list(self, limit: int | None = 50, *,
              status: RunStatus | None = None) -> list[RunRecord]:
         out: list[RunRecord] = []
         for record in self._store.iter_newest_first():
             if status is not None and record.status != status:
                 continue
             out.append(record)
-            if len(out) >= limit:
+            if limit is not None and len(out) >= limit:
                 break
         return out
