@@ -1,0 +1,28 @@
+$id: arch-skillkit/inference-candidate-v1
+type: object
+required: [id, snapshot_id, origin, confidence, status, statement, evidence_refs, provenance]
+properties:
+  id: {type: string}
+  snapshot_id: {type: string}
+  origin: {const: INFERRED}
+  confidence: {type: number, minimum: 0, maximum: 1}
+  status:
+    enum: [CANDIDATE, REVIEW_REQUIRED, ACCEPTED, REJECTED, SUPERSEDED, STALE]
+  statement: {type: object}
+  evidence_refs:
+    type: array
+    items: {type: string}
+  uncertainties:
+    type: array
+    items: {type: string}
+  provenance:
+    type: object
+    required: [agent_run_id, context_pack_id, prompt_revision]
+    properties:
+      agent_run_id: {type: string}
+      context_pack_id: {type: string}
+      prompt_revision: {type: string}
+      prompt_hash: {type: string}
+      skill_revision: {type: [string, 'null']}
+      model: {type: [string, 'null']}
+additionalProperties: false

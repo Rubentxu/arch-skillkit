@@ -44,21 +44,32 @@ sequences):
 | "Is the architecture healthy? Any drift/boundary broken?" | **watch** | watch recipe |
 | "What if we changed X → Y?" (proposal) | **proposal** | proposal recipe |
 | "Detect framework X / new pattern Y" (extend scanners) | **extend-detection** | `ast-grep` + `semgrep` skills |
+| "What's the current state / any suggestions?" (V2.4) | **status** | `docs/v2/49-v2.4-summary.md` |
+| "Investigate how X really works" (LLM-assisted, evidence-first) | **investigate** | `arch-investigation` skill; `docs/v2/53-v2.4-agent-llm-skills.md` |
+| "What breaks if we change X?" (impact simulation) | **impact** | `docs/v2/57-v2.4-governance-impact-simulation.md` |
+| "Enrich this projection with candidate knowledge" | **projection-enrichment** | `arch-projection-intelligence` skill |
+| "Simulate / review this architectural change" | **simulate** | `arch-reviewer` skill; `docs/v2/57-v2.4-governance-impact-simulation.md` |
+| "Turn repeated LLM inferences into deterministic sensors" | **sensor-distillation** | `arch-sensor-distillation` skill |
 | "Build on the architecture programmatically" | **develop** | `docs/v2/23-implementation-sequence.md`, `docs/v2/20-backlog-v2.md` |
 
 ## Context-efficiency rules
 
-1. **CLI JSON before raw payloads, raw payloads before source, source
-   last.** `search-code` / `index-stats` / `state` / `context` answer
-   most questions without opening a file of the repository.
-2. **One reference per phase.** Never load a skill's full references
+1. **Application capability first; CLI and MCP are equivalent
+   adapters.** Ask for a capability (`search-code`, `index-stats`,
+   `state`, `context`, …) and use whichever adapter is available — CLI
+   JSON is the default answer, raw payloads before source, source last.
+   Most questions are answered without opening a file of the repository.
+2. **LLM output is Candidate Knowledge, never Accepted Architecture**
+   (ADR-0037): proposals, enrichments and inferences enter through
+   evidence + review; contradictions block promotion.
+3. **One reference per phase.** Never load a skill's full references
    "just in case" — load the reference named by the active recipe.
-3. **Budgeted context for reasoning**: use `context --goal … --subject …`
+4. **Budgeted context for reasoning**: use `context --goal … --subject …`
    instead of dumping the world; it returns a ranked ContextPack with
    snippets already clipped to the budget.
-4. **Re-scan only when detection changed.** If the question can be
+5. **Re-scan only when detection changed.** If the question can be
    answered from the existing `code.sqlite` / world, do not scan again.
-5. **Delegate depth, not breadth**: when a rule needs authoring, hand
+6. **Delegate depth, not breadth**: when a rule needs authoring, hand
    over to the `ast-grep` or `semgrep` skill for that step and come back
    to the pipeline — do not inline their checklists here.
 

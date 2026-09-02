@@ -1,0 +1,24 @@
+$id: arch-skillkit/architecture-delta-v1
+type: object
+required: [base_snapshot, head_snapshot, elements, relations, unknowns, drift]
+properties:
+  base_snapshot: {type: string}
+  head_snapshot: {type: string}
+  elements:
+    type: object
+    properties:
+      added: {type: array, items: {type: string}}
+      removed: {type: array, items: {type: string}}
+      changed: {type: array, items: {type: string}}
+  relations:
+    type: object
+    properties:
+      added: {type: array, items: {type: string}}
+      removed: {type: array, items: {type: string}}
+      changed: {type: array, items: {type: string}}
+  unknowns: {type: object}
+  drift: {type: object}
+  policy_impacts:
+    type: array
+    items: {type: object}
+additionalProperties: false

@@ -1,0 +1,18 @@
+$id: arch-skillkit/action-suggestion-v1
+type: object
+required: [action_id, reason_code, parameters, preconditions, mutation_scope, risk]
+properties:
+  action_id: {type: string}
+  reason_code: {type: string}
+  parameters: {type: object}
+  preconditions:
+    type: array
+    items: {type: string}
+  mutation_scope:
+    enum: [none, runtime, workspace, proposal, accepted-world]
+  risk:
+    enum: [low, medium, high]
+  expected_effects:
+    type: array
+    items: {type: string}
+additionalProperties: false

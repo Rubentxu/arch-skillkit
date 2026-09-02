@@ -1,0 +1,20 @@
+$id: arch-skillkit/run-record-v1
+type: object
+required: [run_id, kind, project_revision, started_at, status]
+properties:
+  run_id: {type: string}
+  kind: {enum: [scan, ingest, discover, drift, project, gate, investigation, simulation]}
+  project_revision: {type: string}
+  snapshot_before: {type: [string, 'null']}
+  snapshot_after: {type: [string, 'null']}
+  started_at: {type: string}
+  finished_at: {type: [string, 'null']}
+  status: {enum: [RUNNING, PASS, FAIL, BLOCKED, CANCELLED]}
+  metrics: {type: object}
+  artifact_refs:
+    type: array
+    items: {type: string}
+  tool_revisions:
+    type: array
+    items: {type: string}
+additionalProperties: false

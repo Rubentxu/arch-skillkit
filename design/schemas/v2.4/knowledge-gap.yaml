@@ -1,0 +1,18 @@
+$id: arch-skillkit/knowledge-gap-v1
+type: object
+required: [id, question, impact, status, related_refs]
+properties:
+  id: {type: string}
+  question: {type: string}
+  impact: {enum: [low, medium, high]}
+  status: {enum: [OPEN, INVESTIGATING, RESOLVED, DEFERRED]}
+  related_refs:
+    type: array
+    items: {type: string}
+  evidence_needed:
+    type: array
+    items: {type: string}
+  candidate_answers:
+    type: array
+    items: {type: object}
+additionalProperties: false

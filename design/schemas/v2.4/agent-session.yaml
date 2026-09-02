@@ -1,0 +1,19 @@
+$id: arch-skillkit/agent-session-v1
+type: object
+required: [session_id, snapshot_id, world_revision, code_generation, policy_revision, scope, budget, status]
+properties:
+  session_id: {type: string}
+  snapshot_id: {type: string}
+  world_revision: {type: string}
+  code_generation: {type: string}
+  policy_revision: {type: string}
+  scope: {type: object}
+  budget:
+    type: object
+    properties:
+      max_estimated_tokens: {type: integer, minimum: 1}
+      max_source_lines: {type: integer, minimum: 0}
+  status:
+    enum: [ACTIVE, STALE, CLOSED]
+  created_at: {type: string}
+additionalProperties: false

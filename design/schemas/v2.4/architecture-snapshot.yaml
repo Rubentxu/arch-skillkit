@@ -1,0 +1,36 @@
+$id: arch-skillkit/architecture-snapshot-v1
+type: object
+required: [schema, snapshot_id, project_revision, code_revision, world_revision, policy_revision]
+properties:
+  schema: {const: arch-skillkit/architecture-snapshot-v1}
+  snapshot_id: {type: string}
+  project_revision:
+    type: object
+    required: [git_commit]
+    properties:
+      git_commit: {type: string}
+      dirty_digest: {type: [string, 'null']}
+  code_revision:
+    type: object
+    required: [generation]
+    properties:
+      generation: {type: string}
+      sensor_revisions:
+        type: array
+        items: {type: string}
+  world_revision:
+    type: object
+    required: [event_id, digest]
+    properties:
+      event_id: {type: string}
+      digest: {type: string}
+  policy_revision: {type: string}
+  knowledge:
+    type: object
+    properties:
+      elements: {type: integer, minimum: 0}
+      relations: {type: integer, minimum: 0}
+      evidence_coverage: {type: number, minimum: 0, maximum: 1}
+      unknowns: {type: integer, minimum: 0}
+  artifact_manifest_digest: {type: [string, 'null']}
+additionalProperties: false

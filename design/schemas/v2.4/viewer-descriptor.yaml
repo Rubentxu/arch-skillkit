@@ -1,0 +1,26 @@
+$id: arch-skillkit/viewer-descriptor-v1
+type: object
+required: [id, name, consumes, modes, capabilities]
+properties:
+  id: {type: string}
+  name: {type: string}
+  consumes:
+    type: array
+    items: {type: string}
+  modes:
+    type: array
+    items:
+      enum: [EMBEDDED, MANAGED_SERVER, LOCAL_PROCESS, WEB_HANDOFF]
+  capabilities:
+    type: object
+    required: [view, edit, round_trip]
+    properties:
+      view: {type: boolean}
+      edit: {type: boolean}
+      round_trip: {type: boolean}
+      autosave: {type: boolean, default: false}
+      semantic_links: {type: boolean, default: false}
+  probe:
+    type: object
+    additionalProperties: true
+additionalProperties: false

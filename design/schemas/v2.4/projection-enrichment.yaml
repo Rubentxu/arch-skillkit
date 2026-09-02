@@ -1,0 +1,26 @@
+$id: arch-skillkit/projection-enrichment-v1
+type: object
+required: [snapshot_id, intent, focus, overlays]
+properties:
+  snapshot_id: {type: string}
+  intent: {type: string}
+  focus:
+    oneOf:
+      - {type: string}
+      - type: array
+        items: {type: string}
+  overlays:
+    type: array
+    items:
+      enum: [confidence, evidence, drift, changes, ownership, uncertainty, policy]
+  group_by: {type: [string, 'null']}
+  highlight:
+    type: array
+    items: {type: string}
+  narrative:
+    type: array
+    items: {type: string}
+  annotations:
+    type: array
+    items: {type: object}
+additionalProperties: false

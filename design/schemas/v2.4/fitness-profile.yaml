@@ -1,0 +1,34 @@
+$id: arch-skillkit/fitness-profile-v1
+type: object
+required: [snapshot_id, dimensions]
+properties:
+  snapshot_id: {type: string}
+  dimensions:
+    type: object
+    properties:
+      freshness: {$ref: '#/$defs/dimension'}
+      evidence_coverage: {$ref: '#/$defs/dimension'}
+      unknown_coverage: {$ref: '#/$defs/dimension'}
+      drift: {$ref: '#/$defs/dimension'}
+      review_debt: {$ref: '#/$defs/dimension'}
+      policy_coverage: {$ref: '#/$defs/dimension'}
+      projection_validity: {$ref: '#/$defs/dimension'}
+      sensor_coverage: {$ref: '#/$defs/dimension'}
+      unexplained_change: {$ref: '#/$defs/dimension'}
+  aggregate:
+    type: [object, 'null']
+    properties:
+      formula_version: {type: string}
+      score: {type: number, minimum: 0, maximum: 100}
+      grade: {type: string}
+$defs:
+  dimension:
+    type: object
+    required: [status]
+    properties:
+      status: {enum: [pass, warn, fail, na]}
+      value: {}
+      evidence_refs:
+        type: array
+        items: {type: string}
+additionalProperties: false

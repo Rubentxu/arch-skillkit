@@ -18,6 +18,7 @@ tmp/
 arch-skillkit-v2.1-activegraph-python-only/
 arch-skillkit-v2.1-activegraph-python-only.zip
 arch-skillkit-v2.2-projection-applications/
+docs/arch-skillkit-v2.4-evolution/
 
 # Python (V2 domain core)
 .venv/
