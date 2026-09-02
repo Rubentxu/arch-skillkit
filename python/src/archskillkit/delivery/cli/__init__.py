@@ -3,7 +3,7 @@
 Each module owns its subcommand end to end: `register` declares the
 arguments, `handle` invokes the application layer and prints JSON.
 World-dependent commands declare NEEDS_WORLD and receive the world;
-host-level commands (viewers) don't. `cli.py` stays parser/composition
+host-level commands (viewers, mcp) don't. `cli.py` stays parser/composition
 root; legacy commands keep their existing handlers. `ark schema`
 arrives with M1.
 """
@@ -13,13 +13,14 @@ from archskillkit.delivery.cli import (
     delta,
     explain,
     gate,
+    mcp,
     schema,
     status,
     view,
     viewers,
 )
 
-COMMANDS = (status, explain, viewers, schema, view, ask, delta, gate)
+COMMANDS = (status, explain, viewers, schema, view, ask, delta, gate, mcp)
 
-__all__ = ["COMMANDS", "ask", "delta", "explain", "gate", "schema",
+__all__ = ["COMMANDS", "ask", "delta", "explain", "gate", "mcp", "schema",
            "status", "view", "viewers"]
