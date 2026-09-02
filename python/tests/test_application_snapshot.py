@@ -148,6 +148,49 @@ class TestSnapshotContract:
                        for e in world.graph.events)
 
 
+class TestCoverageBaseline:
+    def test_empty_world_zero_coverage_zero_unknowns(self, world):
+        snap = build_snapshot(world)
+        assert snap.knowledge.evidence_coverage == 0.0
+        assert snap.knowledge.unknowns == 0
+
+    def test_coverage_counts_accepted_claim_lineage(self, world):
+        from archskillkit.packs.arch_core import (
+            ClaimData,
+            EvidenceData,
+            ObservationData,
+        )
+        obs_id = world.record_observation(ObservationData(
+            subject="orders-api", predicate="exposes",
+            object="POST /orders",
+            evidence=EvidenceData(tool="semgrep", rule="r", file="f.kt",
+                                  start_line=1)))
+        ev_id = world.record_evidence(EvidenceData(
+            tool="ast-grep", rule="r2", file="g.kt", start_line=2))
+        claim_id = world.propose_derived_claim(
+            ClaimData(statement="orders-api exposes POST /orders",
+                      subjects=["Orders API"], evidence_refs=[ev_id]),
+            obs_id)
+        world.add_architecture_element("Orders API", "container")
+        world.add_architecture_element("Billing", "component")
+
+        proposed = build_snapshot(world)
+        assert proposed.knowledge.unknowns == 2
+        assert proposed.knowledge.evidence_coverage == 0.0
+
+        world.accept_claim(claim_id)
+        accepted = build_snapshot(world)
+        assert accepted.knowledge.evidence_coverage == 0.5
+        assert accepted.knowledge.unknowns == 1
+        assert accepted.digest() != proposed.digest()
+
+    def test_elements_without_claims_stay_unknown(self, world):
+        world.add_architecture_element("Solo", "component")
+        snap = build_snapshot(world)
+        assert snap.knowledge.unknowns == 1
+        assert snap.knowledge.evidence_coverage == 0.0
+
+
 class TestActionSuggestion:
     def test_round_trip(self):
         s = ActionSuggestion(

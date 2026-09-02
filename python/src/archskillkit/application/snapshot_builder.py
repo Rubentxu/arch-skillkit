@@ -88,20 +88,35 @@ def _sensor_revisions(world: ArchitectureQueryPort) -> list[str]:
     return sorted(f"{name}@{rev}" for name, rev in tools.items())
 
 
+def _knowledge(world: ArchitectureQueryPort) -> KnowledgeSummary:
+    """M0 coverage baseline (deterministic, world-state only):
+    coverage = elements backed by an accepted claim; everything else is
+    an explicit unknown — the same rule the Explain use case declares
+    as a gap."""
+    elements = world.find_objects("architecture_element")
+    total = len(elements)
+    accepted_subjects: set[str] = set()
+    for claim in world.find_objects("claim"):
+        if claim["data"].get("status") == "accepted":
+            accepted_subjects.update(claim["data"].get("subjects") or [])
+    covered = sum(1 for e in elements
+                  if e["data"].get("name") in accepted_subjects)
+    return KnowledgeSummary(
+        elements=total,
+        # Architecture edges only — evidence lineage relations
+        # (derived_from, evidenced_by, …) are provenance, not
+        # architecture (docs/v2/04).
+        relations=len(world.architecture_relations()),
+        evidence_coverage=(round(covered / total, 6) if total else 0.0),
+        unknowns=total - covered,
+    )
+
+
 def build_snapshot(world: ArchitectureQueryPort, code_index=None,
                    artifact_manifest_digest: str | None = None,
                    ) -> ArchitectureSnapshot:
     """Gather revisions from an open world (+ optional CodeIndex) into a
     finalized snapshot. The world must be open."""
-    projection = world.snapshot()
-    counts = projection.get("counts", {})
-    knowledge = KnowledgeSummary(
-        elements=counts.get("architecture_element", 0),
-        # Architecture edges only — evidence lineage relations
-        # (derived_from, evidenced_by, …) are provenance, not
-        # architecture (docs/v2/04).
-        relations=len(world.architecture_relations()),
-    )
     generation = _EMPTY_REVISION
     if code_index is not None:
         generation = code_index.current_generation or _EMPTY_REVISION
@@ -116,7 +131,7 @@ def build_snapshot(world: ArchitectureQueryPort, code_index=None,
         ),
         world_revision=_world_revision(world),
         policy_revision=_policy_revision(world),
-        knowledge=knowledge,
+        knowledge=_knowledge(world),
         artifact_manifest_digest=artifact_manifest_digest,
     )
     return snapshot.with_snapshot_id()

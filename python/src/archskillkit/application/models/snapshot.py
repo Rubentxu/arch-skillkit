@@ -47,8 +47,10 @@ class WorldRevision(BaseModel):
 
 
 class KnowledgeSummary(BaseModel):
-    """Counts only. `evidence_coverage`/`unknowns` are 0 until the
-    coverage instrumentation lands (Slice 7); 0 is "not measured yet",
+    """Counts plus the M0 coverage baseline. `evidence_coverage` is the
+    fraction of architecture elements backed by an accepted claim
+    (accepted ⟹ evidenced, per promotion rules); `unknowns` counts the
+    rest. 0.0 coverage on an empty world means "nothing measured yet",
     not a measured zero."""
 
     model_config = ConfigDict(extra="forbid")
