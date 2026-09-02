@@ -207,6 +207,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_promote(world, args.name, args.approved_by)
     if args.command == "reject-proposal":
         return _cmd_reject(world, args.name, args.actor)
+    if args.command == "proposals":
+        for module in COMMANDS:
+            if module.NAME == "proposals":
+                return module.handle(args, world)
     for module in COMMANDS:
         if args.command == module.NAME:
             return module.handle(args, world)

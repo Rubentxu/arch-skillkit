@@ -245,6 +245,10 @@ class ArchitectureWorld:
     def has_run(self, run_id: str) -> bool:
         return self.db_path.exists() and _run_exists(self.db_path, run_id)
 
+    def list_runs(self) -> list[str]:
+        """All distinct run_ids present in this project's store."""
+        return _list_runs(self.db_path)
+
     def view(self, run_id: str) -> ArchitectureWorld:
         return ArchitectureWorld(
             project_id=self.project_id, name=self.project_name,
@@ -359,3 +363,15 @@ def _run_exists(db_path: Path, run_id: str) -> bool:
         row = conn.execute(
             "SELECT 1 FROM events WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
     return row is not None
+
+
+def _list_runs(db_path: Path) -> list[str]:
+    """All distinct run_ids present in the project's sqlite store."""
+    import sqlite3
+
+    if not db_path.exists():
+        return []
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT run_id FROM events ORDER BY run_id").fetchall()
+    return [r[0] for r in rows]
