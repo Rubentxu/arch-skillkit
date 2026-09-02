@@ -12,9 +12,15 @@ import argparse
 import json
 import sys
 
+from archskillkit.application.models.snapshot import ArchitectureSnapshot
 from archskillkit.application.queries.fitness import (
     FitnessThresholds,
     evaluate_gate,
+)
+from archskillkit.application.queries.report import (
+    render_json,
+    render_markdown,
+    render_sarif,
 )
 from archskillkit.application.snapshot_builder import build_snapshot
 from archskillkit.codeindex import CodeIndex
@@ -36,14 +42,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--max-unknowns", type=int, default=0)
     p.add_argument("--max-findings", type=int, default=0)
     p.add_argument("--max-run-age-days", type=int, default=30)
+    p.add_argument("--format", choices=["json", "markdown", "sarif"],
+                   default="json",
+                   help="report format (json|markdown|sarif)")
+    p.add_argument("--out", help="write the report to PATH instead of"
+                   " stdout")
 
 
-def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
-    if not world.db_path.exists():
-        print(f"error: no Architecture World for {world.project_id} "
-              f"(run: archskillkit init --repo {world.root or '.'})",
-              file=sys.stderr)
-        return 1
+def _evaluate(args: argparse.Namespace, world: ArchitectureWorld):
     thresholds = FitnessThresholds(
         min_evidence_coverage=args.min_coverage,
         max_unknowns=args.max_unknowns,
@@ -55,7 +61,8 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     ledger = RunLedger()  # state-root ledger; absence reads as empty
     try:
         with world:
-            snapshot = build_snapshot(world, code_index=index)
+            snapshot: ArchitectureSnapshot = build_snapshot(
+                world, code_index=index)
             result = evaluate_gate(world, snapshot,
                                    thresholds=thresholds,
                                    ledger=ledger,
@@ -63,5 +70,35 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     finally:
         if index is not None:
             index.close()
-    print(json.dumps(result.model_dump(), indent=2))
+    return result, snapshot
+
+
+def _render(args, result, snapshot) -> str:
+    project = world_project_label(args)
+    if args.format == "json":
+        return render_json(result)
+    if args.format == "markdown":
+        return render_markdown(result, project=project)
+    return json.dumps(render_sarif(result, project=project), indent=2) \
+        + "\n"
+
+
+def world_project_label(args) -> str:
+    return args.repo
+
+
+def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
+    if not world.db_path.exists():
+        print(f"error: no Architecture World for {world.project_id} "
+              f"(run: archskillkit init --repo {world.root or '.'})",
+              file=sys.stderr)
+        return 1
+    result, snapshot = _evaluate(args, world)
+    rendered = _render(args, result, snapshot)
+    if args.out:
+        from pathlib import Path
+        Path(args.out).write_text(rendered)
+    else:
+        sys.stdout.write(rendered)
     return result.exit_code
+
