@@ -67,9 +67,11 @@ podman run -d --name "$NAME_A" \
   -v "$ROOT/skills/architecture-discovery/rules":/opt/rules:ro,Z \
   "$IMAGE" sleep infinity >/dev/null
 if [ -n "$WHEEL_LOCAL" ]; then
+  WHEEL_NAME="$(basename "$WHEEL_LOCAL")"
   podman cp "$WHEEL_LOCAL" "$NAME_A":/tmp/wheel.whl
   WHEEL_REF="/tmp/wheel.whl"
 else
+  WHEEL_NAME="$(basename "$WHEEL_URL")"
   WHEEL_REF="$WHEEL_URL"
 fi
 
@@ -81,7 +83,7 @@ podman exec -e WHEEL_REF="$WHEEL_REF" "$NAME_A" bash -Eeuo pipefail -c '
   curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
   export PATH="/root/.local/bin:$PATH"
   uv --version
-  uv tool install --python 3.12 --extra attestation "$WHEEL_REF"
+  uv tool install --python 3.12 --with sigstore --with cramjam "$WHEEL_REF"
   cp /root/.local/bin/uv /share/uv
   archskillkit --help > /dev/null
   echo "CLI responde"
@@ -147,13 +149,13 @@ podman exec "$NAME_A" bash /tmp/corrupt.sh 2>&1 | tee "$ART/corruption.log"
 podman cp "$NAME_A":/tmp/doctor-corrupt.json "$ART/doctor-corrupt.json"
 
 echo "-- A: preparación del material air-gap (wheel + bundle + trust root)"
-podman exec -e WHEEL_REF="$WHEEL_REF" -e VERSION="$VERSION" \
+podman exec -e WHEEL_REF="$WHEEL_REF" -e WHEEL_NAME="$WHEEL_NAME" -e VERSION="$VERSION" \
   -e RELEASE_BASE="https://github.com/Rubentxu/arch-skillkit/releases/download" \
   "$NAME_A" bash -Eeuo pipefail -c '
   export PATH="/root/.local/bin:$PATH"
   PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
-  if [ -f /tmp/wheel.whl ]; then cp /tmp/wheel.whl /share/wheel.whl; else curl -LsS -o /share/wheel.whl "$WHEEL_REF"; fi
-  DIGEST=$(sha256sum /share/wheel.whl | cut -d" " -f1)
+  if [ -f /tmp/wheel.whl ]; then cp /tmp/wheel.whl "/share/${WHEEL_NAME:-wheel.whl}"; else curl -LsS -o "/share/${WHEEL_NAME:-wheel.whl}" "$WHEEL_REF"; fi
+  DIGEST=$(sha256sum "/share/${WHEEL_NAME:-wheel.whl}" | cut -d" " -f1)
   curl -sS -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/Rubentxu/arch-skillkit/attestations/sha256:$DIGEST" \
     | jq -r ".attestations[0].bundle_url" > /tmp/bundle_url
@@ -175,11 +177,11 @@ PY
 ' | tee "$ART/airgap-prep.log"
 
 echo "-- A: verificación hermética online (sanity: flags --trust-config --offline)"
-if podman exec "$NAME_A" bash -ec '
+if podman exec -e WHEEL_NAME="$WHEEL_NAME" "$NAME_A" bash -ec '
   test ! -f /share/.no-trust-root
   PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
   "$PT" -m sigstore --trust-config /share/sigstore-trust-root.json verify github \
-    /share/wheel.whl --bundle /share/wheel.bundle.json \
+    "/share/${WHEEL_NAME:-wheel.whl}" --bundle /share/wheel.bundle.json \
     --repository Rubentxu/arch-skillkit --offline
 '; then
   echo "verificación hermética: OK" | tee "$ART/attestation-hermetic.log"
@@ -206,14 +208,14 @@ podman run -d --name "$NAME_B" --network=none \
   -v "$V_DATA":/root/.local/share \
   -v "$V_STATE":/root/.local/state \
   "$IMAGE" sleep infinity >/dev/null
-podman exec "$NAME_B" bash -Eeuo pipefail -c '
+podman exec -e WHEEL_NAME="$WHEEL_NAME" "$NAME_B" bash -Eeuo pipefail -c '
   install -Dm755 /share/uv /usr/local/bin/uv
   export PATH="/usr/local/bin:/root/.local/bin:$PATH"
-  WHEEL=$(ls /share/archskillkit-*.whl /share/wheel.whl 2>/dev/null | head -1 || echo "")
+  WHEEL=$(ls "/share/${WHEEL_NAME:-wheel.whl}" 2>/dev/null | head -1 || echo "")
   if [ -n "$WHEEL" ]; then
-    uv tool install --offline --python 3.12 --extra attestation "$WHEEL"
+    uv tool install --offline --python 3.12 --with sigstore --with cramjam "$WHEEL"
   else
-    uv tool install --offline --python 3.12 --extra attestation archskillkit
+    uv tool install --offline --python 3.12 --with sigstore --with cramjam archskillkit
   fi
   archskillkit setup --offline 2>&1
   archskillkit doctor > /tmp/doctor-offline.json || true
@@ -223,7 +225,7 @@ podman exec "$NAME_B" bash -Eeuo pipefail -c '
   if [ ! -f /share/.no-trust-root ]; then
     PT="$HOME/.local/share/uv/tools/archskillkit/bin/python"
     "$PT" -m sigstore --trust-config /share/sigstore-trust-root.json verify github \
-      /share/wheel.whl --bundle /share/wheel.bundle.json \
+      "/share/${WHEEL_NAME:-wheel.whl}" --bundle /share/wheel.bundle.json \
       --repository Rubentxu/arch-skillkit --offline
     echo "air-gap: verificación Sigstore hermética sin red — OK"
   else
