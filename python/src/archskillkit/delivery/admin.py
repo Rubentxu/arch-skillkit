@@ -33,6 +33,8 @@ ADMIN_TOOLS: Final = (
     "arch_propose_review",
     "arch_propose_promote",
     "arch_propose_reject",
+    "arch_prompt_registry",
+    "arch_skill_registry",
 )
 
 

@@ -1,5 +1,6 @@
 ---
 name: arch-investigation
+version: 1.0.0
 description: Investigate architectural uncertainty using ArchSkillKit's evidence graph, Context Compiler and KnowledgeGap workflow. Use for why/how questions, ambiguous boundaries, missing ownership, unexplained dependencies and evidence gathering. Never browse the repository recursively or promote inferred knowledge directly.
 ---
 

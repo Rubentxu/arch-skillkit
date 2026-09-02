@@ -29,6 +29,10 @@ from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, TextContent, Tool
 
+from archskillkit.agent_governance import (
+    load_skill_revisions,
+    prompt_specs_registry,
+)
 from archskillkit.application.queries.explain import SubjectNotFound, explain
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.application.queries.history import get_history
@@ -104,16 +108,64 @@ def _handle_admin_propose_list(
     arguments: dict[str, Any], world: ArchitectureWorld
 ) -> dict[str, Any]:
     """List candidate proposals (proposal-* runs)."""
+    from archskillkit.agent_governance import get_proposal_metadata
+
     rows = []
     for run_id in world.list_runs():
         if not run_id.startswith("proposal-"):
             continue
         status = _candidate_status(world, run_id)
-        rows.append({"run_id": run_id, "status": status})
+        row: dict[str, Any] = {"run_id": run_id, "status": status}
+        metadata = get_proposal_metadata(world, run_id)
+        if metadata is not None:
+            row["metadata"] = metadata.to_object()
+        rows.append(row)
     return {
         "schema": "arch-skillkit/proposals-list-v1",
         "project_id": world.project_id,
         "candidates": rows,
+    }
+
+
+def _handle_admin_prompt_registry(
+    arguments: dict[str, Any], world: ArchitectureWorld
+) -> dict[str, Any]:
+    """List the PromptSpec(s) the embedded LLM can declare.
+
+    Every entry carries name + version + sha-256 digest. The
+    digest is the stable identifier a candidate MUST record to
+    prove which spec produced it."""
+    specs = []
+    for spec in prompt_specs_registry().values():
+        specs.append(
+            {
+                "name": spec.name,
+                "version": spec.version,
+                "digest": spec.digest(),
+            }
+        )
+    return {
+        "schema": "arch-skillkit/prompt-registry-v1",
+        "specs": specs,
+    }
+
+
+def _handle_admin_skill_registry(
+    arguments: dict[str, Any], world: ArchitectureWorld
+) -> dict[str, Any]:
+    """List the versioned skills the embedded LLM can declare.
+
+    Only skills with a `version:` line in SKILL.md frontmatter
+    appear; unversioned skills are excluded by design (they have
+    no stable provenance)."""
+    from archskillkit.delivery.cli.proposals import _default_skills_root
+
+    root = _default_skills_root()
+    revisions = load_skill_revisions(root)
+    return {
+        "schema": "arch-skillkit/skill-registry-v1",
+        "skills_root": str(root),
+        "skills": [r.model_dump() for r in revisions],
     }
 
 
@@ -184,10 +236,24 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
             "arch_propose_create",
             "Fork the base world into a candidate run. The "
             "candidate is a sibling run prefixed with proposal-; "
-            "the base world is never mutated. Admin tool.",
+            "the base world is never mutated. Optional "
+            "prompt_spec + skill[] record provenance metadata "
+            "into the fork. Admin tool.",
             {
                 "type": "object",
-                "properties": {"name": {"type": "string", "minLength": 1}},
+                "properties": {
+                    "name": {"type": "string", "minLength": 1},
+                    "prompt_spec": {
+                        "type": "string",
+                        "description": "PromptSpec name (e.g. architecture-analyst)",
+                    },
+                    "skill": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Skill names the agent was "
+                        "operating under (content-addressed)",
+                    },
+                },
                 "required": ["name"],
                 "additionalProperties": False,
             },
@@ -254,6 +320,20 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 "required": ["name", "actor"],
                 "additionalProperties": False,
             },
+        ),
+        "arch_prompt_registry": _tool(
+            "arch_prompt_registry",
+            "List the PromptSpec(s) the embedded LLM can declare. "
+            "Every entry carries name + version + sha-256 digest. "
+            "Admin tool.",
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        ),
+        "arch_skill_registry": _tool(
+            "arch_skill_registry",
+            "List the versioned skills the embedded LLM can declare "
+            "(skills with a version: line in SKILL.md frontmatter). "
+            "Admin tool.",
+            {"type": "object", "properties": {}, "additionalProperties": False},
         ),
     }
 
@@ -376,7 +456,13 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 return _envelope(_handle_admin_propose_list(arguments, world))
             if name == "arch_propose_create":
                 return _envelope(
-                    _call_proposals_handler(handle_create, world, name=arguments["name"])
+                    _call_proposals_handler(
+                        handle_create,
+                        world,
+                        name=arguments["name"],
+                        prompt_spec=arguments.get("prompt_spec"),
+                        skill=list(arguments.get("skill") or []),
+                    )
                 )
             if name == "arch_propose_diff":
                 return _envelope(
@@ -410,6 +496,10 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                         handle_reject, world, name=arguments["name"], actor=arguments["actor"]
                     )
                 )
+            if name == "arch_prompt_registry":
+                return _envelope(_handle_admin_prompt_registry(arguments, world))
+            if name == "arch_skill_registry":
+                return _envelope(_handle_admin_skill_registry(arguments, world))
             return _envelope({"error": f"unknown tool {name!r}"})
         finally:
             if index is not None:

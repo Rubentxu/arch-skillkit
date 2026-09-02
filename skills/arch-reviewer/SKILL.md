@@ -1,5 +1,6 @@
 ---
 name: arch-reviewer
+version: 1.0.0
 description: Review candidate architectural knowledge, proposals and drift against evidence, contradictions and policy. Use before promotion or when confidence is low/high-impact.
 ---
 

@@ -22,7 +22,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
+from archskillkit.agent_governance import (
+    ProposalMetadata,
+    SkillRevision,
+    find_skill_revision,
+    get_prompt_spec,
+    get_proposal_metadata,
+    record_proposal_metadata,
+)
 from archskillkit.application.queries.fitness import (
     FitnessThresholds,
     evaluate_gate,
@@ -51,6 +60,24 @@ SCHEMA_PROMOTE = "arch-skillkit/proposal-promote-v1"
 SCHEMA_REJECT = "arch-skillkit/proposal-reject-v1"
 
 
+def _default_skills_root() -> Path:
+    """Resolve the skills root from env, then from the well-known
+    install location, then from the local `skills/` directory next
+    to the arch-skillkit package.
+
+    MCP and CLI processes share this default so a candidate
+    produced via MCP carries the same skill revisions as one
+    produced via the CLI."""
+    import os
+
+    env = os.environ.get("ARCH_SKILLKIT_SKILLS_ROOT")
+    if env:
+        return Path(env)
+    # Local repo: <arch-skillkit>/skills.
+    repo_root = Path(__file__).resolve().parents[4]
+    return repo_root / "skills"
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     p = subparsers.add_parser(NAME, help="candidate -> review -> promote workflow")
     p.add_argument("--repo", required=True)
@@ -60,6 +87,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "create", help="fork the base world into a candidate (alias of `archskillkit fork`)"
     )
     pc.add_argument("--name", required=True)
+    pc.add_argument(
+        "--prompt-spec",
+        default=None,
+        help="PromptSpec name to record for provenance (e.g. architecture-analyst). Optional.",
+    )
+    pc.add_argument(
+        "--skill",
+        action="append",
+        default=[],
+        help="Skill name the agent was operating under (repeatable). "
+        "Optional; records content-addressed revisions.",
+    )
     pd = sub.add_parser("diff", help="structural diff between base and the candidate")
     pd.add_argument("--name", required=True)
     pr = sub.add_parser(
@@ -140,6 +179,60 @@ def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None,
     return run_id, None
 
 
+class ProposalMetadataError(Exception):
+    """Raised when a caller asks to record provenance but the
+    inputs cannot be resolved (unknown prompt spec, unversioned
+    skill, etc). Carries a stable error code so the MCP wire
+    layer surfaces it without parsing free-form text."""
+
+    code = "METADATA_INVALID"
+
+    def __init__(self, message: str, **details) -> None:
+        super().__init__(message)
+        self.message = message
+        self.details = dict(details)
+
+    def to_envelope(self) -> dict:
+        return {"error": self.code, "message": self.message, **self.details}
+
+
+def _resolve_metadata(
+    world: ArchitectureWorld, name: str, prompt_name: str | None, skill_names: list[str]
+) -> ProposalMetadata:
+    """Resolve a ProposalMetadata from CLI/MCP inputs.
+
+    Raises ProposalMetadataError if any input cannot be resolved
+    to a known, versioned, content-addressed reference."""
+    if not prompt_name:
+        raise ProposalMetadataError(
+            "metadata requires --prompt-spec (the candidate's "
+            "embedded agent must declare its prompt)"
+        )
+    try:
+        spec = get_prompt_spec(prompt_name)
+    except KeyError as exc:
+        raise ProposalMetadataError(str(exc), prompt_spec=prompt_name)
+    skill_revisions: list[SkillRevision] = []
+    skills_root = _default_skills_root()
+    for skill_name in skill_names:
+        revision = find_skill_revision(skill_name, skills_root)
+        if revision is None:
+            raise ProposalMetadataError(
+                f"skill {skill_name!r} is not versioned in"
+                f" {skills_root}; add a 'version:' line to its"
+                f" SKILL.md frontmatter",
+                skill=skill_name,
+                skills_root=str(skills_root),
+            )
+        skill_revisions.append(revision)
+    return ProposalMetadata(
+        prompt_spec_name=spec.name,
+        prompt_spec_version=spec.version,
+        prompt_spec_hash=spec.digest(),
+        skill_revisions=skill_revisions,
+    )
+
+
 # ---------- actions ----------
 
 
@@ -151,27 +244,64 @@ def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     rows = []
     for run_id in sorted(_candidate_runs(world)):
         name = run_id.removeprefix(PROPOSAL_PREFIX)
-        rows.append({"name": name, "run_id": run_id, "status": _candidate_status(world, run_id)})
+        status = _candidate_status(world, run_id)
+        metadata = get_proposal_metadata(world, run_id)
+        row = {"name": name, "run_id": run_id, "status": status}
+        if metadata is not None:
+            row["metadata"] = {
+                "prompt_spec_name": metadata.prompt_spec_name,
+                "prompt_spec_version": metadata.prompt_spec_version,
+                "prompt_spec_hash": metadata.prompt_spec_hash,
+                "skill_count": len(metadata.skill_revisions),
+            }
+        rows.append(row)
     envelope = {"schema": SCHEMA_LIST, "project_id": world.project_id, "candidates": rows}
     print(json.dumps(envelope, indent=2))
     return 0
 
 
 def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
-    """Fork the base world into a candidate run."""
+    """Fork the base world into a candidate run.
+
+    When the caller passes --prompt-spec and/or --skill, record
+    the provenance metadata (prompt spec name+version+hash, skill
+    name+version+content hash) into the fork so a later review
+    can answer "what produced this candidate?"."""
     err = _require_main_world(world)
     if err is not None:
         print(json.dumps(err), file=sys.stderr)
         return 1
     name = args.name
+    metadata: ProposalMetadata | None = None
+    metadata_error: dict | None = None
+    prompt_name = getattr(args, "prompt_spec", None)
+    skill_names = list(getattr(args, "skill", []) or [])
+    if prompt_name or skill_names:
+        try:
+            metadata = _resolve_metadata(world, name, prompt_name, skill_names)
+        except ProposalMetadataError as exc:
+            metadata_error = exc.to_envelope()
+            # Bail out: we will NOT create the fork if provenance
+            # cannot be resolved. The caller must fix the inputs.
+            print(json.dumps(metadata_error), file=sys.stderr)
+            return 1
+    # Fork first (one transaction: copies events into the new run).
     with world:
         fork = world.fork(name)
+        # Record metadata inside the same world transaction so the
+        # writes commit atomically with the fork itself. A second
+        # transaction outside `with world:` would risk a stale read
+        # from a freshly-opened sqlite handle.
+        if metadata is not None:
+            record_proposal_metadata(world, fork.run_id, metadata)
     envelope = {
         "schema": SCHEMA_CREATE,
         "name": name,
         "run_id": fork.run_id,
         "project_id": world.project_id,
     }
+    if metadata is not None:
+        envelope["metadata"] = metadata.to_object()
     print(json.dumps(envelope, indent=2))
     return 0
 
@@ -235,6 +365,8 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     diff_dict = {k: v for k, v in vars(diff).items()}
     diff_dict["is_empty"] = diff.is_empty()
 
+    metadata = get_proposal_metadata(world, run_id)
+
     envelope = {
         "schema": SCHEMA_REVIEW,
         "candidate": args.name,
@@ -242,6 +374,8 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
         "structural_diff": diff_dict,
         "gate": json.loads(render_json(result)),
     }
+    if metadata is not None:
+        envelope["metadata"] = metadata.to_object()
     print(json.dumps(envelope, indent=2))
     if args.require_pass and result.verdict != "pass":
         return 1
