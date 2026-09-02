@@ -111,6 +111,25 @@ class TestArrowsProjection:
         assert meta["manually_modified"] is False
         assert meta["source"]["project_id"] == promoted.project_id
 
+    def test_arrows_validates_against_arrows_v1_schema(self, promoted):
+        # P7: the adapter declares `arch-skillkit/arrows-v1` as its
+        # schema and exports a JSON document to feed arrows.app and the
+        # V1 export-arrows pipeline. The in-tree schema constrains the
+        # document shape — validation proves the artifact is importable.
+        from archskillkit.projections.schemas import load_schema
+        validator = jsonschema.Draft202012Validator(load_schema("arrows-v1"))
+        result = project_to_workspace(promoted, ArrowsAdapter())
+        doc = json.loads(Path(result["path"]).read_text())
+        errors = sorted(validator.iter_errors(doc), key=lambda e: e.path)
+        assert not errors, (
+            f"arch-skillkit/arrows-v1 schema violations: "
+            f"{[e.message for e in errors]}"
+        )
+        # Node ids unique — arrows.app deduplicates on id and a
+        # duplicate would silently merge two elements.
+        ids = [n["id"] for n in doc["nodes"]]
+        assert len(ids) == len(set(ids)), "duplicate node ids in arrows doc"
+
 
 class TestManualEditProtection:
     def test_modified_projection_is_not_overwritten(self, promoted):

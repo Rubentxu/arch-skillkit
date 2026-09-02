@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arch-skillkit/schemas/arrows-v1",
+  "title": "arch-skillkit/arrows-v1",
+  "description": "Internal JSON document emitted by the Arrows adapter (docs/v2/29, ADR-0017). Designed to be import-compatible with the V1 export-arrows pipeline and explorable in arrows.app.",
+  "type": "object",
+  "required": ["schema", "title", "nodes", "relationships"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "arch-skillkit/arrows-v1"
+    },
+    "generated_by": {
+      "type": "string",
+      "description": "Free-form provenance string identifying the generator and version."
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "properties": {
+        "project_id": { "type": "string" },
+        "commit": { "type": "string" },
+        "generated_at": { "type": "string" },
+        "revision": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "labels"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "origin": { "type": "string" },
+            "confidence": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "relationship": {
+      "type": "object",
+      "required": ["id", "type", "start", "end"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "start": { "type": "string", "minLength": 1 },
+        "end": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "rule": { "type": "string" },
+            "confidence": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
