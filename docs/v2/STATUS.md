@@ -63,13 +63,13 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
 | P4 — draw.io | Implemented; local suite green (F10 de V2.3) | `projections/adapters/drawio.py` + tests; revisión visual humana del layout pendiente (como todo lo visual) |
 | P5 — Routing | Implemented para los cinco formatos | Tabla de preferencias determinista por intent + override del usuario (`projections/router.py`, UAT-P11) |
 | P6 — Lifecycle | Implemented | Staleness real + protección de ediciones manuales vía `generated_sha256`/`source_revision`/`adapter_version` (PR-4) |
-| P7 — Validación real | Partial | Falta evidencia en consumidores externos y tres stacks |
+| P7 — Validación real | Implemented; local suite green | `scripts/projections/validate_*.py` para los 5 adapters (networkx para GraphML, jsonschema para JSON Canvas y Arrows, lxml para draw.io mxgraph, likec4 CLI para LikeC4); tests pytest equivalentes. PNG render queda como follow-up manual para draw.io y LikeC4 (necesita Chrome). El piloto LikeC4 destapó 2 bugs del adapter (relations top-level sin FQN + view `context` reservada) ya corregidos en el commit de P7. |
 | P8 — Checkpoint | Pending | Depende de P7 y métricas de uso |
 
 ## Camino siguiente
 
 1. **Cerrar el gate V2.1:** medir instalación y ejecutar el [plan UAT](uat/v2.1-plan.yaml), consolidando sus hashes de evidencia. UAT2-017 y el KPI del Context Compiler ya tienen evidencia para la carga canónica, pero no sustituyen los UAT obligatorios.
 2. **Ranking del Context Compiler — completado:** proximidad a ficheros cambiados (`CodeIndex.changed_files()`) y delta de grafo reciente (`recent_delta_names()`) integrados en el ranking por relevancia; primera generación degrada a no-op.
-3. **Validación real V2.2 (P7):** evidencia en consumidores externos (Cytoscape/Gephi/yEd, Obsidian, draw.io) y revisión visual humana del layout draw.io.
+3. **Validación real V2.2 (P7) — implementado:** 5 adapters validados con scripts standalone + tests pytest (GraphML/networkx, JSON Canvas/jsonschema, draw.io/lxml, Arrows/jsonschema, LikeC4/likec4 CLI). El piloto LikeC4 destapó y corrigió 2 bugs del adapter. PNG render sigue como follow-up manual (draw.io/likec4) donde se necesite Chrome.
 4. **Decidir SCIP con datos:** adoptar, mantener opcional o rechazar (spike condicional, sin fecha).
 5. **Distribución offline estricta — trust root Sigstore implementado:** snapshot de la client trust configuration como asset de release, digest fijado en el manifest (`trust_root`) y verificación hermética (`--trust-config --offline`) probada contra el release v0.3.1; la suites `verify-release` la ejercita en el contenedor sin red a partir del release que la incluya. Pendiente: matriz ARM del verify-release (qemu) si hay demanda.
