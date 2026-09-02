@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archskillkit"
-version = "0.3.1"
+version = "0.3.2"
 description = "ArchSkillKit V2 domain core: event-sourced Architecture World on ActiveGraph"
 requires-python = ">=3.11"
 license = "MIT"

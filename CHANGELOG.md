@@ -8,6 +8,8 @@ fixes.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-02
+
 ### Added
 
 - **Sigstore trust root for strict air-gap verification (docs/v2/24 §5)**:

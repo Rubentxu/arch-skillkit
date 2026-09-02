@@ -4,4 +4,4 @@ Event-sourced Architecture World on ActiveGraph (ADR-0013/0015/0024).
 The ActiveGraph runtime never leaks past the world module boundary.
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
