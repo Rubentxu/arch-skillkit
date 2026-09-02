@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jsoncanvas.org/schema/1.0",
+  "title": "JSON Canvas 1.0",
+  "description": "Schema for the JSON Canvas 1.0 format used by Obsidian Canvas and compatible applications. https://jsoncanvas.org/",
+  "type": "object",
+  "required": ["nodes", "edges"],
+  "properties": {
+    "version": {
+      "description": "Schema version. Optional in 1.0 — many writers omit it; when present must be '1.0' or '1.0-rc'.",
+      "type": "string",
+      "enum": ["1.0", "1.0-rc"]
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "color": {
+      "description": "CSS color string. Optional — hex (#rrggbb or #rrggbbaa), preset ('1'..'6'), or 'mixed' (inherits from side).",
+      "type": "string"
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "x", "y", "width", "height"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["text", "file", "link", "group"]
+        },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "color": { "$ref": "#/$defs/color" },
+        "text": { "type": "string" },
+        "file": { "type": "string" },
+        "url": { "type": "string" },
+        "label": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "text" } }, "required": ["type"] },
+          "then": { "required": ["text"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "file" } }, "required": ["type"] },
+          "then": { "required": ["file"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "link" } }, "required": ["type"] },
+          "then": { "required": ["url"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "group" } }, "required": ["type"] },
+          "then": { "required": ["label"] }
+        }
+      ]
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "fromNode", "toNode"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "fromNode": { "type": "string", "minLength": 1 },
+        "toNode": { "type": "string", "minLength": 1 },
+        "fromSide": {
+          "type": "string",
+          "enum": ["top", "right", "bottom", "left"]
+        },
+        "toSide": {
+          "type": "string",
+          "enum": ["top", "right", "bottom", "left"]
+        },
+        "color": { "$ref": "#/$defs/color" },
+        "label": { "type": "string" }
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ and consistency between artifact metrics and the world (M2-E3).
 import json
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 from archskillkit.projections import (
@@ -234,6 +235,21 @@ class TestJSONCanvasProjection:
         Path(first["path"]).unlink()
         second = project_to_workspace(promoted, JSONCanvasAdapter())
         assert Path(second["path"]).read_bytes() == original
+
+    def test_canvas_validates_against_jsoncanvas_1_0_schema(self, promoted):
+        # P7: Obsidian Canvas parses files conforming to the public
+        # JSON Canvas 1.0 schema (https://jsoncanvas.org/schema/1.0).
+        # jsonschema validation proves the artifact is portable to
+        # Obsidian Canvas and any JSON Canvas 1.0 reader.
+        from archskillkit.projections.schemas import load_schema
+        validator = jsonschema.Draft202012Validator(load_schema("jsoncanvas-1.0"))
+        result = project_to_workspace(promoted, JSONCanvasAdapter())
+        canvas = json.loads(Path(result["path"]).read_text())
+        errors = sorted(validator.iter_errors(canvas), key=lambda e: e.path)
+        assert not errors, (
+            f"JSON Canvas schema violations: "
+            f"{[e.message for e in errors]}"
+        )
 
 
 class TestDrawioProjection:
