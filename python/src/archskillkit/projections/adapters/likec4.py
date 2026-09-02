@@ -85,7 +85,12 @@ class LikeC4Adapter:
             "model {",
         ]
 
+        # Track where each element lives so relations can use the right
+        # FQN: internals are nested inside `target` and must be referenced
+        # as `target.<id>` from the outer scope (likec4 silently rejects
+        # bare ids at the model-root scope for nested elements).
         ids: dict[str, str] = {}
+        scopes: dict[str, str] = {}  # ident -> "target" or ""
         internals = sorted((e for e in elements if e["kind"] in _INTERNAL),
                            key=lambda e: e["name"])
         externals = sorted((e for e in elements if e["kind"] not in _INTERNAL),
@@ -96,6 +101,7 @@ class LikeC4Adapter:
         for index, element in enumerate(internals):
             ident = f"n{index}"
             ids[element["name"]] = ident
+            scopes[ident] = "target"
             lines.append(f"    {ident} = {_KIND_TO_LIKEC4[element['kind']]}"
                          f" '{_quote(element['name'])}' {{")
             interface_tag = "#interface " \
@@ -109,6 +115,7 @@ class LikeC4Adapter:
         for index, element in enumerate(externals):
             ident = f"x{index}"
             ids[element["name"]] = ident
+            scopes[ident] = ""
             lines.append(f"  {ident} = {_KIND_TO_LIKEC4[element['kind']]}"
                          f" '{_quote(element['name'])}' {{")
             lines.append(f"    {_ORIGIN_TAG.get(element['origin'], '#detected')}"
@@ -121,7 +128,9 @@ class LikeC4Adapter:
             dst = ids.get(relation["target"])
             if not src or not dst:
                 continue
-            lines.append(f"  {src} -> {dst} '{_quote(relation['kind'])}' {{")
+            src_ref = f"{scopes[src]}.{src}" if scopes[src] else src
+            dst_ref = f"{scopes[dst]}.{dst}" if scopes[dst] else dst
+            lines.append(f"  {src_ref} -> {dst_ref} '{_quote(relation['kind'])}' {{")
             lines.append("    #detected"
                          f" {_CONFIDENCE_TAG.get(relation.get('confidence', 'high'), '#confidence-high')}")
             lines.append("  }")
@@ -130,8 +139,8 @@ class LikeC4Adapter:
             "}",
             "",
             "views {",
-            "  view context {",
-            "    title 'Context'",
+            "  view index {",
+            "    title 'Architecture'",
             "    include *",
             "  }",
             "}",

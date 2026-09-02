@@ -9,6 +9,9 @@ and consistency between artifact metrics and the world (M2-E3).
 """
 
 import json
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import jsonschema
@@ -79,6 +82,34 @@ class TestLikeC4Projection:
         model = Path(result["path"]).read_text()
         for line in model.splitlines():
             assert line.count("'") % 2 == 0, line  # balanced quotes
+
+    def test_likec4_dsl_builds_with_likec4_cli(self, promoted):
+        # P7: the adapter emits a `.c4` model the likec4 CLI parses,
+        # validates, and builds. Skip when the CLI is absent — the
+        # standalone validate_likec4.py script records the missing
+        # tool in reconciliation.json and continues.
+        likec4 = shutil.which("likec4")
+        if not likec4:
+            pytest.skip("likec4 CLI not installed")
+        result = project_to_workspace(promoted, LikeC4Adapter())
+        model_path = Path(result["path"])
+        with tempfile.TemporaryDirectory(prefix="ark-test-likec4-") as tmp:
+            ws = Path(tmp) / "ws"
+            (ws / "src").mkdir(parents=True)
+            (ws / "src" / "model.c4").write_text(model_path.read_text())
+            out = Path(tmp) / "out"
+            out.mkdir()
+            cp = subprocess.run(
+                [likec4, "export", "--dry-run", "-o", str(out), str(ws)],
+                capture_output=True, text=True, timeout=120, check=False,
+            )
+            assert cp.returncode == 0, (
+                f"likec4 export --dry-run failed (rc={cp.returncode}): "
+                f"{cp.stderr[-500:]}"
+            )
+            assert "Done" in cp.stdout, (
+                f"likec4 did not report success: stdout={cp.stdout[-500:]}"
+            )
 
 
 class TestArrowsProjection:
