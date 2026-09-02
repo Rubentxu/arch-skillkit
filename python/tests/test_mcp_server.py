@@ -18,8 +18,7 @@ import pytest
 
 
 def _git(repo, *args):
-    subprocess.run(["git", "-C", str(repo), *args],
-                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 @pytest.fixture()
@@ -40,9 +39,11 @@ def repo_with_world(tmp_path):
     _git(repo, "config", "user.name", "t")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "init")
-    subprocess.run([sys.executable, "-m", "archskillkit", "init",
-                    "--repo", str(repo)], check=True,
-                   capture_output=True)
+    subprocess.run(
+        [sys.executable, "-m", "archskillkit", "init", "--repo", str(repo)],
+        check=True,
+        capture_output=True,
+    )
     return repo
 
 
@@ -50,7 +51,7 @@ def _text(content) -> str:
     return content[0].text if content else ""
 
 
-def _session(repo_path):
+def _session(repo_path, *, admin=False):
     """Yield a connected ClientSession for the MCP server."""
     import asyncio
 
@@ -60,10 +61,11 @@ def _session(repo_path):
     async def _runner(coro_factory):
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "archskillkit", "mcp", "--repo", repo_path],
+            args=(
+                ["-m", "archskillkit", "mcp", "--repo", repo_path] + (["--admin"] if admin else [])
+            ),
         )
-        async with stdio_client(params) as (read, write), \
-                ClientSession(read, write) as session:
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
             await session.initialize()
             return await coro_factory(session)
 
@@ -78,10 +80,14 @@ def test_list_tools_only_read_only(sandbox, repo_with_world):
         return {t.name for t in tools.tools}
 
     names = asyncio.run(runner(call))
-    assert {"arch_get_status", "arch_get_explain", "arch_search_code",
-            "arch_get_context", "arch_get_history"} <= names
-    for forbidden in ("arch_apply", "arch_mutate",
-                      "arch_propose", "arch_promote"):
+    assert {
+        "arch_get_status",
+        "arch_get_explain",
+        "arch_search_code",
+        "arch_get_context",
+        "arch_get_history",
+    } <= names
+    for forbidden in ("arch_apply", "arch_mutate", "arch_propose", "arch_promote"):
         assert forbidden not in names
 
 
@@ -101,8 +107,7 @@ def test_arch_get_explain_subject_not_found(sandbox, repo_with_world):
     asyncio, runner = _session(str(repo_with_world))
 
     async def call(session):
-        result = await session.call_tool(
-            "arch_get_explain", {"subject": "nope"})
+        result = await session.call_tool("arch_get_explain", {"subject": "nope"})
         return _text(result.content)
 
     payload = json.loads(asyncio.run(runner(call)))
@@ -113,8 +118,7 @@ def test_arch_get_history_returns_envelope(sandbox, repo_with_world):
     asyncio, runner = _session(str(repo_with_world))
 
     async def call(session):
-        result = await session.call_tool(
-            "arch_get_history", {"limit": 3})
+        result = await session.call_tool("arch_get_history", {"limit": 3})
         return _text(result.content)
 
     payload = json.loads(asyncio.run(runner(call)))
