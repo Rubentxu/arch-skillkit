@@ -8,9 +8,17 @@ root; legacy commands keep their existing handlers. `ark schema`
 arrives with M1.
 """
 
-from archskillkit.delivery.cli import ask, explain, schema, status, view, viewers
+from archskillkit.delivery.cli import (
+    ask,
+    explain,
+    gate,
+    schema,
+    status,
+    view,
+    viewers,
+)
 
-COMMANDS = (status, explain, viewers, schema, view, ask)
+COMMANDS = (status, explain, viewers, schema, view, ask, gate)
 
-__all__ = ["COMMANDS", "ask", "explain", "schema", "status", "view",
-           "viewers"]
+__all__ = ["COMMANDS", "ask", "explain", "gate", "schema", "status",
+           "view", "viewers"]

@@ -1,7 +1,8 @@
 $id: arch-skillkit/fitness-profile-v1
 type: object
-required: [snapshot_id, dimensions]
+required: [schema, snapshot_id, dimensions]
 properties:
+  schema: {const: arch-skillkit/fitness-profile-v1}
   snapshot_id: {type: string}
   dimensions:
     type: object
