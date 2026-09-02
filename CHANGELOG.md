@@ -8,6 +8,24 @@ fixes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-02
+
+### Added
+
+- **Context Compiler — recency ranking signals (docs/v2/46, camino
+  siguiente)**: the deterministic relevance ranking now also boosts
+  elements named by the previous→current scan generation delta
+  (`CodeIndex.recent_delta_names()`, +40) and elements whose relation
+  evidence lives in files changed between generations
+  (`CodeIndex.changed_files()`, +30). Both degrade to no-op on the first
+  generation; name tiebreak keeps replay-identical ordering.
+
+### Fixed
+
+- **STATUS.md refreshed**: V2.2 workstreams P2–P4 now reflect the shipped
+  GraphML/JSON Canvas/draw.io adapters; version references updated to
+  0.3.0/v0.3.0; roadmap pointer renewed.
+
 ## [0.3.0] - 2026-09-01
 
 ### Added

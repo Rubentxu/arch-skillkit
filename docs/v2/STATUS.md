@@ -1,6 +1,6 @@
 # Estado de implementación V2
 
-Última revisión documental: 2026-09-01.
+Última revisión documental: 2026-09-02.
 
 ## Resumen ejecutivo
 
@@ -11,8 +11,14 @@
 | Iniciativa | Estado | Evidencia y trabajo abierto |
 |---|---|---|
 | V1 | Baseline entregado | Pipeline shell en `scripts/`, Skill y cobertura BATS en `tests/`. |
-| V2.1 ActiveGraph/Python | Implementado; benchmark/KPI parcial completado | Fases A–G en `python/src/archskillkit/` y `python/tests/`. UAT2-017 midió el KPI con resultado PASS para su carga canónica; el [plan UAT trazable](uat/v2.1-plan.yaml) permanece sin evidencia obligatoria consolidada, y faltan instalación y validar el workflow local. |
-| V2.2 Projection Applications | Parcial | Foundation, router inicial, lifecycle y LikeC4/Arrows presentes. Faltan writers draw.io, JSON Canvas y GraphML, redacción y thresholds/routing productivo. |
+| V2.1 ActiveGraph/Python | Implementado; benchmark/KPI parcial completado | Fases A–G en `python/src/archskillkit/` y `python/tests/`. UAT2-017 midió el KPI con resultado PASS para su carga canónica; el [plan UAT trazable](uat/v2.1-plan.yaml) permanece sin evidencia obligatoria consolidada, y falta la medición de instalación. |
+| V2.2 Projection Applications | Implementada (F10 de V2.3); validación externa parcial | Cinco writers productivos: LikeC4, Arrows, GraphML, JSON Canvas y draw.io en `projections/adapters/`, con protección real de ediciones manuales, lifecycle y routing. Falta evidencia UAT en consumidores externos (Cytoscape/Gephi/yEd, Obsidian, draw.io) y revisión visual humana del layout draw.io. |
+| V2.3 Semantic Integrity & Hardening | COMPLETA (F1–F10) | Ver bloque siguiente; roadmap en [`46-roadmap-v2.3.md`](46-roadmap-v2.3.md). |
+
+**Release v0.3.0 publicada y verificada end-to-end** (5 jobs verdes, 9 assets,
+instalación + setup + doctor probados en contenedores Podman limpios vía
+`just verify-release`, incluido el camino offline; attestation Sigstore
+criptográfica del artefacto).
 
 **V2.3 — Semantic Integrity & Architectural Hardening: COMPLETA (F1-F10).**
 Los cinco P0 de la [auditoría de septiembre](44-architecture-review-2026-09.md)
@@ -24,7 +30,7 @@ C4 con estructura vs interfaz y los cinco proyectores. Fase 2 de
 [distribución](24-distribution-and-installation.md) implementada en local
 (`just verify-release`).
 
-Estos nombres identifican iniciativas de producto y **no son versiones SemVer del paquete**. El paquete Python declara `0.2.0` en [`python/pyproject.toml`](../../python/pyproject.toml); el último tag Git es `v0.2.0` (la fuente de versión canónica es pyproject — ver [V2.3, §6](45-v2.3-semantic-integrity-hardening.md#6-fuente-única-de-versión)).
+Estos nombres identifican iniciativas de producto y **no son versiones SemVer del paquete**. El paquete Python declara `0.3.0` en [`python/pyproject.toml`](../../python/pyproject.toml); el último tag Git es `v0.3.0` (la fuente de versión canónica es pyproject — ver [V2.3, §6](45-v2.3-semantic-integrity-hardening.md#6-fuente-única-de-versión); `scripts/release/sync-versions.py --check` se ejecuta en el gate).
 
 Política de compatibilidad pendiente: [`python/pyproject.toml`](../../python/pyproject.toml) declara Python `>=3.11`, mientras que el baseline reproducible fija Python `3.12.11`. La verificación local sólo demuestra el entorno fijado; no valida toda la compatibilidad declarada.
 
@@ -52,19 +58,18 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
 |---|---|---|
 | P0 — VisualIntent, ProjectionAdapter y metadata | Implemented; local suite green | `projections/{intents,contract,metadata}.py` |
 | P1 — LikeC4 y Arrows normalizados | Implemented; local suite green | adapters productivos en `projections/adapters/` |
-| P2 — JSON Canvas | Pending | Especificación absorbida; no hay writer productivo |
-| P3 — GraphML | Pending | Especificación absorbida; no hay writer productivo |
-| P4 — draw.io | Pending | Especificación absorbida; no hay writer productivo |
-| P5 — Routing | Partial | Reglas por intent y override presentes; faltan thresholds/política productiva |
-| P6 — Lifecycle | Partial | Staleness y protección manual presentes; redacción operativa pendiente |
-| P7 — Validación real | Pending | Falta evidencia en tres stacks y consumidores externos |
-| P8 — Checkpoint | Pending | Depende de P2–P7 y métricas de uso |
+| P2 — JSON Canvas | Implemented; local suite green (F10 de V2.3) | `projections/adapters/jsoncanvas.py` + tests; UAT con Obsidian/visores canvas pendiente |
+| P3 — GraphML | Implemented; local suite green (F10 de V2.3) | `projections/adapters/graphml.py` + tests; UAT con Cytoscape/Gephi/yEd pendiente |
+| P4 — draw.io | Implemented; local suite green (F10 de V2.3) | `projections/adapters/drawio.py` + tests; revisión visual humana del layout pendiente (como todo lo visual) |
+| P5 — Routing | Implemented para los cinco formatos | Tabla de preferencias determinista por intent + override del usuario (`projections/router.py`, UAT-P11) |
+| P6 — Lifecycle | Implemented | Staleness real + protección de ediciones manuales vía `generated_sha256`/`source_revision`/`adapter_version` (PR-4) |
+| P7 — Validación real | Partial | Falta evidencia en consumidores externos y tres stacks |
+| P8 — Checkpoint | Pending | Depende de P7 y métricas de uso |
 
 ## Camino siguiente
 
-1. **Baseline reproducible local — completado:** bootstrap, doctor y suites Python/BATS verdes sin ensuciar el repositorio.
-2. **Cerrar el gate V2.1:** medir instalación y ejecutar el [plan UAT](uat/v2.1-plan.yaml), consolidando sus hashes de evidencia. UAT2-017 y el KPI del Context Compiler ya tienen evidencia para la carga canónica, pero no sustituyen los UAT obligatorios.
-3. **Validar la entrega:** ejecutar localmente `just ci-github-local` y resolver la política Python `>=3.11` frente al pin `3.12.11`.
-4. **Decidir SCIP con datos:** adoptar, mantener opcional o rechazar.
-5. **Cerrar V2.1 y preparar release:** reconciliar versión, tag y changelog.
-6. **Continuar V2.2 por slices:** un writer por vez, con fixtures, tests y UAT; después redacción y routing productivo.
+1. **Cerrar el gate V2.1:** medir instalación y ejecutar el [plan UAT](uat/v2.1-plan.yaml), consolidando sus hashes de evidencia. UAT2-017 y el KPI del Context Compiler ya tienen evidencia para la carga canónica, pero no sustituyen los UAT obligatorios.
+2. **Ranking del Context Compiler — completado:** proximidad a ficheros cambiados (`CodeIndex.changed_files()`) y delta de grafo reciente (`recent_delta_names()`) integrados en el ranking por relevancia; primera generación degrada a no-op.
+3. **Validación real V2.2 (P7):** evidencia en consumidores externos (Cytoscape/Gephi/yEd, Obsidian, draw.io) y revisión visual humana del layout draw.io.
+4. **Decidir SCIP con datos:** adoptar, mantener opcional o rechazar (spike condicional, sin fecha).
+5. **Distribución offline estricta:** trust root Sigstore para air-gap; matriz ARM del verify-release (qemu) si hay demanda.
