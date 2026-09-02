@@ -16,7 +16,7 @@ session_contract:
     cada fuente debe estar declarada en provenance.allowed_sources y cada
     evidencia debe enlazar source_path y source_sha256 de esa fuente.
 sessions:
-  - {scenario_id: UAT2-001, feature_id: F-01, requirement_ref: UAT2-001, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
+  - {scenario_id: UAT2-001, feature_id: F-01, requirement_ref: UAT2-001, execution_state: EXECUTED, verdict: PASS, session_id: UAT2-001, manifest_id: UAT2-001, evidence_refs: [artifacts/uat/v2.1/sessions/UAT2-001/evidence/runner/checkout-before.json, artifacts/uat/v2.1/sessions/UAT2-001/evidence/runner/checkout-after.json, artifacts/uat/v2.1/sessions/UAT2-001/evidence/runner/result.json]}
   - {scenario_id: UAT2-002, feature_id: F-01, requirement_ref: UAT2-002, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
   - {scenario_id: UAT2-003, feature_id: F-01, requirement_ref: UAT2-003, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
   - {scenario_id: UAT2-004, feature_id: F-02, requirement_ref: UAT2-004, execution_state: NOT_RUN, verdict: NOT_RUN, session_id: null, manifest_id: null, evidence_refs: []}
