@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from archskillkit.codeindex import CodeIndex, IngestError
 from archskillkit.context import Budget, ContextCompiler
+from archskillkit.delivery.cli import COMMANDS
 from archskillkit.ids import RepoNotFound
 from archskillkit.packs.arch_core import ObservationData
 from archskillkit.projections.adapters.arrows import ArrowsAdapter
@@ -147,6 +148,11 @@ def main(argv: list[str] | None = None) -> int:
                           help="path or URL of the runtime manifest to"
                           " diagnose against (default: stored copies)")
 
+    # V2.4 delivery-adapter commands (docs/v2/67 slice 4): each module
+    # owns its parser and handler through the application layer.
+    for module in COMMANDS:
+        module.register(sub)
+
     args = parser.parse_args(argv)
 
     if args.command == "setup":
@@ -196,6 +202,9 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_promote(world, args.name, args.approved_by)
     if args.command == "reject-proposal":
         return _cmd_reject(world, args.name, args.actor)
+    for module in COMMANDS:
+        if args.command == module.NAME:
+            return module.handle(args, world)
     parser.error(f"unknown command: {args.command}")
     return 2
 
