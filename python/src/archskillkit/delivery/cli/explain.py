@@ -14,6 +14,7 @@ from archskillkit.application.queries.explain import SubjectNotFound, explain
 from archskillkit.world import ArchitectureWorld
 
 NAME = "explain"
+NEEDS_WORLD = True
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

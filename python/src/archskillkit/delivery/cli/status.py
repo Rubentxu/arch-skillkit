@@ -15,6 +15,7 @@ from archskillkit.codeindex import CodeIndex
 from archskillkit.world import ArchitectureWorld
 
 NAME = "status"
+NEEDS_WORLD = True
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

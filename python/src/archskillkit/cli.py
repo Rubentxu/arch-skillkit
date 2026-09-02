@@ -155,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
+    # Host-level V2.4 commands run without a repository.
+    for module in COMMANDS:
+        if args.command == module.NAME and not module.NEEDS_WORLD:
+            return module.handle(args)
+
     if args.command == "setup":
         return _cmd_setup(args)
     if args.command == "doctor":
