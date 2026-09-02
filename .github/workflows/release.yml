@@ -122,11 +122,13 @@ jobs:
           path: dist
 
       - name: Install manifest generator dependency
-        run: python3 -m pip install --quiet pydantic sigstore
+        run: python3 -m pip install --quiet pydantic
 
       - name: Snapshot sigstore trust root (air-gap asset)
         run: |
-          python3 scripts/release/generate-trust-root.py \
+          python3 -m venv /tmp/trust-venv
+          /tmp/trust-venv/bin/pip install --quiet sigstore
+          /tmp/trust-venv/bin/python scripts/release/generate-trust-root.py \
             --out dist/sigstore-trust-root.json
           sha256sum dist/sigstore-trust-root.json
 
