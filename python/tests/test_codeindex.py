@@ -498,3 +498,110 @@ class TestRepoClean:
                                capture_output=True, text=True,
                                check=False).stdout
         assert after == before
+
+
+class TestSemgrepOssNoMetavars:
+    """Semgrep OSS >=1.x omits extra.metavars (login-gated). The ingest
+    must recover targets by slicing the matched source text out of the
+    file using the start/end offsets (real-OSS validation finding)."""
+
+    def _write_repo(self, tmp_path: Path, rel: str, content: str) -> Path:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        return target
+
+    def _outline(self, rule_id: str, name: str, path: Path, line: int,
+                 lang: str) -> str:
+        return ndjson(outline_record(rule_id, name, str(path), line, lang))
+
+    def test_quoted_target_recovered_from_source_slice(self, tmp_path):
+        index = CodeIndex(tmp_path / "code.sqlite").open()
+        src = self._write_repo(
+            tmp_path, "srv/app.ts",
+            'import express from "express"\n'
+            'const app = express()\n'
+            'function mount() {\n'
+            '  app.get("/users", (q, s) => s.json([]))\n'
+            '}\n')
+        index.ingest_astgrep(
+            self._outline("outline.typescript.function", "mount", src, 3,
+                          "TypeScript"),
+            scan_run_id="r1", scan_root=tmp_path)
+        # Offsets of the quoted literal inside the match line.
+        text = src.read_text()
+        start = text.index('app.get("/users"')
+        payload = json.dumps({"results": [{
+            "check_id": "express.endpoint",
+            "path": str(src),
+            "start": {"line": 4, "col": 3, "offset": start},
+            "end": {"line": 4, "col": 32, "offset": start + 29},
+            "extra": {"message": "m", "metadata": {
+                "archskillkit": {"fact": "exposes",
+                                 "target_kind": "endpoint",
+                                 "confidence": "high"}},
+            # no metavars key: OSS gate
+        }}]})
+        report = index.ingest_semgrep(payload, scan_run_id="r1",
+                                      scan_root=tmp_path)
+        assert report.warnings == []
+        assert report.edges == 1
+        out = index.outgoing(index.resolve("srv/app.ts::mount")["id"])
+        assert [e["target_name"] for e in out] == ["/users"]
+        index.close()
+
+    def test_function_ident_target_recovered_from_source_slice(self, tmp_path):
+        index = CodeIndex(tmp_path / "code.sqlite").open()
+        src = self._write_repo(
+            tmp_path, "pages/api/users.ts",
+            "export default function handler(req, res) {\n"
+            "  res.status(200).json([])\n"
+            "}\n")
+        index.ingest_astgrep(
+            self._outline("outline.typescript.function", "handler", src, 1,
+                          "TypeScript"),
+            scan_run_id="r1", scan_root=tmp_path)
+        payload = json.dumps({"results": [{
+            "check_id": "next.pages_api_handler",
+            "path": str(src),
+            "start": {"line": 1, "col": 1, "offset": 0},
+            "end": {"line": 3, "col": 2, "offset": len(src.read_text())},
+            "extra": {"message": "m", "metadata": {
+                "archskillkit": {"fact": "exposes",
+                                 "target_kind": "endpoint",
+                                 "target_metavar": "$F",
+                                 "confidence": "high"}},
+        }}]})
+        report = index.ingest_semgrep(payload, scan_run_id="r1",
+                                      scan_root=tmp_path)
+        assert report.warnings == []
+        assert report.edges == 1
+        out = index.outgoing(
+            index.resolve("pages/api/users.ts::handler")["id"])
+        assert [e["target_name"] for e in out] == ["handler"]
+        index.close()
+
+    def test_unreadable_file_falls_back_to_positional_target(self, index):
+        # Relative path that does not exist on disk: slice fails, the
+        # legacy positional fallback keeps the edge discoverable.
+        index.ingest_astgrep(
+            ndjson(outline_record("outline.typescript.function", "h",
+                                  "gone/app.ts", 5, "TypeScript")),
+            scan_run_id="r1", scan_root=FX_ROOT)
+        payload = json.dumps({"results": [{
+            "check_id": "next.pages_api_handler",
+            "path": "gone/app.ts",
+            "start": {"line": 6, "col": 1, "offset": 0},
+            "end": {"line": 6, "col": 30, "offset": 29},
+            "extra": {"message": "m", "metadata": {
+                "archskillkit": {"fact": "exposes",
+                                 "target_kind": "endpoint",
+                                 "target_metavar": "$F",
+                                 "confidence": "high"}},
+        }}]})
+        report = index.ingest_semgrep(payload, scan_run_id="r1",
+                                      scan_root=FX_ROOT)
+        assert report.edges == 1
+        src = index.resolve("gone/app.ts::h")
+        assert [e["target_name"] for e in index.outgoing(src["id"])] == [
+            "endpoint@6"]

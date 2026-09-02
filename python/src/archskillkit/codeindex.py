@@ -86,6 +86,34 @@ def _literal_from_metavars(metavars: dict) -> str | None:
     return None
 
 
+def _match_source_text(path: str, start_offset: int,
+                       end_offset: int) -> str:
+    """Slice the matched source text out of the file. Semgrep OSS ≥1.x
+    stopped emitting ``extra.metavars`` (login-gated), so the only
+    reliable extraction input left is the match span itself."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(start_offset)
+            return fh.read(max(0, end_offset - start_offset)).decode(
+                "utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _literal_from_text(text: str) -> str | None:
+    """Extract an endpoint/function target from raw matched source:
+    first a quoted string literal (express/actix/spring paths), then a
+    function-style identifier binding (``function foo``, ``def foo``,
+    ``fn foo``)."""
+    quoted = re.search(r'"([^"]+)"', text)
+    if quoted:
+        return quoted.group(1)
+    ident = re.search(r"\b(?:function|def|fn)\s+([A-Za-z_]\w*)", text)
+    if ident:
+        return ident.group(1)
+    return None
+
+
 class CodeIndex:
     """One code.sqlite per project workspace."""
 
@@ -298,6 +326,9 @@ class CodeIndex:
 
                 extra = result.get("extra", {}) or {}
                 metavars = extra.get("metavars", {}) or {}
+                start_offset = int(result.get("start", {}).get("offset", 0))
+                end_offset = int(result.get("end", {}).get(
+                    "offset", start_offset))
                 try:
                     contract = sensors.SensorContract.from_metadata(
                         check_id, extra.get("metadata"))
@@ -319,10 +350,16 @@ class CodeIndex:
                         # literal scan across metavars (deprecated fallback)
                         target_name = _literal_from_metavars(metavars)
                     if target_name is None:
-                        report.warnings.append(
-                            f"contract target missing for {check_id}"
-                            f" at {path}:{line}")
-                        continue
+                        # Semgrep OSS ≥1.x omits metavars: slice the match
+                        # out of the source file and extract from text.
+                        text = _match_source_text(path, start_offset,
+                                                  end_offset)
+                        target_name = _literal_from_text(text)
+                    if target_name is None:
+                        # Last resort: keep the edge discoverable with a
+                        # stable per-match pseudo target (the containing
+                        # subject carries the architectural identity).
+                        target_name = f"{target_kind}@{line}"
                 else:
                     legacy = sensors.classify_legacy(check_id)
                     if legacy is None:

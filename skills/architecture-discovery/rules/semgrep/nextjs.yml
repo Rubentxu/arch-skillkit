@@ -1,0 +1,49 @@
+# Next.js architecture markers (high confidence: explicit framework
+# idioms). Real-OSS validation — docs/v2/uat/v2.1-real-oss-validation-plan.md
+#
+# Scope: Pages Router (`pages/api/**`) and App Router (`app/**/route.ts`)
+# HTTP surfaces. The endpoint target is the exported symbol name
+# (Pages Router) or the HTTP method (App Router); the URL for Next.js
+# routes is filesystem-derived and not present in code.
+rules:
+  - id: next.pages_api_handler
+    languages: [typescript]
+    severity: INFO
+    message: Pages Router API route handler (pages/api/**)
+    paths:
+      include:
+        - "**/pages/api/**"
+    metadata:
+      archskillkit:
+        fact: exposes
+        target_kind: endpoint
+        target_metavar: $F
+        confidence: high
+    patterns:
+      - pattern-either:
+          - pattern: export default function $F(...) { ... }
+          - pattern: export default async function $F(...) { ... }
+
+  - id: next.app_route_handler
+    languages: [typescript]
+    severity: INFO
+    message: App Router route handler export (app/**/route.ts)
+    paths:
+      include:
+        - "**/route.ts"
+        - "**/route.tsx"
+        - "**/route.js"
+        - "**/route.jsx"
+    metadata:
+      archskillkit:
+        fact: exposes
+        target_kind: endpoint
+        target_metavar: $METHOD
+        confidence: high
+    patterns:
+      - pattern-either:
+          - pattern: export async function $METHOD(...) { ... }
+          - pattern: export function $METHOD(...) { ... }
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$

@@ -425,7 +425,9 @@ def _cmd_project(world: ArchitectureWorld, args: argparse.Namespace) -> int:
         "jsoncanvas": JSONCanvasAdapter(),
         "drawio": DrawioAdapter(),
     }
-    if args.format == "both":
+    if args.format == "all":
+        targets = list(adapters)
+    elif args.format == "both":
         # "both" = the two canonical projections; graphml/jsoncanvas are
         # opt-in formats (F10).
         targets = ["likec4", "arrows"]

@@ -257,6 +257,19 @@ class TestProjectCli:
         assert "specification {" in model.read_text()
         assert json.loads(arrows.read_text())["schema"] == "arch-skillkit/arrows-v1"
 
+    def test_project_all_formats(self, repo, tmp_path, monkeypatch):
+        env = _sandbox_env(monkeypatch, tmp_path)
+        TestProjectCli._seed_pipeline(repo, tmp_path, env)
+        proc = run_cli("project", "--repo", str(repo), "--format", "all",
+                       env=env)
+        assert proc.returncode == 0, proc.stderr
+        out = json.loads(proc.stdout)
+        formats = {p["format"] for p in out["projections"]}
+        assert formats == {"likec4", "arrows", "graphml", "jsoncanvas",
+                           "drawio"}
+        for projection in out["projections"]:
+            assert Path(projection["path"]).is_file()
+
     def test_project_without_world_fails_cleanly(self, repo, tmp_path, monkeypatch):
         env = _sandbox_env(monkeypatch, tmp_path)
         # no init: the repo has no Architecture World yet
