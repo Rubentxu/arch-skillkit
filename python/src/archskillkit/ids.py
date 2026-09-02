@@ -17,6 +17,7 @@ import hashlib
 import os
 import re
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +45,23 @@ def arch_data_root() -> Path:
 
 def arch_state_root() -> Path:
     return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "arch-skillkit"
+
+
+def arch_runtime_root() -> Path:
+    """Runtime state (registry of live processes, V2.4 ADR-0033).
+
+    XDG_RUNTIME_DIR when present; otherwise an owned tmp dir. The
+    ARCH_SKILLKIT_HOME override wins, as with the data root, so tests
+    and sandboxed runs never touch the host runtime directory. Python
+    side only — no bash parity requirement.
+    """
+    override = os.environ.get("ARCH_SKILLKIT_HOME")
+    if override:
+        return Path(override) / "runtime"
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime:
+        return Path(runtime) / "arch-skillkit"
+    return Path(tempfile.gettempdir()) / f"arch-skillkit-{os.getuid()}"
 
 
 def arch_cache_root() -> Path:
