@@ -15,15 +15,15 @@ fixes.
   users hit when rendering the projection). Two bugs surfaced by the new
   P7 real validation pipeline (`scripts/projections/validate_likec4.py`)
   that the existing syntax-only tests missed:
-    - Relations referenced nested elements with bare identifiers (`n8 ->
-      n9`) when both endpoints lived inside `target { ... }`. likec4
-      silently dropped them during model build. The adapter now tracks
-      each element's scope and emits relations with the fully qualified
-      name (`target.n8 -> target.n9`).
-    - The view was declared `view context { include * }` but `context`
-      is a reserved view name in likec4 0.40. The adapter now emits
-      `view index { include *; title 'Architecture' }` instead, which
-      matches the canonical LikeC4 layout convention.
+  - Relations referenced nested elements with bare identifiers (`n8 ->
+    n9`) when both endpoints lived inside `target { ... }`. likec4
+    silently dropped them during model build. The adapter now tracks
+    each element's scope and emits relations with the fully qualified
+    name (`target.n8 -> target.n9`).
+  - The view was declared `view context { include * }` but `context`
+    is a reserved view name in likec4 0.40. The adapter now emits
+    `view index { include *; title 'Architecture' }` instead, which
+    matches the canonical LikeC4 layout convention.
 
 ### Added
 
@@ -35,20 +35,20 @@ fixes.
   pytest equivalents under `python/tests/test_projections_adapters.py`
   run the same pipeline in CI with skipif when the external CLI is
   missing.
-    - `validate_graphml.py` — round-trip through `networkx`
-      (10 nodes / 5 edges, labels preserved, directed flag honoured).
-    - `validate_jsoncanvas.py` — round-trip through `jsonschema`
-      Draft 2020-12 against the in-tree schema
-      `python/src/archskillkit/projections/schemas/jsoncanvas-1.0.schema.json`.
-    - `validate_drawio.py` — round-trip through `lxml` over the
-      `<mxfile>/<mxGraphModel>` document; PNG render attempted when
-      `drawio-batch` is available.
-    - `validate_arrows.py` — round-trip through `jsonschema` against
-      the in-tree schema
-      `python/src/archskillkit/projections/schemas/arrows-v1.schema.json`.
-    - `validate_likec4.py` — round-trip through the `likec4` CLI
-      (`likec4 export --dry-run`) without requiring headless Chrome;
-      PNG render attempted when Chrome is on the host.
+  - `validate_graphml.py` — round-trip through `networkx`
+    (10 nodes / 5 edges, labels preserved, directed flag honoured).
+  - `validate_jsoncanvas.py` — round-trip through `jsonschema`
+    Draft 2020-12 against the in-tree schema
+    `python/src/archskillkit/projections/schemas/jsoncanvas-1.0.schema.json`.
+  - `validate_drawio.py` — round-trip through `lxml` over the
+    `<mxfile>/<mxGraphModel>` document; PNG render attempted when
+    `drawio-batch` is available.
+  - `validate_arrows.py` — round-trip through `jsonschema` against
+    the in-tree schema
+    `python/src/archskillkit/projections/schemas/arrows-v1.schema.json`.
+  - `validate_likec4.py` — round-trip through the `likec4` CLI
+    (`likec4 export --dry-run`) without requiring headless Chrome;
+    PNG render attempted when Chrome is on the host.
   The GraphML validator depends on `networkx>=3.6.1`, which has been
   moved from the main runtime to the `[dev]` extra to keep the runtime
   dependency surface clean.
