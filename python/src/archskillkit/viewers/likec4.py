@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 from archskillkit.viewers.contract import (
@@ -19,16 +20,31 @@ from archskillkit.viewers.contract import (
 )
 
 
+def _supports_server(binary: str) -> bool:
+    """Capability probe: a managed server needs the `start` command.
+    Some installed CLI shims are partial (e.g. export-only) — existence
+    alone is not availability."""
+    try:
+        proc = subprocess.run([binary, "--help"], capture_output=True,
+                              text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "start" in proc.stdout
+
+
 def find_likec4_binary() -> str | None:
-    found = shutil.which("likec4")
-    if found:
-        return found
+    """First candidate that actually supports the managed server:
+    PATH first, then the mise installs used by scripts/oss/view.sh."""
+    candidates = [which for which in [shutil.which("likec4")] if which]
     home = os.environ.get("HOME", "")
-    installs = sorted(
+    candidates.extend(
         str(p) for p in Path(home or "/nonexistent").glob(
             ".local/share/mise/installs/npm-likec4/*/node_modules/.bin/likec4")
         if p.is_file())
-    return installs[-1] if installs else None
+    for candidate in candidates:
+        if _supports_server(candidate):
+            return candidate
+    return None
 
 
 class LikeC4Viewer(ViewerAdapter):

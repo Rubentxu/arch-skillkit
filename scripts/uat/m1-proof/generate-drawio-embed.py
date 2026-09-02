@@ -95,7 +95,9 @@ window.addEventListener("message", evt => {
   let msg;
   try { msg = JSON.parse(evt.data); } catch { return; }
   note("← " + (msg.event || "?"));
-  if (msg.event === "load") {
+  if (msg.event === "init" || msg.event === "load") {
+    // current embed protocol announces `init`; older ones said `load`.
+    // Either way: the editor shell is ready for the load action.
     note("   editor ready — artifact can be loaded");
     btnLoad.disabled = false;
   } else if (msg.event === "export") {

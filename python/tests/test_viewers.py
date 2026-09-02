@@ -42,10 +42,15 @@ def sandbox(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _fake_binary(directory: Path, name: str) -> str:
+def _fake_binary(directory: Path, name: str, body: str = "exit 0\n") -> str:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
-    path.write_text("#!/bin/sh\nexit 0\n")
+    # a useful fake advertises the managed-server capability so the
+    # capability probe accepts it
+    path.write_text(
+        f"#!/bin/sh\n"
+        f"if [ \"$1\" = \"--help\" ]; then echo 'start serve export'; fi\n"
+        f"{body}")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return str(path)
 
