@@ -85,6 +85,11 @@ from archskillkit.ids import RepoNotFound, arch_config_root, arch_data_root
 from archskillkit.projections.arrows_bridge import (
     build_envelope as build_arrows_envelope,
 )
+from archskillkit.projections.arrows_delta import (
+    ARROWS_EMBED_ORIGIN,
+    MalformedArrowsGraph,
+    classify_arrows,
+)
 from archskillkit.projections.drawio_delta import (
     DRAWIO_EMBED_ORIGIN,
     MalformedDrawioXml,
@@ -116,6 +121,7 @@ LAUNCH_SCHEMA = "arch-skillkit/launch-v1"
 DRAWCAND_SCHEMA = "arch-skillkit/drawio-candidate-v1"
 DRAWIO_ARTIFACT_SCHEMA = "arch-skillkit/drawio-artifact-v1"
 ARROWS_ARTIFACT_SCHEMA = "arch-skillkit/arrows-artifact-v1"
+ARROWSCAND_SCHEMA = "arch-skillkit/arrows-candidate-v1"
 FAVORITES_SCHEMA = "arch-skillkit/favorites-v1"
 
 # Candidate names become run ids (proposal-<name>): restrictive charset.
@@ -885,7 +891,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     </div>
   </section>
 
-  <!-- Arrows embed panel (M5 slice 26) -->
+  <!-- Arrows embed panel (M5 slice 26/27) -->
   <section id="arrows-panel" aria-labelledby="arrows-heading" hidden>
     <div class="panel">
       <div class="panel-header">
@@ -895,15 +901,38 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       </div>
       <div id="arrows-body" class="panel-body">
         <p class="field-hint">Interactive Arrows diagram served from the local
-        vendor bundle. No server round-trip for edits in this slice
-        (export/save follow-up).</p>
+        vendor bundle. Semantic edits become a reviewable proposal
+        candidate — never direct architecture changes.</p>
         <iframe id="arrows-frame" title="Arrows viewer" class="drawio-frame"
                 sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+        <div class="hub-row">
+          <div class="hub-field">
+            <label for="arrows-candidate-name">Candidate name</label>
+            <input type="text" id="arrows-candidate-name" autocomplete="off"
+                   spellcheck="false" maxlength="64" placeholder="edit-1" />
+            <p id="arrows-candidate-name-hint" class="field-hint">letters, digits, - _ (max 64)</p>
+          </div>
+          <div class="hub-field">
+            <label for="arrows-actor-name">Actor</label>
+            <input type="text" id="arrows-actor-name" autocomplete="off"
+                   spellcheck="false" placeholder="you" />
+            <p id="arrows-actor-hint" class="field-hint">recorded on promote / reject</p>
+          </div>
+          <div class="hub-actions">
+            <button type="button" id="btn-arrows-propose" disabled>Create proposal</button>
+            <button type="button" id="btn-arrows-reject" disabled
+                    title="Governance mutation: requires --admin">Reject</button>
+            <button type="button" id="btn-arrows-promote" disabled
+                    title="Governance mutation: requires --admin">Promote</button>
+            <button type="button" id="btn-arrows-close">Close viewer</button>
+          </div>
+        </div>
+        <p id="arrows-promote-hint" class="field-hint">Promote and reject are
+        governance mutations: they stay disabled unless the server runs
+        with --admin (or ARCH_SKILLKIT_ADMIN=1).</p>
         <div id="arrows-status" class="field-hint" aria-live="polite"></div>
         <div id="arrows-error" class="error-state" hidden role="alert"></div>
-        <div class="hub-actions">
-          <button type="button" id="btn-arrows-close">Close viewer</button>
-        </div>
+        <div id="arrows-result" hidden></div>
       </div>
     </div>
   </section>
@@ -1345,9 +1374,16 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       governanceAction("/drawio-promote", "approved_by", "promoted");
     });
 
-    // slice 26: arrows embed
+    // slice 26/27: arrows embed
     document.getElementById("btn-open-arrows").addEventListener("click", openArrows);
     document.getElementById("btn-arrows-close").addEventListener("click", closeArrows);
+    document.getElementById("btn-arrows-propose").addEventListener("click", proposeArrows);
+    document.getElementById("btn-arrows-reject").addEventListener("click", function () {
+      arrowsGovernanceAction("/arrows-reject", "actor", "rejected");
+    });
+    document.getElementById("btn-arrows-promote").addEventListener("click", function () {
+      arrowsGovernanceAction("/arrows-promote", "approved_by", "promoted");
+    });
   }
 
   // ---------- draw.io semantic edit (slice 23d) -------------------------
@@ -1540,21 +1576,40 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     }
   });
 
-  // ---------- Arrows embed panel (slice 26) --------------------------------
+  // ---------- Arrows embed panel (slice 26/27) --------------------------------
   // The arrows embed iframe is served from /vendor/arrows/embed.html
   // (same origin as the shell). The bridge protocol:
   //   iframe emits: {type:'ready', host:'iframe'}
   //   host sends:   {type:'load', graph:{nodes,rels}, docVersion}
   //   iframe emits: {type:'graph-changed'}
-  // Export/save round-trip is a follow-up (not in this slice).
+  //   iframe emits: {type:'response', result} when cypher export completes
+  // For proposal creation: send {type:'request',kind:'cypher'} to export
+  // the current graph; parse {type:'response',result} to extract graph.
 
   var _arrowsPhase = "closed";
+  var _lastArrowsCandidate = null;
+
+  function arrowsStatus(msg) {
+    document.getElementById("arrows-status").textContent = msg;
+  }
+
+  function arrowsError(msg) {
+    var el = document.getElementById("arrows-error");
+    el.textContent = msg;
+    el.removeAttribute("hidden");
+  }
+
+  function arrowsSend(payload) {
+    var frame = document.getElementById("arrows-frame");
+    frame.contentWindow.postMessage(payload, location.origin);
+  }
 
   function openArrows() {
     var fmtSel = document.getElementById("format-select");
     if (fmtSel.value !== "arrows") return;
     var errEl = document.getElementById("arrows-error");
     errEl.setAttribute("hidden", "");
+    document.getElementById("arrows-result").setAttribute("hidden", "");
     apiFetch("/arrows-artifact").then(function (result) {
       if (result.status !== 200) {
         errEl.removeAttribute("hidden");
@@ -1562,8 +1617,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
         return;
       }
       if (result.body.base_drift) {
-        document.getElementById("arrows-status").textContent =
-          "warning: artifact drifted since generation";
+        arrowsStatus("warning: artifact drifted since generation");
       }
       var frame = document.getElementById("arrows-frame");
       // Serve from the local vendor dir (same origin — no CORS issues)
@@ -1571,7 +1625,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       var panel = document.getElementById("arrows-panel");
       panel.removeAttribute("hidden");
       _arrowsPhase = "waiting";
-      document.getElementById("arrows-status").textContent = "waiting for Arrows to initialise…";
+      arrowsStatus("waiting for Arrows to initialise…");
     });
   }
 
@@ -1580,12 +1634,85 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     var frame = document.getElementById("arrows-frame");
     frame.removeAttribute("src");
     document.getElementById("arrows-panel").setAttribute("hidden", "");
+    document.getElementById("btn-arrows-propose").disabled = true;
+    _lastArrowsCandidate = null;
+    updateArrowsGovernanceControls();
   }
 
-  // Arrows postMessage pump: exact-origin check (same origin in this case,
-  // but we verify evt.origin === location.origin as specified).
+  function updateArrowsGovernanceControls() {
+    var ready = _admin && !!_lastArrowsCandidate;
+    document.getElementById("btn-arrows-promote").disabled = !ready;
+    document.getElementById("btn-arrows-reject").disabled = !ready;
+  }
+
+  function arrowsGovernanceAction(endpoint, actorKey, pastTense) {
+    if (!_admin || !_lastArrowsCandidate) return;
+    var actor = (document.getElementById("arrows-actor-name").value || "").trim();
+    if (!actor) {
+      arrowsError("actor is required to record a " + actorKey);
+      return;
+    }
+    var payload = { name: _lastArrowsCandidate };
+    payload[actorKey] = actor;
+    apiPost(endpoint, payload)
+      .then(function (result) {
+        var el = document.getElementById("arrows-result");
+        if (result.status === 200) {
+          _lastArrowsCandidate = null;
+          updateArrowsGovernanceControls();
+          el.innerHTML = '<p class="pass">candidate ' + pastTense + ".</p>";
+          el.removeAttribute("hidden");
+        } else {
+          arrowsError(
+            (result.body && result.body.error && result.body.error.message)
+            || "governance action failed"
+          );
+        }
+      })
+      .catch(function () {
+        arrowsError("governance request failed");
+      });
+  }
+
+  function proposeArrows() {
+    if (_arrowsPhase !== "loaded") return;
+    _arrowsPhase = "proposing";
+    arrowsStatus("exporting diagram…");
+    arrowsSend({ type: "request", kind: "cypher" });
+  }
+
+  function submitArrowsProposal(graph) {
+    var name = (document.getElementById("arrows-candidate-name").value || "").trim();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) {
+      _arrowsPhase = "loaded";
+      arrowsError("candidate name must use letters, digits, '-', '_' (max 64)");
+      return;
+    }
+    apiPost("/arrows-candidate", { name: name, format: "arrows", graph: graph })
+      .then(function (result) {
+        _arrowsPhase = "loaded";
+        renderArrowsProposalResult(result.status, result.body);
+      })
+      .catch(function () {
+        _arrowsPhase = "loaded";
+        arrowsError("proposal request failed");
+      });
+  }
+
+  function renderArrowsProposalResult(status, body) {
+    // Reuse the same rendering logic as draw.io
+    renderProposalResult(status, body);
+    // Mirror update of _lastCandidate for arrows governance
+    if (status === 200 && body && body.candidate) {
+      _lastArrowsCandidate = body.candidate;
+    } else {
+      _lastArrowsCandidate = null;
+    }
+    updateArrowsGovernanceControls();
+  }
+
+  // Arrows postMessage pump
   window.addEventListener("message", function (evt) {
-    // Only handle arrows messages
     if (evt.origin !== location.origin) return;
     var msg;
     try {
@@ -1593,27 +1720,42 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     } catch (e) {
       return;
     }
-    if (!msg || msg.type !== "ready" || msg.host !== "iframe") return;
-    if (_arrowsPhase !== "waiting") return;
+    if (!msg) return;
 
-    // Fetch artifact and send load envelope to iframe
-    apiFetch("/arrows-artifact").then(function (result) {
-      if (result.status !== 200) {
-        document.getElementById("arrows-status").textContent =
-          "could not load artifact: " + (result.body.message || result.status);
-        return;
+    if (_arrowsPhase === "waiting") {
+      if (msg.type === "ready" && msg.host === "iframe") {
+        // Fetch artifact and send load envelope to iframe
+        apiFetch("/arrows-artifact").then(function (result) {
+          if (result.status !== 200) {
+            arrowsStatus("could not load artifact: " + (result.body.message || result.status));
+            return;
+          }
+          var frame = document.getElementById("arrows-frame");
+          frame.contentWindow.postMessage({
+            type: "load",
+            graph: result.body.graph,
+            docVersion: result.body.docVersion
+          }, location.origin);
+          _arrowsPhase = "loaded";
+          arrowsStatus(
+            "loaded — " + (result.body.graph.nodes || []).length + " nodes, "
+            + (result.body.graph.rels || []).length + " relations"
+          );
+          document.getElementById("btn-arrows-propose").disabled = false;
+        });
       }
-      var frame = document.getElementById("arrows-frame");
-      frame.contentWindow.postMessage({
-        type: "load",
-        graph: result.body.graph,
-        docVersion: result.body.docVersion
-      }, location.origin);
-      _arrowsPhase = "loaded";
-      document.getElementById("arrows-status").textContent =
-        "loaded — " + (result.body.graph.nodes || []).length + " nodes, "
-        + (result.body.graph.rels || []).length + " relations";
-    });
+    } else if (_arrowsPhase === "proposing") {
+      if (msg.type === "response" && msg.result) {
+        // The cypher export response contains the live graph
+        var graph = msg.result;
+        if (graph && graph.nodes && graph.rels) {
+          submitArrowsProposal(graph);
+        } else {
+          _arrowsPhase = "loaded";
+          arrowsError("unexpected cypher response shape");
+        }
+      }
+    }
   });
 
   function apiPost(endpoint, payload) {
@@ -1857,6 +1999,27 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                     "POST required; use the /drawio-reject endpoint with POST",
                 )
                 return
+            if parsed.path == "/arrows-candidate":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /arrows-candidate endpoint with POST",
+                )
+                return
+            if parsed.path == "/arrows-promote":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /arrows-promote endpoint with POST",
+                )
+                return
+            if parsed.path == "/arrows-reject":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /arrows-reject endpoint with POST",
+                )
+                return
             self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
             self._error(500, "INTERNAL", str(exc))
@@ -1885,6 +2048,15 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/drawio-reject":
                 self._drawio_reject_http()
                 return
+            if parsed.path == "/arrows-candidate":
+                self._arrows_candidate_http()
+                return
+            if parsed.path == "/arrows-promote":
+                self._arrows_promote_http()
+                return
+            if parsed.path == "/arrows-reject":
+                self._arrows_reject_http()
+                return
             # Known GET-only routes return 405, unknown routes return 404
             get_only_routes = {
                 "/health",
@@ -1901,6 +2073,9 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/drawio-candidate",
                 "/drawio-promote",
                 "/drawio-reject",
+                "/arrows-candidate",
+                "/arrows-promote",
+                "/arrows-reject",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -1939,6 +2114,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/drawio-candidate",
                 "/drawio-promote",
                 "/drawio-reject",
+                "/arrows-candidate",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -2108,6 +2284,16 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
     def _drawio_reject_http(self) -> None:
         """Handle POST /drawio-reject (M5 slice 24, opt-in): mark a
         candidate rejected. Requires --admin."""
+        self._governance_http(handle_reject, "actor")
+
+    def _arrows_promote_http(self) -> None:
+        """Handle POST /arrows-promote (V2.4 M5 slice 27): promote an
+        arrows candidate fork. Requires --admin."""
+        self._governance_http(handle_promote, "approved_by")
+
+    def _arrows_reject_http(self) -> None:
+        """Handle POST /arrows-reject (V2.4 M5 slice 27): reject an
+        arrows candidate fork. Requires --admin."""
         self._governance_http(handle_reject, "actor")
 
     def _drawio_artifact_http(self) -> None:
@@ -2618,6 +2804,170 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 200,
                 {
                     "schema": DRAWCAND_SCHEMA,
+                    "candidate": name,
+                    "run_id": run_id,
+                    "fork_created": True,
+                    "classification": classification,
+                    "unsupported": [],
+                    "structural_diff": diff_dict,
+                    "base_artifact_sha256": delta.base_artifact_sha256,
+                    "submitted_artifact_sha256": delta.submitted_artifact_sha256,
+                },
+            )
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _arrows_candidate_http(self) -> None:
+        """Handle POST /arrows-candidate (V2.4 M5 slice 27).
+
+        Classify the submitted Arrows bridge-shaped graph export into
+        presentation vs semantic changes, and record ONLY a reviewable
+        proposal candidate fork. Mirrors the draw.io candidate flow exactly.
+
+        Sends exactly one response directly and returns normally.
+        """
+        if not self._require_admin_or_error():
+            return
+        payload = self._parse_json_object(_MAX_DRAWIO_BODY)
+        if payload is None:
+            return
+
+        # --- strict schema: exactly name + format + graph -----------------
+        if set(payload.keys()) != {"name", "format", "graph"}:
+            self._error(
+                400,
+                "BAD_REQUEST",
+                "request body must contain exactly 'name', 'format' and 'graph'",
+            )
+            return
+        name = payload["name"]
+        fmt = payload["format"]
+        graph = payload["graph"]
+        if not isinstance(name, str) or not _CANDIDATE_NAME_RE.fullmatch(name):
+            self._error(400, "BAD_REQUEST", "'name' must match ^[A-Za-z0-9_-]{1,64}$")
+            return
+        if fmt != "arrows":
+            self._error(400, "UNKNOWN_FORMAT", "this endpoint only accepts format 'arrows'")
+            return
+        if not isinstance(graph, dict):
+            self._error(400, "BAD_REQUEST", "'graph' must be a JSON object")
+            return
+
+        world, index = self._world()
+        try:
+            # Base artifact resolved server-side (browser never supplies paths)
+            artifact = world.workspace / ARTIFACT_PATHS["arrows"]
+            if not artifact.exists():
+                self._error(
+                    409,
+                    "ARTIFACT_MISSING",
+                    "no arrows artifact; run: archskillkit project --format arrows",
+                )
+                return
+            artifact_bytes = artifact.read_bytes()
+
+            # Base drift gate
+            meta = load_metadata(world, "arrows")
+            generated_sha = (meta or {}).get("generated_sha256")
+            if not generated_sha:
+                self._error(
+                    409,
+                    "BASE_DRIFT",
+                    "arrows projection has no metadata sidecar;"
+                    " regenerate: archskillkit project --format arrows --force",
+                )
+                return
+            if hashlib.sha256(artifact_bytes).hexdigest() != generated_sha:
+                self._error(
+                    409,
+                    "BASE_DRIFT",
+                    "arrows artifact changed since generation;"
+                    " regenerate: archskillkit project --format arrows --force",
+                )
+                return
+
+            # Classify: origin is enforced inside classify_arrows
+            try:
+                delta = classify_arrows(artifact_bytes, graph, ARROWS_EMBED_ORIGIN)
+            except MalformedArrowsGraph as exc:
+                self._error(400, exc.code, str(exc))
+                return
+
+            classification = {
+                "presentation_changes": delta.presentation_changes,
+                "semantic_changes": delta.semantic_changes,
+                "semantic_candidates": [c.model_dump() for c in delta.semantic_candidates],
+            }
+
+            # Ambiguous conditions: refuse loudly, create nothing
+            if delta.unsupported:
+                self._send_json(
+                    422,
+                    {
+                        "schema": ARROWSCAND_SCHEMA,
+                        "error": {
+                            "code": "UNSUPPORTED_EDITS",
+                            "message": "unsupported conditions present; no candidate created",
+                        },
+                        "classification": classification,
+                        "unsupported": [u.model_dump() for u in delta.unsupported],
+                    },
+                )
+                return
+
+            # Presentation-only: nothing to review
+            if delta.semantic_changes == 0:
+                self._send_json(
+                    200,
+                    {
+                        "schema": ARROWSCAND_SCHEMA,
+                        "candidate": None,
+                        "run_id": None,
+                        "fork_created": False,
+                        "message": "presentation-only changes; no candidate needed",
+                        "classification": classification,
+                        "unsupported": [],
+                    },
+                )
+                return
+
+            # Apply semantic candidates on a fresh candidate fork
+            run_id = f"proposal-{name}"
+            with world:
+                if world.has_run(run_id):
+                    world.drop_run(run_id)
+                fork = world.fork(name)
+                apply_errors = _apply_candidates(fork, delta.semantic_candidates)
+                if not apply_errors:
+                    fork.record_proposal(name, rationale="Arrows embedded edit")
+            if apply_errors:
+                self._send_json(
+                    422,
+                    {
+                        "schema": ARROWSCAND_SCHEMA,
+                        "error": {
+                            "code": "APPLY_FAILED",
+                            "message": "semantic candidates could not be applied;"
+                            " no candidate recorded",
+                        },
+                        "classification": classification,
+                        "apply_errors": apply_errors,
+                    },
+                )
+                return
+
+            with world:
+                fork = world.view(run_id)
+                diff = structural_diff(world, fork)
+            diff_dict = {k: v for k, v in vars(diff).items()}
+            diff_dict["is_empty"] = diff.is_empty()
+
+            self._send_json(
+                200,
+                {
+                    "schema": ARROWSCAND_SCHEMA,
                     "candidate": name,
                     "run_id": run_id,
                     "fork_created": True,

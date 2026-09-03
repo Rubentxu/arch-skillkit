@@ -1942,6 +1942,259 @@ def test_arrows_artifact_post_405(arrows_server):
     assert body["code"] == "METHOD_NOT_ALLOWED"
 
 
+# ---------- slice 27: POST /arrows-candidate ---------------------------
+
+ARROWSCAND = "/arrows-candidate"
+
+
+def _start_server(repo, *, admin=False):
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "control-plane",
+            "--repo",
+            str(repo),
+            "--port",
+            "0",
+        ]
+        + (["--admin"] if admin else []),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    start = json.loads(proc.stdout.readline())
+    return proc, start
+
+
+@pytest.fixture()
+def arrows_server_admin(sandbox, repo_with_arrows):
+    """Admin-opted-in server for arrows candidate flows."""
+    proc, start = _start_server(repo_with_arrows, admin=True)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+@pytest.fixture()
+def arrows_server_noadmin(sandbox, repo_with_arrows):
+    proc, start = _start_server(repo_with_arrows, admin=False)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+def _artifact_graph(repo) -> dict:
+    """Return the bridge-shaped graph from the arrows artifact."""
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    world = ArchitectureWorld.for_repo(str(repo))
+    path = world.workspace / ARTIFACT_PATHS["arrows"]
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    # Convert arrows-v1 to bridge shape using arrows_bridge
+    from archskillkit.projections.arrows_bridge import arrows_to_bridge
+
+    return arrows_to_bridge(doc)
+
+
+def test_arrows_get_returns_405(arrows_server):
+    status, body = _get(arrows_server["url"] + ARROWSCAND, token=arrows_server["token"])
+    assert status == 405
+    assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+def test_arrows_requires_auth(server):
+    status, body = _post_json(
+        server["url"], ARROWSCAND, None, {"name": "x", "format": "arrows", "graph": {}}
+    )
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_arrows_strict_schema(arrows_server_admin):
+    s = arrows_server_admin
+    ok = {"name": "edit1", "format": "arrows", "graph": {"nodes": [], "rels": []}}
+    # extra key
+    bad = dict(ok, approve=True)
+    status, body = _post_json(s["url"], ARROWSCAND, s["token"], bad)
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # missing key
+    status, body = _post_json(s["url"], ARROWSCAND, s["token"], {"name": "edit1", "format": "arrows"})
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # bad name charset
+    status, body = _post_json(s["url"], ARROWSCAND, s["token"], dict(ok, name="bad name!"))
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # wrong format
+    status, body = _post_json(s["url"], ARROWSCAND, s["token"], dict(ok, format="likec4"))
+    assert (status, body["code"]) == (400, "UNKNOWN_FORMAT")
+    # graph not an object
+    status, body = _post_json(s["url"], ARROWSCAND, s["token"], dict(ok, graph=["nodes"]))
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+
+
+def test_arrows_missing_artifact_409(sandbox, repo_with_world):
+    # Gate order: admin opt-in fires before artifact check
+    proc, start = _start_server(repo_with_world)  # no projection, no admin
+    try:
+        status, body = _post_json(
+            start["url"],
+            ARROWSCAND,
+            start["token"],
+            {"name": "edit1", "format": "arrows", "graph": {"nodes": [], "rels": []}},
+        )
+        assert status == 403
+        assert body["code"] == "ADMIN_DISABLED"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+    # With opt-in, the missing artifact surfaces as 409
+    proc, start = _start_server(repo_with_world, admin=True)
+    try:
+        status, body = _post_json(
+            start["url"],
+            ARROWSCAND,
+            start["token"],
+            {"name": "edit1", "format": "arrows", "graph": {"nodes": [], "rels": []}},
+        )
+        assert status == 409
+        assert body["code"] == "ARTIFACT_MISSING"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+def test_arrows_base_drift(arrows_server_admin, repo_with_arrows):
+    s = arrows_server_admin
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    # Capture the valid graph BEFORE tampering (the tampered file is
+    # intentionally invalid JSON; the drift gate must fire on bytes, not
+    # on our ability to parse it).
+    graph = _artifact_graph(repo_with_arrows)
+    artifact = (
+        ArchitectureWorld.for_repo(str(repo_with_arrows)).workspace / ARTIFACT_PATHS["arrows"]
+    )
+    artifact.write_text(artifact.read_text() + "\n// tampered\n")
+    status, body = _post_json(
+        s["url"],
+        ARROWSCAND,
+        s["token"],
+        {"name": "edit1", "format": "arrows", "graph": graph},
+    )
+    assert status == 409
+    assert body["code"] == "BASE_DRIFT"
+
+
+def test_arrows_unsupported_no_fork(arrows_server_admin, repo_with_arrows):
+    s = arrows_server_admin
+    # Submit a graph with a node that has no caption (unsupported)
+    graph = _artifact_graph(repo_with_arrows)
+    graph["nodes"].append({"id": "nx", "position": {"x": 0, "y": 0}, "labels": [], "properties": {}})
+    status, body = _post_json(
+        s["url"], ARROWSCAND, s["token"], {"name": "edit1", "format": "arrows", "graph": graph}
+    )
+    assert status == 422
+    assert body["error"]["code"] == "UNSUPPORTED_EDITS"
+    assert body["unsupported"]
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    try:
+        assert not world.has_run("proposal-edit1")
+    finally:
+        world.close()
+
+
+def test_arrows_presentation_only_no_fork(arrows_server_admin, repo_with_arrows):
+    s = arrows_server_admin
+    # Submit the same graph (no changes)
+    graph = _artifact_graph(repo_with_arrows)
+    status, body = _post_json(
+        s["url"],
+        ARROWSCAND,
+        s["token"],
+        {"name": "edit1", "format": "arrows", "graph": graph},
+    )
+    assert status == 200
+    assert body["fork_created"] is False
+    assert body["candidate"] is None
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    try:
+        assert not world.has_run("proposal-edit1")
+    finally:
+        world.close()
+
+
+def test_arrows_happy_path_creates_candidate(arrows_server_admin, repo_with_arrows):
+    s = arrows_server_admin
+    graph = _artifact_graph(repo_with_arrows)
+    # Add a new node (element_added)
+    graph["nodes"].append(
+        {"id": "ng", "caption": "Gamma", "position": {"x": 0, "y": 0}, "labels": ["component"], "properties": {}, "style": None}
+    )
+    status, body = _post_json(
+        s["url"], ARROWSCAND, s["token"], {"name": "edit1", "format": "arrows", "graph": graph}
+    )
+    assert status == 200, body
+    assert body["fork_created"] is True
+    assert body["run_id"] == "proposal-edit1"
+    assert "Gamma" in json.dumps(body["structural_diff"])
+
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    try:
+        fork = world.view("proposal-edit1")
+        try:
+            names = {o["data"].get("name") for o in fork.find_objects("architecture_element")}
+            assert "Gamma" in names
+            gamma = next(
+                o
+                for o in fork.find_objects("architecture_element")
+                if o["data"].get("name") == "Gamma"
+            )
+            assert gamma["data"].get("origin") == "DECLARED"
+            proposals = fork.find_objects("proposal")
+            assert proposals, "record_proposal should persist a proposal object"
+        finally:
+            fork.close()
+    finally:
+        world.close()
+
+
+def test_arrows_resubmit_replaces_candidate(arrows_server_admin, repo_with_arrows):
+    s = arrows_server_admin
+    graph = _artifact_graph(repo_with_arrows)
+    # First: add Gamma
+    g1 = dict(graph)
+    g1["nodes"] = graph["nodes"] + [
+        {"id": "ng", "caption": "Gamma", "position": {"x": 0, "y": 0}, "labels": [], "properties": {}, "style": None}
+    ]
+    status, _ = _post_json(
+        s["url"], ARROWSCAND, s["token"], {"name": "edit1", "format": "arrows", "graph": g1}
+    )
+    assert status == 200
+    # Second: replace Gamma with Delta
+    g2 = dict(graph)
+    g2["nodes"] = graph["nodes"] + [
+        {"id": "nd", "caption": "Delta", "position": {"x": 0, "y": 0}, "labels": ["interface"], "properties": {}, "style": None}
+    ]
+    status, _ = _post_json(
+        s["url"], ARROWSCAND, s["token"], {"name": "edit1", "format": "arrows", "graph": g2}
+    )
+    assert status == 200
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    try:
+        fork = world.view("proposal-edit1")
+        try:
+            names = {o["data"].get("name") for o in fork.find_objects("architecture_element")}
+            assert "Delta" in names
+            assert "Gamma" not in names  # latest submission wins
+        finally:
+            fork.close()
+    finally:
+        world.close()
+
+
 # -- /favorites -------------------------------------------------------
 
 
