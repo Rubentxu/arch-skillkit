@@ -27,6 +27,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -330,7 +331,22 @@ def test_health_requires_token_too(server):
     assert status_noauth == 401
     status, body = _get(server["url"] + "/health", token=server["token"])
     assert status == 200
-    assert body == {"schema": "arch-skillkit/control-plane-health-v1", "ok": True}
+    assert body == {
+        "schema": "arch-skillkit/control-plane-health-v1",
+        "ok": True,
+        "admin": False,
+    }
+
+
+def test_health_reports_admin_optin(sandbox, repo_with_drawio):
+    proc, start = _start_server(repo_with_drawio, admin=True)
+    try:
+        status, body = _get(start["url"] + "/health", token=start["token"])
+        assert status == 200
+        assert body["admin"] is True
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
 
 
 def test_write_methods_rejected(server):
@@ -1181,7 +1197,7 @@ from archskillkit.world import ArchitectureWorld
 DRAWCAND = "/drawio-candidate"
 
 
-def _start_server(repo):
+def _start_server(repo, *, admin=False):
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -1192,7 +1208,8 @@ def _start_server(repo):
             str(repo),
             "--port",
             "0",
-        ],
+        ]
+        + (["--admin"] if admin else []),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1232,7 +1249,18 @@ def repo_with_drawio(sandbox, repo_with_world):
 
 @pytest.fixture()
 def drawio_server(sandbox, repo_with_drawio):
-    proc, start = _start_server(repo_with_drawio)
+    """Admin-opted-in server: slice-23 candidate flows stay green and
+    slice-24 governance endpoints are exercisable."""
+    proc, start = _start_server(repo_with_drawio, admin=True)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+@pytest.fixture()
+def drawio_server_noadmin(sandbox, repo_with_drawio):
+    proc, start = _start_server(repo_with_drawio, admin=False)
     assert start["schema"] == "arch-skillkit/control-plane-start-v1"
     yield start
     proc.terminate()
@@ -1313,7 +1341,22 @@ def test_drawio_strict_schema(drawio_server):
 
 
 def test_drawio_missing_artifact_409(sandbox, repo_with_world):
-    proc, start = _start_server(repo_with_world)  # no projection generated
+    # Gate order: admin opt-in fires before any artifact work.
+    proc, start = _start_server(repo_with_world)  # no projection, no admin
+    try:
+        status, body = _post_json(
+            start["url"],
+            DRAWCAND,
+            start["token"],
+            {"name": "edit1", "format": "drawio", "export": "<a/>"},
+        )
+        assert status == 403
+        assert body["code"] == "ADMIN_DISABLED"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+    # With opt-in, the missing artifact surfaces as 409.
+    proc, start = _start_server(repo_with_world, admin=True)
     try:
         status, body = _post_json(
             start["url"],
@@ -1544,3 +1587,160 @@ def test_drawio_artifact_post_405(server):
     status, body = _post_json(server["url"] + "/drawio-artifact", token=server["token"], payload={})
     assert status == 405
     assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+# ---------- slice 24: governance mutations opt-in ------------------------
+
+
+def test_drawio_candidate_requires_admin(server):
+    """Candidate creation is a governance write: refused without opt-in
+    (stable ADMIN_DISABLED code, before any body parsing)."""
+    status, body = _post_json(
+        server["url"] + DRAWCAND,
+        token=server["token"],
+        payload={"name": "edit1", "format": "drawio", "export": "<a/>"},
+    )
+    assert status == 403
+    assert body["code"] == "ADMIN_DISABLED"
+
+
+def test_drawio_promote_requires_admin(drawio_server_noadmin):
+    status, body = _post_json(
+        drawio_server_noadmin["url"] + "/drawio-promote",
+        token=drawio_server_noadmin["token"],
+        payload={"name": "edit1", "approved_by": "you"},
+    )
+    assert status == 403
+    assert body["code"] == "ADMIN_DISABLED"
+
+
+def test_drawio_reject_requires_admin(drawio_server_noadmin):
+    status, body = _post_json(
+        drawio_server_noadmin["url"] + "/drawio-reject",
+        token=drawio_server_noadmin["token"],
+        payload={"name": "edit1", "actor": "you"},
+    )
+    assert status == 403
+    assert body["code"] == "ADMIN_DISABLED"
+
+
+def test_drawio_promote_reject_get_405(server):
+    for path in ("/drawio-promote", "/drawio-reject"):
+        status, body = _get(server["url"] + path, token=server["token"])
+        assert status == 405
+        assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+def test_drawio_promote_strict_schema(drawio_server):
+    s = drawio_server
+    status, body = _post_json(
+        s["url"] + "/drawio-promote",
+        token=s["token"],
+        payload={"name": "edit1", "approved_by": "you", "extra": 1},
+    )
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    status, body = _post_json(
+        s["url"] + "/drawio-promote",
+        token=s["token"],
+        payload={"name": "edit1"},
+    )
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    status, body = _post_json(
+        s["url"] + "/drawio-promote",
+        token=s["token"],
+        payload={"name": "edit1", "approved_by": "  "},
+    )
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+
+
+def _create_gamma_candidate(s):
+    submitted = _inject_before_last_root(
+        _artifact_xml(s["repo"] if "repo" in s else _drawio_repo_of(s)),
+        _vertex_xml("nG", "Gamma"),
+    )
+    return _post_json(
+        s["url"] + DRAWCAND,
+        token=s["token"],
+        payload={"name": "edit1", "format": "drawio", "export": submitted},
+    )
+
+
+def _drawio_repo_of(s):
+    """Recover the repo path from the server's --repo command line."""
+    registry_entry = [
+        e for e in RuntimeRegistry().active() if e.pid == s["pid"] and e.run_id == "control-plane"
+    ]
+    assert registry_entry, "control-plane runtime entry missing"
+    command = registry_entry[0].command
+    return Path(command.split("--repo ")[1].split(" --port")[0])
+
+
+def test_drawio_promote_happy_path(drawio_server):
+    s = drawio_server
+    status, body = _create_gamma_candidate(s)
+    assert status == 200, body
+
+    status, body = _post_json(
+        s["url"] + "/drawio-promote",
+        token=s["token"],
+        payload={"name": "edit1", "approved_by": "you"},
+    )
+    assert status == 200, body
+    # The pipeline's own envelope schema is the contract (single source).
+    assert body["schema"] == "arch-skillkit/proposal-promote-v1"
+
+    world = ArchitectureWorld.for_repo(str(_drawio_repo_of(s))).open()
+    try:
+        names = {o["data"].get("name") for o in world.find_objects("architecture_element")}
+        assert "Gamma" in names  # promoted into the base world
+    finally:
+        world.close()
+
+
+def test_drawio_promote_unknown_candidate(drawio_server):
+    s = drawio_server
+    status, body = _post_json(
+        s["url"] + "/drawio-promote",
+        token=s["token"],
+        payload={"name": "never-created", "approved_by": "you"},
+    )
+    assert status == 404
+    assert body["error"]["code"] == "CANDIDATE_NOT_FOUND"
+
+
+def test_drawio_reject_happy_path(drawio_server):
+    s = drawio_server
+    status, body = _create_gamma_candidate(s)
+    assert status == 200, body
+
+    status, body = _post_json(
+        s["url"] + "/drawio-reject",
+        token=s["token"],
+        payload={"name": "edit1", "actor": "you"},
+    )
+    assert status == 200, body
+
+    world = ArchitectureWorld.for_repo(str(_drawio_repo_of(s))).open()
+    try:
+        fork = world.view("proposal-edit1")
+        try:
+            statuses = [o["data"].get("status") for o in fork.find_objects("proposal")]
+            assert "rejected" in statuses
+            # Reject never mutates base.
+            names = {o["data"].get("name") for o in world.find_objects("architecture_element")}
+            assert "Gamma" not in names
+        finally:
+            fork.close()
+    finally:
+        world.close()
+
+
+def test_shell_governance_controls_static(server):
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert 'id="btn-drawio-reject" disabled' in content
+    assert 'id="btn-drawio-promote" disabled' in content
+    assert 'id="actor-name"' in content
+    assert "updateGovernanceControls" in content
+    assert "ARCH_SKILLKIT_ADMIN" in content

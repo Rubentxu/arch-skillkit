@@ -69,6 +69,8 @@ from archskillkit.application.queries.gaps_query import (
 )
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
+from archskillkit.delivery.admin import ADMIN_DISABLED_CODE, admin_enabled
+from archskillkit.delivery.cli.proposals import handle_promote, handle_reject
 from archskillkit.ids import RepoNotFound
 from archskillkit.projections.drawio_delta import (
     DRAWIO_EMBED_ORIGIN,
@@ -824,15 +826,24 @@ _CONTROL_SHELL = """<!DOCTYPE html>
                    spellcheck="false" maxlength="64" placeholder="edit-1" />
             <p id="candidate-name-hint" class="field-hint">letters, digits, - _ (max 64)</p>
           </div>
+          <div class="hub-field">
+            <label for="actor-name">Actor</label>
+            <input type="text" id="actor-name" autocomplete="off"
+                   spellcheck="false" placeholder="you" />
+            <p id="actor-hint" class="field-hint">recorded on promote / reject</p>
+          </div>
           <div class="hub-actions">
             <button type="button" id="btn-drawio-propose" disabled>Create proposal</button>
+            <button type="button" id="btn-drawio-reject" disabled
+                    title="Governance mutation: requires --admin">Reject</button>
             <button type="button" id="btn-drawio-promote" disabled
-                    title="Governance mutations require opt-in (slice 24)">Promote</button>
+                    title="Governance mutation: requires --admin">Promote</button>
             <button type="button" id="btn-drawio-close">Close editor</button>
           </div>
         </div>
-        <p id="promote-hint" class="field-hint">Promotion is a governance
-        mutation and stays disabled until governance opt-in (slice 24).</p>
+        <p id="promote-hint" class="field-hint">Promote and reject are
+        governance mutations: they stay disabled unless the server runs
+        with --admin (or ARCH_SKILLKIT_ADMIN=1).</p>
         <div id="drawio-status" class="field-hint" aria-live="polite"></div>
         <div id="drawio-error" class="error-state" hidden role="alert"></div>
         <div id="drawio-result" hidden></div>
@@ -891,6 +902,10 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result.status === 200 && result.body.ok) {
         badge.textContent = "ok";
         badge.className = "badge badge-ok";
+        // Governance opt-in flag (slice 24): the shell only enables
+        // promote / reject when the server was started with --admin.
+        _admin = result.body.admin === true;
+        updateGovernanceControls();
       } else if (result.status === 401) {
         badge.textContent = "auth";
         badge.className = "badge badge-fail";
@@ -1208,6 +1223,12 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     document.getElementById("btn-edit-drawio").addEventListener("click", openDrawio);
     document.getElementById("btn-drawio-close").addEventListener("click", closeDrawio);
     document.getElementById("btn-drawio-propose").addEventListener("click", proposeDrawio);
+    document.getElementById("btn-drawio-reject").addEventListener("click", function () {
+      governanceAction("/drawio-reject", "actor", "rejected");
+    });
+    document.getElementById("btn-drawio-promote").addEventListener("click", function () {
+      governanceAction("/drawio-promote", "approved_by", "promoted");
+    });
   }
 
   // ---------- draw.io semantic edit (slice 23d) -------------------------
@@ -1223,6 +1244,45 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     '<mxGraphModel><root><mxCell id="0" /><mxCell id="1" parent="0" /></root></mxGraphModel>';
   var _artifactXml = null;
   var _drawioPhase = "closed";
+  var _admin = false;
+  var _lastCandidate = null;
+
+  function updateGovernanceControls() {
+    // Slice 24: promote / reject are governance mutations — enabled only
+    // when the server opted in (--admin) and a candidate exists.
+    var ready = _admin && !!_lastCandidate;
+    document.getElementById("btn-drawio-promote").disabled = !ready;
+    document.getElementById("btn-drawio-reject").disabled = !ready;
+  }
+
+  function governanceAction(endpoint, actorKey, pastTense) {
+    if (!_admin || !_lastCandidate) return;
+    var actor = (document.getElementById("actor-name").value || "").trim();
+    if (!actor) {
+      drawioError("actor is required to record a " + actorKey);
+      return;
+    }
+    var payload = { name: _lastCandidate };
+    payload[actorKey] = actor;
+    apiPost(endpoint, payload)
+      .then(function (result) {
+        var el = document.getElementById("drawio-result");
+        if (result.status === 200) {
+          _lastCandidate = null;
+          updateGovernanceControls();
+          el.innerHTML = '<p class="pass">candidate ' + pastTense + ".</p>";
+          el.removeAttribute("hidden");
+        } else {
+          drawioError(
+            (result.body && result.body.error && result.body.error.message)
+            || "governance action failed"
+          );
+        }
+      })
+      .catch(function () {
+        drawioError("governance request failed");
+      });
+  }
 
   function drawioStatus(msg) {
     document.getElementById("drawio-status").textContent = msg;
@@ -1318,19 +1378,19 @@ _CONTROL_SHELL = """<!DOCTYPE html>
         html += "<li>" + esc(u.reason) + " (" + esc(u.cell_id) + ")</li>";
       });
       html += "</ul>";
+      _lastCandidate = null;
     } else if (body.fork_created) {
       html += '<p class="pass">candidate recorded: ' + esc(body.run_id) + "</p>";
       html += "<p>review it with: archskillkit proposals review --name "
         + esc(body.candidate) + "</p>";
+      _lastCandidate = body.candidate;
     } else {
       html += "<p>presentation-only changes — no candidate needed.</p>";
+      _lastCandidate = null;
     }
-    html += '<p class="field-hint">Promotion stays disabled: governance'
-    html += " mutations require opt-in (slice 24).</p>";
     out.innerHTML = html;
     out.removeAttribute("hidden");
-    // By design: promotion is a governance mutation (slice 24 opt-in).
-    document.getElementById("btn-drawio-promote").disabled = true;
+    updateGovernanceControls();
   }
 
   // Editor message pump: strict exact-origin gate and a small phase
@@ -1480,7 +1540,14 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         try:
             if parsed.path == "/health":
-                self._send_json(200, {"schema": HEALTH_SCHEMA, "ok": True})
+                self._send_json(
+                    200,
+                    {
+                        "schema": HEALTH_SCHEMA,
+                        "ok": True,
+                        "admin": bool(getattr(self.server, "admin", False)),
+                    },
+                )
                 return
             if parsed.path == "/status":
                 self._send_json(200, self._status())
@@ -1529,6 +1596,20 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                     "POST required; use the /drawio-candidate endpoint with POST",
                 )
                 return
+            if parsed.path == "/drawio-promote":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /drawio-promote endpoint with POST",
+                )
+                return
+            if parsed.path == "/drawio-reject":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /drawio-reject endpoint with POST",
+                )
+                return
             self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
             self._error(500, "INTERNAL", str(exc))
@@ -1551,6 +1632,12 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/drawio-candidate":
                 self._drawio_candidate_http()
                 return
+            if parsed.path == "/drawio-promote":
+                self._drawio_promote_http()
+                return
+            if parsed.path == "/drawio-reject":
+                self._drawio_reject_http()
+                return
             # Known GET-only routes return 405, unknown routes return 404
             get_only_routes = {
                 "/health",
@@ -1564,6 +1651,8 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/projections",
                 "/drawio-artifact",
                 "/drawio-candidate",
+                "/drawio-promote",
+                "/drawio-reject",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -1651,6 +1740,94 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 index.close()
             world.close()
 
+    def _call_handler(
+        self, handler: Any, world: ArchitectureWorld, **kwargs: Any
+    ) -> tuple[int, dict[str, Any]]:
+        """Drive a proposals CLI handler as single source of truth,
+        capturing its printed envelope (same pattern as the MCP admin
+        tools). Returns (exit_code, parsed_envelope)."""
+        import contextlib
+        import io
+
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        ns = argparse.Namespace(**kwargs)
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            rc = handler(ns, world)
+        if rc != 0:
+            text = err_buf.getvalue().strip() or out_buf.getvalue().strip()
+            try:
+                return rc, json.loads(text)
+            except json.JSONDecodeError:
+                return rc, {"error": "HANDLER_FAILED", "message": text or "handler failed"}
+        try:
+            return rc, json.loads(out_buf.getvalue())
+        except json.JSONDecodeError:
+            return rc, {"error": "HANDLER_FAILED", "message": "no envelope printed"}
+
+    def _handler_error_status(self, payload: dict[str, Any]) -> int:
+        code = payload.get("error", "")
+        return {
+            "CANDIDATE_NOT_FOUND": 404,
+            "BASE_WORLD_MISSING": 409,
+        }.get(code, 409)
+
+    def _governance_http(self, handler: Any, name_key: str) -> None:
+        """Shared body for the opt-in governance decisions (promote /
+        reject). Sends exactly one response."""
+        if not self._require_admin_or_error():
+            return
+        payload = self._parse_json_object(_MAX_LAUNCH_BODY)
+        if payload is None:
+            return
+        if set(payload.keys()) != {"name", name_key}:
+            self._error(
+                400,
+                "BAD_REQUEST",
+                f"request body must contain exactly 'name' and '{name_key}'",
+            )
+            return
+        name = payload["name"]
+        actor = payload[name_key]
+        if not isinstance(name, str) or not _CANDIDATE_NAME_RE.fullmatch(name):
+            self._error(400, "BAD_REQUEST", "'name' must match ^[A-Za-z0-9_-]{1,64}$")
+            return
+        if not isinstance(actor, str) or not actor.strip():
+            self._error(400, "BAD_REQUEST", f"'{name_key}' must be a non-empty string")
+            return
+
+        world, index = self._world()
+        try:
+            kwargs = {"name": name, name_key: actor}
+            rc, envelope = self._call_handler(handler, world, **kwargs)
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+        if rc != 0:
+            self._send_json(
+                self._handler_error_status(envelope),
+                {
+                    "schema": DRAWCAND_SCHEMA,
+                    "error": {
+                        "code": envelope.get("error", "HANDLER_FAILED"),
+                        "message": envelope.get("message", "governance action failed"),
+                    },
+                },
+            )
+            return
+        self._send_json(200, {"schema": DRAWCAND_SCHEMA, **envelope})
+
+    def _drawio_promote_http(self) -> None:
+        """Handle POST /drawio-promote (M5 slice 24, opt-in): approve and
+        promote a candidate fork into the base world via the proposals
+        pipeline. Requires --admin."""
+        self._governance_http(handle_promote, "approved_by")
+
+    def _drawio_reject_http(self) -> None:
+        """Handle POST /drawio-reject (M5 slice 24, opt-in): mark a
+        candidate rejected. Requires --admin."""
+        self._governance_http(handle_reject, "actor")
+
     def _drawio_artifact_http(self) -> None:
         """Handle GET /drawio-artifact (M5 slice 23d): serve the current
         draw.io projection XML to the authenticated shell so it can
@@ -1714,6 +1891,21 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if index is not None:
                 index.close()
             world.close()
+
+    def _require_admin_or_error(self) -> bool:
+        """Governance opt-in gate (M5 slice 24). Sends 403 with the
+        stable ADMIN_DISABLED code when the server was not started with
+        --admin / ARCH_SKILLKIT_ADMIN=1. Returns True when the mutation
+        may proceed."""
+        if getattr(self.server, "admin", False):
+            return True
+        self._error(
+            403,
+            ADMIN_DISABLED_CODE,
+            "governance mutations require opt-in;"
+            " restart with --admin or set ARCH_SKILLKIT_ADMIN=1",
+        )
+        return False
 
     def _parse_json_object(self, max_bytes: int) -> dict[str, Any] | None:
         """Strict JSON body reader. Sends exactly one 400 envelope and
@@ -1834,6 +2026,8 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
 
         Sends exactly one response directly and returns normally.
         """
+        if not self._require_admin_or_error():
+            return
         payload = self._parse_json_object(_MAX_DRAWIO_BODY)
         if payload is None:
             return
@@ -2067,7 +2261,7 @@ def _apply_candidates(fork: ArchitectureWorld, candidates: list[SemanticCandidat
 # ---------- server lifecycle -------------------------------------------
 
 
-def serve(repo_path: str, port: int) -> int:
+def serve(repo_path: str, port: int, *, admin: bool = False) -> int:
     """Open the world once (fail fast), bind loopback, register in the
     RuntimeRegistry, print the startup envelope and serve until
     SIGINT/SIGTERM. Always unregisters on the way out."""
@@ -2079,6 +2273,9 @@ def serve(repo_path: str, port: int) -> int:
     server = HTTPServer((BIND_HOST, port), _ControlPlaneHandler)
     server.token = token
     server.repo_path = repo_path
+    # Governance opt-in (M5 slice 24): mutation endpoints refuse with the
+    # stable ADMIN_DISABLED code unless the operator opted in.
+    server.admin = admin
 
     registry = RuntimeRegistry()
     registry.register(
@@ -2086,7 +2283,8 @@ def serve(repo_path: str, port: int) -> int:
             pid=os.getpid(),
             run_id=RUN_ID,
             project_id=project_id,
-            command=f"archskillkit {NAME} --repo {repo_path} --port {server.server_port}",
+            command=f"archskillkit {NAME} --repo {repo_path} --port {server.server_port}"
+            + (" --admin" if admin else ""),
         )
     )
 
@@ -2137,6 +2335,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--port", type=int, default=0, help="TCP port (default: 0 = ephemeral, printed on startup)"
     )
+    p.add_argument(
+        "--admin",
+        action="store_true",
+        help="enable governance mutations (draw.io candidate creation,"
+        " promote, reject). Default: disabled. Equivalent to"
+        " ARCH_SKILLKIT_ADMIN=1.",
+    )
 
 
 def handle(args: argparse.Namespace, world=None) -> int:
@@ -2153,4 +2358,4 @@ def handle(args: argparse.Namespace, world=None) -> int:
             file=sys.stderr,
         )
         return 2
-    return serve(repo_path, args.port)
+    return serve(repo_path, args.port, admin=admin_enabled(getattr(args, "admin", False)))
