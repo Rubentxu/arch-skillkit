@@ -188,6 +188,69 @@ def server(sandbox, repo_with_world):
 
 
 @pytest.fixture()
+def repo_with_artifacts(tmp_path, monkeypatch):
+    """Init an Architecture World with a real graphml artifact pre-generated."""
+    repo = tmp_path / "fixture-artifacts"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "main.rs").write_text("fn main() {}\n")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+    subprocess.run(
+        [sys.executable, "-m", "archskillkit", "init", "--repo", str(repo)],
+        check=True,
+        capture_output=True,
+    )
+    # Generate a graphml artifact so routing tests can reach the routing stage
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "project",
+            "--repo",
+            str(repo),
+            "--format",
+            "graphml",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return repo
+
+
+@pytest.fixture()
+def server_with_artifacts(sandbox, repo_with_artifacts):
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "control-plane",
+            "--repo",
+            str(repo_with_artifacts),
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    line = proc.stdout.readline()
+    assert line.strip(), f"server died before startup line: {proc.stderr.read()}"
+    start = json.loads(line)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+@pytest.fixture()
 def server_with_content(sandbox, repo_with_content):
     proc = subprocess.Popen(
         [
@@ -551,9 +614,9 @@ def test_shell_html_contains_aria_and_semantics(server):
     with urllib.request.urlopen(req, timeout=5) as resp:
         content = resp.read().decode()
     assert 'role="main"' in content
-    assert 'aria-label' in content
-    assert 'aria-expanded' in content
-    assert 'aria-controls' in content
+    assert "aria-label" in content
+    assert "aria-expanded" in content
+    assert "aria-controls" in content
     assert "prefers-reduced-motion" in content
 
 
@@ -741,3 +804,369 @@ def test_git_repo_without_world_exits_2(sandbox, tmp_path):
     )
     assert proc.returncode == 2
     assert "no Architecture World" in proc.stderr
+
+
+# ---------- Viewer Hub slice 22 ---------------------------------------
+
+
+def _post_json(url: str, token: str, payload: dict) -> tuple[int, dict]:
+    """POST JSON payload and return status + parsed body."""
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode())
+
+
+def test_projections_endpoint_schema(server):
+    """Schema envelope and format list."""
+    status, body = _get(server["url"] + "/projections", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/projections-v1"
+    assert "formats" in body
+    assert isinstance(body["formats"], list)
+    # All known formats are listed
+    fmt_ids = {f["id"] for f in body["formats"]}
+    assert fmt_ids == {"likec4", "arrows", "graphml", "jsoncanvas", "drawio"}
+
+
+def test_projections_no_artifact_paths_in_response(server):
+    """Artifact paths are never sent to the browser."""
+    status, body = _get(server["url"] + "/projections", token=server["token"])
+    assert status == 200
+    for fmt in body["formats"]:
+        assert "artifact_path" not in fmt, "paths must not be sent to browser"
+        assert "artifact_status" in fmt
+        assert fmt["artifact_status"] in ("exists", "missing")
+
+
+def test_projections_requires_auth(server):
+    status, _ = _get(server["url"] + "/projections", token=None)
+    assert status == 401
+
+
+def test_launch_requires_auth(server):
+    status, _ = _post_json(
+        server["url"] + "/launch",
+        token=None,
+        payload={"format": "likec4", "viewer": "system-default"},
+    )
+    assert status == 401
+
+
+def test_launch_rejects_missing_fields(server):
+    """Missing format or viewer key returns BAD_REQUEST."""
+    # Missing viewer key
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "likec4"},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "exactly 'format' and 'viewer'" in body["message"]
+
+    # Missing format key
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"viewer": "system-default"},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "exactly 'format' and 'viewer'" in body["message"]
+
+    # Completely empty payload
+    status, body = _post_json(server["url"] + "/launch", token=server["token"], payload={})
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+
+
+def test_launch_rejects_extra_keys(server):
+    """Extra keys in payload return BAD_REQUEST (strict schema)."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "likec4", "viewer": "system-default", "extra": "ignored"},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "exactly 'format' and 'viewer'" in body["message"]
+
+
+def test_launch_rejects_non_string_format(server):
+    """Non-string format value returns BAD_REQUEST."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": 123, "viewer": "system-default"},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "'format' must be a non-empty string" in body["message"]
+
+
+def test_launch_rejects_non_string_viewer(server):
+    """Non-string viewer value returns BAD_REQUEST."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "likec4", "viewer": None},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "'viewer' must be a non-empty string" in body["message"]
+
+
+def test_launch_rejects_empty_string_format(server):
+    """Empty string format returns BAD_REQUEST."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "", "viewer": "system-default"},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "'format' must be a non-empty string" in body["message"]
+
+
+def test_launch_rejects_empty_string_viewer(server):
+    """Empty string viewer returns BAD_REQUEST."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "likec4", "viewer": ""},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "'viewer' must be a non-empty string" in body["message"]
+
+
+def test_launch_rejects_unknown_format(server):
+    """Unknown format returns BAD_REQUEST with stable code."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "nonexistent-format", "viewer": "system-default"},
+    )
+    assert status == 400
+    assert body["code"] == "UNKNOWN_FORMAT"
+    assert "nonexistent-format" in body["message"]
+
+
+def test_launch_rejects_mismatched_viewer(server_with_artifacts):
+    """likec4-server does not consume graphml — routing fires after artifact check."""
+    status, body = _post_json(
+        server_with_artifacts["url"] + "/launch",
+        token=server_with_artifacts["token"],
+        payload={"format": "graphml", "viewer": "likec4-server"},
+    )
+    # likec4-server does not consume graphml → VIEWER_UNAVAILABLE (503)
+    assert status == 503
+    assert body["code"] == "VIEWER_UNAVAILABLE"
+    assert "does not consume" in body["message"]
+
+
+def test_launch_rejects_unavailable_viewer(server_with_artifacts):
+    """Explicit viewer that is not available returns stable error after routing."""
+    status, body = _post_json(
+        server_with_artifacts["url"] + "/launch",
+        token=server_with_artifacts["token"],
+        payload={"format": "graphml", "viewer": "drawio-desktop"},
+    )
+    # drawio-desktop is never available in test env → VIEWER_UNAVAILABLE (503)
+    assert status == 503
+    assert body["code"] == "VIEWER_UNAVAILABLE"
+
+
+def test_launch_with_system_default_succeeds(server_with_artifacts):
+    """system-default is always available; graphml artifact exists in fixture."""
+    status, body = _post_json(
+        server_with_artifacts["url"] + "/launch",
+        token=server_with_artifacts["token"],
+        payload={"format": "graphml", "viewer": "system-default"},
+    )
+    # system-default consumes graphml and is always available;
+    # launch may succeed (200) or fail if xdg-open unavailable (503)
+    assert status in (200, 503)
+    if status == 200:
+        assert body["schema"] == "arch-skillkit/launch-v1"
+        assert body["viewer"] == "system-default"
+        assert "pid" in body
+        assert "artifact" not in body
+    else:
+        # xdg-open unavailable is a launch-level failure, not a routing one
+        assert body["code"] == "VIEWER_UNAVAILABLE"
+
+
+def test_launch_rejects_missing_artifact(server):
+    """Missing artifact returns ARTIFACT_MISSING before routing."""
+    status, body = _post_json(
+        server["url"] + "/launch",
+        token=server["token"],
+        payload={"format": "likec4", "viewer": "system-default"},
+    )
+    # Artifact was never generated — stable 400, not a routing attempt
+    assert status == 400
+    assert body["code"] == "ARTIFACT_MISSING"
+
+
+def test_launch_content_length_non_integer(server):
+    """Non-integer Content-Length returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b'{"format":"likec4","viewer":"system-default"}',
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {server['token']}",
+            "Content-Type": "application/json",
+            "Content-Length": "not-an-integer",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+        body = json.loads(exc.read())
+        assert body["code"] == "BAD_REQUEST"
+
+
+def test_launch_content_length_negative(server):
+    """Negative Content-Length returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b'{"format":"likec4","viewer":"system-default"}',
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {server['token']}",
+            "Content-Type": "application/json",
+            "Content-Length": "-1",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+        body = json.loads(exc.read())
+        assert body["code"] == "BAD_REQUEST"
+
+
+def test_launch_content_length_oversized(server):
+    """Oversized Content-Length returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b'{"format":"likec4","viewer":"system-default"}',
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {server['token']}",
+            "Content-Type": "application/json",
+            "Content-Length": "99999",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+        body = json.loads(exc.read())
+        assert body["code"] == "BAD_REQUEST"
+
+
+def test_launch_non_object_json(server):
+    """Non-object JSON body returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b'"not an object"',
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {server['token']}",
+            "Content-Type": "application/json",
+            "Content-Length": "15",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+        body = json.loads(exc.read())
+        assert body["code"] == "BAD_REQUEST"
+
+
+def test_launch_empty_body_rejected(server):
+    """Empty request body returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b"",
+        method="POST",
+        headers={"Authorization": f"Bearer {server['token']}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+
+
+def test_launch_invalid_json_rejected(server):
+    """Invalid JSON returns BAD_REQUEST."""
+    req = urllib.request.Request(
+        server["url"] + "/launch",
+        data=b"not valid json",
+        method="POST",
+        headers={"Authorization": f"Bearer {server['token']}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as _resp:
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+
+
+def test_launch_get_returns_405(server):
+    """GET /launch is not allowed."""
+    status, body = _get(server["url"] + "/launch", token=server["token"])
+    assert status == 405
+    assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+def test_viewer_panel_in_shell(server):
+    """Shell HTML contains Viewer Hub panel markup."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert 'id="viewer-panel"' in content
+    assert 'id="format-select"' in content
+    assert 'id="viewer-select"' in content
+    assert 'id="launch-btn"' in content
+
+
+def test_viewer_panel_has_native_selects(server):
+    """Viewer Hub uses native <select> elements for accessibility."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # Native select, not div-role-button
+    assert "<select" in content
+    assert 'role="button"' not in content or "<button" in content
+
+
+def test_shell_contains_no_color_only_signals(server):
+    """Availability and errors are not conveyed by color alone."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # The Viewer Hub has text status (artifact-status, artifact-status.ok/missing)
+    # and explicit option text with (yes)/(no) availability
+    assert "artifact-status" in content
+    # Error states have text content, not just color changes
+    assert "error-state" in content

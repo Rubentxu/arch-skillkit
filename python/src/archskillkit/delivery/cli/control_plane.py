@@ -59,9 +59,11 @@ from archskillkit.application.queries.gaps_query import InvalidGapStatus, get_kn
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
 from archskillkit.ids import RepoNotFound
+from archskillkit.projections.writer import ARTIFACT_PATHS
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.runtime_state.runtime_registry import RuntimeEntry, RuntimeRegistry
-from archskillkit.viewers.registry import ViewerRegistry
+from archskillkit.viewers.contract import ViewerUnavailable
+from archskillkit.viewers.registry import ViewerRegistry, launch
 from archskillkit.world import ArchitectureWorld
 
 NAME = "control-plane"
@@ -75,6 +77,9 @@ HEALTH_SCHEMA = "arch-skillkit/control-plane-health-v1"
 
 RUN_ID = "control-plane"
 _MAX_LIMIT = 500
+
+PROJECTIONS_SCHEMA = "arch-skillkit/projections-v1"
+LAUNCH_SCHEMA = "arch-skillkit/launch-v1"
 
 # CSP for the static shell. Permits only: this origin, no external
 # connections, no eval, no worker blobs, one inline script block (the
@@ -101,9 +106,7 @@ def _render_shell() -> bytes:
     resolves all three in one pass and returns valid UTF-8 HTML.
     """
     return (
-        _CONTROL_SHELL.replace("{csp}", _SHELL_CSP)
-        .replace("{{", "{")
-        .replace("}}", "}")
+        _CONTROL_SHELL.replace("{csp}", _SHELL_CSP).replace("{{", "{").replace("}}", "}")
     ).encode("utf-8")
 
 
@@ -477,6 +480,166 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     border-radius: 4px;
   }}
 
+  /* Viewer Hub */
+  .viewer-hub {{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }}
+
+  .hub-row {{
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }}
+
+  .hub-field {{
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 160px;
+  }}
+
+  .hub-field label {{
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }}
+
+  .hub-field select {{
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 0.5em 0.6em;
+    font-size: 0.875rem;
+    cursor: pointer;
+    appearance: auto;
+  }}
+
+  .hub-field select:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }}
+
+  .hub-field select:disabled {{
+    opacity: 0.5;
+    cursor: not-allowed;
+  }}
+
+  .field-hint {{
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }}
+
+  .artifact-info {{
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }}
+
+  .artifact-path {{
+    font-family: ui-monospace, monospace;
+    color: var(--text-muted);
+  }}
+
+  .artifact-status {{
+    font-size: 0.7rem;
+    padding: 0.1em 0.5em;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+
+  .artifact-status.ok {{
+    background: var(--ok);
+    color: #000;
+  }}
+
+  .artifact-status.missing {{
+    background: var(--fail);
+    color: #fff;
+  }}
+
+  .hub-actions {{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }}
+
+  #launch-btn {{
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5em 1em;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }}
+
+  #launch-btn:hover:not(:disabled) {{
+    background: var(--accent-dim, #4a7ae0);
+  }}
+
+  #launch-btn:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }}
+
+  #launch-btn:disabled {{
+    opacity: 0.5;
+    cursor: not-allowed;
+  }}
+
+  /* Viewer card in status area */
+  .viewer-cards {{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }}
+
+  .viewer-card {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }}
+
+  .viewer-card .vid {{
+    font-family: ui-monospace, monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }}
+
+  .viewer-card .vname {{
+    flex: 1;
+  }}
+
+  .viewer-card .vavail {{
+    font-size: 0.65rem;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+
+  .vavail-yes  {{ background: var(--ok); color: #000; }}
+  .vavail-no   {{ background: var(--fail); color: #fff; }}
+  .vavail-unknown {{ background: var(--border); color: var(--text); }}
+
   @media (prefers-contrast: high) {{
     :root {{ --bg: #000; --surface: #111; --surface-2: #1a1a1a; --border: #555; --text: #fff; --text-muted: #aaa; }}
   }}
@@ -564,6 +727,44 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     </div>
   </section>
 
+  <!-- Viewer Hub panel -->
+  <section id="viewer-panel" aria-labelledby="viewer-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="viewer-heading">Viewer Hub</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="viewer-body">[−]</button>
+      </div>
+      <div id="viewer-body" class="panel-body">
+        <div class="viewer-hub">
+          <div class="hub-row">
+            <div class="hub-field">
+              <label for="format-select">Projection</label>
+              <select id="format-select" aria-describedby="format-hint">
+                <option value="">— select format —</option>
+              </select>
+              <p id="format-hint" class="field-hint">Available projection formats</p>
+            </div>
+            <div class="hub-field">
+              <label for="viewer-select">Viewer</label>
+              <select id="viewer-select" aria-describedby="viewer-hint" disabled>
+                <option value="">— select viewer —</option>
+              </select>
+              <p id="viewer-hint" class="field-hint">Compatible viewers</p>
+            </div>
+          </div>
+          <div id="artifact-info" class="artifact-info" hidden>
+            <span class="artifact-status" id="artifact-status"></span>
+          </div>
+          <div id="viewer-error" class="error-state" hidden role="alert"></div>
+          <div class="hub-actions">
+            <button type="button" id="launch-btn" disabled>Open viewer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <script>
@@ -601,7 +802,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
   function showPanels() {
     tokenSection.setAttribute("hidden", "");
-    ["evidence-panel", "coverage-panel", "gaps-panel", "findings-panel"]
+    ["evidence-panel", "coverage-panel", "gaps-panel", "findings-panel",
+     "viewer-panel"]
       .forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.removeAttribute("hidden");
@@ -753,6 +955,176 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     });
   }
 
+  // ---------- Viewer Hub ------------------------------------------------
+
+  var _viewers = [];
+  var _projections = [];
+
+  function loadProjections() {
+    return apiFetch("/projections").then(function (result) {
+      if (result.status !== 200) return;
+      _projections = result.body.formats || [];
+      var fmtSelect = document.getElementById("format-select");
+      fmtSelect.innerHTML = '<option value="">— select format —</option>';
+      _projections.forEach(function (fmt) {
+        var opt = document.createElement("option");
+        opt.value = fmt.id;
+        opt.textContent = fmt.name;
+        fmtSelect.appendChild(opt);
+      });
+      // Also load viewers for the status bar
+      return apiFetch("/viewers");
+    }).then(function (result) {
+      if (result && result.status === 200) {
+        _viewers = result.body.viewers || [];
+      }
+    });
+  }
+
+  function updateViewerSelect(formatId) {
+    var viewerSelect = document.getElementById("viewer-select");
+    var artifactInfo = document.getElementById("artifact-info");
+    var artifactStatus = document.getElementById("artifact-status");
+    var launchBtn = document.getElementById("launch-btn");
+    var viewerError = document.getElementById("viewer-error");
+
+    viewerError.setAttribute("hidden", "");
+    artifactInfo.setAttribute("hidden", "");
+    viewerSelect.innerHTML = '<option value="">— select viewer —</option>';
+    viewerSelect.disabled = true;
+    launchBtn.disabled = true;
+
+    if (!formatId) return;
+
+    var fmt = _projections.find(function (f) { return f.id === formatId; });
+    if (!fmt) return;
+
+    // Populate artifact status (text, not path — paths never leave server)
+    artifactInfo.removeAttribute("hidden");
+    if (fmt.artifact_status === "exists") {
+      artifactStatus.textContent = "ready";
+      artifactStatus.className = "artifact-status ok";
+    } else {
+      artifactStatus.textContent = "missing";
+      artifactStatus.className = "artifact-status missing";
+    }
+
+    // Populate compatible viewers
+    var compatible = _viewers.filter(function (v) {
+      return v.consumes && v.consumes.indexOf(formatId) !== -1;
+    });
+    if (compatible.length === 0) {
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "no compatible viewer";
+      viewerSelect.appendChild(opt);
+      return;
+    }
+    viewerSelect.disabled = false;
+    compatible.forEach(function (v) {
+      var opt = document.createElement("option");
+      opt.value = v.id;
+      var avail = v.probe && v.probe.available ? "yes" : "no";
+      opt.textContent = v.name + " (" + avail + ")";
+      opt.disabled = !v.probe || !v.probe.available;
+      viewerSelect.appendChild(opt);
+    });
+  }
+
+  function updateLaunchButton() {
+    var formatSelect = document.getElementById("format-select");
+    var viewerSelect = document.getElementById("viewer-select");
+    var launchBtn = document.getElementById("launch-btn");
+    var viewerError = document.getElementById("viewer-error");
+
+    viewerError.setAttribute("hidden", "");
+    var fmtId = formatSelect.value;
+    var viewerId = viewerSelect.value;
+
+    if (!fmtId || !viewerId) {
+      launchBtn.disabled = true;
+      return;
+    }
+
+    var fmt = _projections.find(function (f) { return f.id === fmtId; });
+    if (!fmt || fmt.artifact_status !== "exists") {
+      launchBtn.disabled = true;
+      return;
+    }
+
+    var viewer = _viewers.find(function (v) { return v.id === viewerId; });
+    if (!viewer || !viewer.probe || !viewer.probe.available) {
+      launchBtn.disabled = true;
+      return;
+    }
+
+    launchBtn.disabled = false;
+  }
+
+  function launchViewer() {
+    var formatSelect = document.getElementById("format-select");
+    var viewerSelect = document.getElementById("viewer-select");
+    var viewerError = document.getElementById("viewer-error");
+    var launchBtn = document.getElementById("launch-btn");
+
+    var fmtId = formatSelect.value;
+    var viewerId = viewerSelect.value;
+
+    viewerError.setAttribute("hidden", "");
+    launchBtn.disabled = true;
+
+    var req = new Request("/launch", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + _token,
+                 "Content-Type": "application/json" },
+      body: JSON.stringify({ format: fmtId, viewer: viewerId })
+    });
+
+    fetch(req).then(function (r) {
+      return r.json().then(function (body) {
+        return { status: r.status, body: body };
+      });
+    }).then(function (result) {
+      if (result.status === 200) {
+        viewerError.removeAttribute("hidden");
+        viewerError.textContent = "Viewer launched (pid: " + result.body.pid + ")";
+        viewerError.style.color = "var(--ok)";
+        viewerError.style.borderColor = "var(--ok)";
+      } else {
+        viewerError.removeAttribute("hidden");
+        viewerError.textContent = "Error " + result.status + ": " + esc(result.body.message || result.body.code);
+        viewerError.style.color = "";
+        viewerError.style.borderColor = "";
+        launchBtn.disabled = false;
+      }
+    }).catch(function (err) {
+      viewerError.removeAttribute("hidden");
+      viewerError.textContent = "Launch failed: " + esc(err.message);
+      viewerError.style.color = "";
+      viewerError.style.borderColor = "";
+      launchBtn.disabled = false;
+    });
+  }
+
+  function initViewerHub() {
+    var formatSelect = document.getElementById("format-select");
+    var viewerSelect = document.getElementById("viewer-select");
+    var launchBtn = document.getElementById("launch-btn");
+
+    formatSelect.addEventListener("change", function () {
+      updateViewerSelect(formatSelect.value);
+      updateLaunchButton();
+    });
+
+    viewerSelect.addEventListener("change", function () {
+      updateLaunchButton();
+    });
+
+    launchBtn.addEventListener("click", function () {
+      launchViewer();
+    });
+  }
+
   function loadAll() {
     loadHealth();
     loadEvidence();
@@ -760,6 +1132,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     loadGaps();
     loadFindings();
     loadStatus();
+    loadProjections().then(function () {
+      initViewerHub();
+    });
   }
 
   function connect() {
@@ -799,7 +1174,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
 
 class _ControlPlaneHandler(BaseHTTPRequestHandler):
-    """One handler, eight GET routes, auth on every data route."""
+    """One handler, nine GET routes + one POST route, auth on every data route."""
 
     protocol_version = "HTTP/1.1"
     server_version = "arch-skillkit-control-plane/1"
@@ -883,6 +1258,16 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/findings":
                 self._send_json(200, self._findings())
                 return
+            if parsed.path == "/projections":
+                self._send_json(200, self._projections())
+                return
+            if parsed.path == "/launch":
+                # POST-only route: return 405 so clients know it exists but
+                # requires a different method
+                self._error(
+                    405, "METHOD_NOT_ALLOWED", "POST required; use the /launch endpoint with POST"
+                )
+                return
             self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
             self._error(500, "INTERNAL", str(exc))
@@ -893,7 +1278,34 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         else:
             self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
 
-    do_POST = _reject
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if not self._authorized():
+            self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
+            return
+        try:
+            if parsed.path == "/launch":
+                self._launch_http()
+                return
+            # Known GET-only routes return 405, unknown routes return 404
+            get_only_routes = {
+                "/health",
+                "/status",
+                "/history",
+                "/viewers",
+                "/evidence",
+                "/coverage",
+                "/gaps",
+                "/findings",
+                "/projections",
+            }
+            if parsed.path in get_only_routes:
+                self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
+                return
+            self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
+        except Exception as exc:  # noqa: BLE001 - envelope, not traceback
+            self._error(500, "INTERNAL", str(exc))
+
     do_PUT = _reject
     do_PATCH = _reject
     do_DELETE = _reject
@@ -946,18 +1358,16 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             world.close()
 
     def _gaps_http(self, query: dict[str, list[str]]) -> None:
-        """Handle /gaps: sends exactly one response.
+        """Handle /gaps: sends exactly one response directly.
 
-        Returns None on success (do_GET sends 200) or sends a 400 and
-        returns normally so do_GET does not add a second response.
+        Sends a 400 on InvalidGapStatus or a 200 with the result directly;
+        returns normally either way so do_GET does not add a second response.
         """
         status_filter = query.get("status", [None])[0]
         world, index = self._world()
         try:
             result = get_knowledge_gaps(world, status=status_filter)
         except InvalidGapStatus as exc:
-            # Send 400 and return normally — do_GET will see None and exit
-            # the handler without sending an additional response.
             self._error(400, exc.code, str(exc))
         else:
             self._send_json(200, result.model_dump())
@@ -974,6 +1384,136 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if index is not None:
                 index.close()
             world.close()
+
+    def _projections(self) -> dict[str, Any]:
+        """List available projection formats and their artifact status.
+
+        Server-side only: artifact paths are never sent to the browser.
+        The UI learns existence from `artifact_status` only.
+        """
+        world, index = self._world()
+        try:
+            formats = []
+            for fmt_id, rel_path in ARTIFACT_PATHS.items():
+                artifact = world.workspace / rel_path
+                formats.append(
+                    {
+                        "id": fmt_id,
+                        "name": fmt_id,
+                        "artifact_status": "exists" if artifact.exists() else "missing",
+                    }
+                )
+            return {
+                "schema": PROJECTIONS_SCHEMA,
+                "formats": formats,
+            }
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _launch_http(self) -> None:
+        """Handle /launch: validate, then launch a viewer for the selected format.
+
+        Matches delivery/cli/view.py error precedence: world → format → artifact
+        → routing → launch. The browser provides only format and viewer_id; the
+        server resolves the artifact path from ARTIFACT_PATHS inside the world
+        workspace. Artifact path is never exposed in any response or error
+        message. This is a local operational side effect, not a governance
+        mutation.
+
+        Sends exactly one response directly and returns normally.
+        """
+        # --- parsing --------------------------------------------------------
+        content_length_str = self.headers.get("Content-Length", "0")
+        try:
+            content_length = int(content_length_str)
+        except ValueError:
+            self._error(400, "BAD_REQUEST", "Content-Length must be a valid integer")
+            return
+
+        MAX_BODY = 1024
+        if content_length <= 0 or content_length > MAX_BODY:
+            self._error(400, "BAD_REQUEST", f"Content-Length must be 1..{MAX_BODY}")
+            return
+
+        try:
+            body = self.rfile.read(content_length)
+            payload = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._error(400, "BAD_REQUEST", "malformed request body")
+            return
+
+        if not isinstance(payload, dict):
+            self._error(400, "BAD_REQUEST", "request body must be a JSON object")
+            return
+
+        # --- strict schema: only format and viewer, both non-empty strings ---
+        allowed_keys = {"format", "viewer"}
+        if set(payload.keys()) != allowed_keys:
+            self._error(
+                400, "BAD_REQUEST", "request body must contain exactly 'format' and 'viewer'"
+            )
+            return
+
+        fmt_id = payload.get("format")
+        viewer_id = payload.get("viewer")
+
+        if not isinstance(fmt_id, str) or not fmt_id:
+            self._error(400, "BAD_REQUEST", "'format' must be a non-empty string")
+            return
+
+        if not isinstance(viewer_id, str) or not viewer_id:
+            self._error(400, "BAD_REQUEST", "'viewer' must be a non-empty string")
+            return
+
+        if fmt_id not in ARTIFACT_PATHS:
+            self._error(400, "UNKNOWN_FORMAT", f"unknown format: {fmt_id!r}")
+            return
+
+        # --- artifact resolution (server-side only) -------------------------
+        # Matches view.py: artifact is resolved before routing.
+        world, index = self._world()
+        try:
+            artifact = world.workspace / ARTIFACT_PATHS[fmt_id]
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+        # Reject missing artifact before routing (matches view.py lines 43-47)
+        if not artifact.exists():
+            self._error(
+                400,
+                "ARTIFACT_MISSING",
+                f"no artifact for format {fmt_id!r}; run: archskillkit project --format {fmt_id}",
+            )
+            return
+
+        # --- routing --------------------------------------------------------
+        registry = ViewerRegistry()
+        try:
+            adapter = registry.route(fmt_id, explicit=viewer_id)
+        except ViewerUnavailable as exc:
+            self._error(503, exc.code, str(exc))
+            return
+
+        # --- launch ---------------------------------------------------------
+        try:
+            session = launch(adapter, artifact, runtime_registry=RuntimeRegistry())
+        except ViewerUnavailable as exc:
+            self._error(503, exc.code, str(exc))
+            return
+
+        self._send_json(
+            200,
+            {
+                "schema": LAUNCH_SCHEMA,
+                "viewer": session.viewer_id,
+                "pid": session.pid,
+                "managed": session.managed,
+            },
+        )
 
 
 # ---------- server lifecycle -------------------------------------------
