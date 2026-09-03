@@ -271,13 +271,15 @@ class TestGraphMLProjection:
         graph = networkx.read_graphml(result["path"])
         assert graph.number_of_nodes() == result["metrics"]["nodes"] == 10
         assert graph.number_of_edges() == result["metrics"]["edges"] == 5
-        # Every node carries its element NAME and a kind — an unnamed
-        # graph is useless for architecture review (P-03 external-viewer
-        # validation caught the missing name: yEd showed "No Value",
-        # Gephi showed anonymous dots).
-        for _, data in graph.nodes(data=True):
-            assert data.get("name"), f"node without name: {data}"
-            assert data.get("kind"), f"node without kind: {data}"
+        # Every node carries its element NAME, a Gephi `label` and a
+        # kind — an unnamed graph is useless for architecture review
+        # (P-03 external-viewer validation caught the missing name:
+        # yEd showed "No Value", Gephi anonymous dots). The node ID is
+        # the element name itself so even zero-config viewers show it.
+        for node_id, data in graph.nodes(data=True):
+            assert data.get("name") == node_id, f"node id/name mismatch: {node_id}"
+            assert data.get("label") == node_id, f"node without label: {node_id}"
+            assert data.get("kind"), f"node without kind: {node_id}"
         names = [data.get("name") for _, data in graph.nodes(data=True)]
         assert len(names) == len(set(names)), "duplicate node names"
 

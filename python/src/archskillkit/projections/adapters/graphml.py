@@ -19,8 +19,8 @@ from archskillkit.projections.intents import IntentType, VisualIntent
 
 _GRAPHML_NS = "http://graphml.graphdrawing.org/xmlns"
 
-_NODE_KEYS = (("d_name", "name"), ("d_kind", "kind"), ("d_origin", "origin"),
-              ("d_confidence", "confidence"))
+_NODE_KEYS = (("d_name", "name"), ("d_label", "label"), ("d_kind", "kind"),
+              ("d_origin", "origin"), ("d_confidence", "confidence"))
 _EDGE_KEYS = (("d_relkind", "kind"), ("d_rule", "rule"),
               ("d_confidence", "confidence"))
 
@@ -30,7 +30,8 @@ class GraphMLAdapter:
     supported_intents = frozenset(
         {"dependency_graph", "large_graph_analysis"}
         & set(IntentType.__args__))  # type: ignore[attr-defined]
-    version = "0.2.0"  # 0.2.0: nodes carry their name (P-03 external-viewer fix)
+    version = "0.2.1"  # 0.2.1: label key + name-as-id (Gephi shows labels
+    # out of the box; P-03 second round)
 
     def project(self, intent: VisualIntent,
                 context: ProjectionContext) -> ProjectionResult:
@@ -58,12 +59,17 @@ class GraphMLAdapter:
 
         ids: dict[str, str] = {}
         for index, element in enumerate(elements):
-            node_id = f"n{index}"
+            # The element NAME is the node id and the Gephi `label` key:
+            # every viewer then shows something meaningful with zero
+            # configuration (P-03 round 2 — anonymous n%d dots were
+            # useless in yEd/Gephi).
+            node_id = str(element["name"])
             ids[element["name"]] = node_id
             node = ET.SubElement(graph, "node", {"id": node_id})
             for key_id, attr_name in _NODE_KEYS:
-                ET.SubElement(node, "data", {"key": key_id}).text = \
-                    str(element.get(attr_name, ""))
+                value = element["name"] if attr_name in ("name", "label") \
+                    else element.get(attr_name, "")
+                ET.SubElement(node, "data", {"key": key_id}).text = str(value)
 
         rendered_edges = 0
         for index, relation in enumerate(relations):
