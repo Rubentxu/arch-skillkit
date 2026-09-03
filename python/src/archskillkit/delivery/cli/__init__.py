@@ -10,6 +10,7 @@ arrives with M1.
 
 from archskillkit.delivery.cli import (
     ask,
+    control_plane,
     delta,
     explain,
     gate,
@@ -38,11 +39,13 @@ COMMANDS = (
     replay_fixture,
     replay_candidate,
     mcp,
+    control_plane,
 )
 
 __all__ = [
     "COMMANDS",
     "ask",
+    "control_plane",
     "delta",
     "explain",
     "gate",

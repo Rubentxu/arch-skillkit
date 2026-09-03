@@ -26,7 +26,7 @@ def _supports_server(binary: str) -> bool:
     alone is not availability."""
     try:
         proc = subprocess.run([binary, "--help"], capture_output=True,
-                              text=True, timeout=10)
+                              text=True, timeout=10, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
     return "start" in proc.stdout
