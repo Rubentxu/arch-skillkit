@@ -184,7 +184,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     --surface-2: #242836;
     --border: #2e3347;
     --text: #e2e4ea;
-    --text-muted: #7c8099;
+    /* WCAG 2.2 AA on both --surface (6.75:1) and --surface-2 (5.89:1). */
+    --text-muted: #9ea3bd;
     --accent: #5e8af0;
     --warn: #e09a4a;
     --ok: #4caf7d;
@@ -278,6 +279,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--text);
+    letter-spacing: 0.02em;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -296,6 +298,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   .panel-header h2.ok::before    {{ background: var(--ok); }}
   .panel-header h2.fail::before   {{ background: var(--fail); }}
   .panel-header h2.warn::before   {{ background: var(--warn); }}
+  /* Unknown / not-yet-fetched state: dot is deliberately dim so it does not
+     imply "all good" before the first /coverage response arrives. */
+  .panel-header h2.unknown::before {{ background: var(--border); }}
 
   .panel-header .toggle {{
     color: var(--text-muted);
@@ -382,14 +387,14 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     font-family: ui-monospace, monospace;
     font-size: 0.75rem;
     color: var(--text-muted);
-    margin-top: 0.15rem;
+    margin-top: 0.2rem;
   }}
 
   .evidence-item .ev-rule {{
     font-size: 0.75rem;
     color: var(--text-muted);
     font-style: italic;
-    margin-top: 0.1rem;
+    margin-top: 0.2rem;
   }}
 
   .evidence-item .ev-refs {{
@@ -402,7 +407,11 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     color: var(--text-muted);
     font-size: 0.875rem;
     text-align: center;
-    padding: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    margin: 0.5rem 0;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
   }}
 
   /* Gaps list */
@@ -520,6 +529,14 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
   #token-section button:hover {{ background: var(--accent-dim, #4a7ae0); }}
   #token-section button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+
+  /* Generic focus-visible for free-form inputs (token, candidate, actor). */
+  input[type="text"]:focus-visible,
+  input[type="password"]:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }}
 
   #token-section .hint {{
     font-size: 0.75rem;
@@ -719,12 +736,58 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     color: var(--warn);
   }}
 
+  /* Skip-link (WCAG 2.4.1 Bypass Blocks). Hidden until keyboard focus. */
+  .skip-link {{
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    z-index: 100;
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 0.5em 1em;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }}
+  .skip-link:focus {{
+    left: 1rem;
+    top: 1rem;
+    width: auto;
+    height: auto;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }}
+
+  /* Panel toggle buttons: consistent focus-visible across all panels. */
+  .toggle-btn {{
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-family: ui-monospace, monospace;
+    font-size: 0.75rem;
+    padding: 0.1em 0.5em;
+    border-radius: 3px;
+    cursor: pointer;
+  }}
+  .toggle-btn:hover {{ color: var(--text); }}
+  .toggle-btn:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    color: var(--text);
+  }}
+
   @media (prefers-contrast: high) {{
     :root {{ --bg: #000; --surface: #111; --surface-2: #1a1a1a; --border: #555; --text: #fff; --text-muted: #aaa; }}
   }}
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 <header role="banner">
   <h1>Control Plane <span>— Architecture Explorer</span></h1>
   <div id="status-bar" role="status" aria-live="polite">
@@ -756,7 +819,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="evidence-heading">Evidence</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="evidence-body">[−]</button>
+                aria-controls="evidence-body"
+                aria-label="Collapse Evidence panel">[−]</button>
       </div>
       <div id="evidence-body" class="panel-body">
         <div class="loading" aria-label="Loading evidence">Loading</div>
@@ -768,9 +832,10 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   <section id="coverage-panel" aria-labelledby="coverage-heading" hidden>
     <div class="panel">
       <div class="panel-header">
-        <h2 id="coverage-heading" class="ok">Coverage &amp; Unknowns</h2>
+        <h2 id="coverage-heading" class="unknown">Coverage &amp; Unknowns</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="coverage-body">[−]</button>
+                aria-controls="coverage-body"
+                aria-label="Collapse Coverage panel">[−]</button>
       </div>
       <div id="coverage-body" class="panel-body">
         <div class="loading" aria-label="Loading coverage">Loading</div>
@@ -784,7 +849,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="gaps-heading">Open Knowledge Gaps</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="gaps-body">[−]</button>
+                aria-controls="gaps-body"
+                aria-label="Collapse Open Knowledge Gaps panel">[−]</button>
       </div>
       <div id="gaps-body" class="panel-body">
         <div class="loading" aria-label="Loading knowledge gaps">Loading</div>
@@ -798,7 +864,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="findings-heading">Governance Findings</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="findings-body">[−]</button>
+                aria-controls="findings-body"
+                aria-label="Collapse Governance Findings panel">[−]</button>
       </div>
       <div id="findings-body" class="panel-body">
         <div class="loading" aria-label="Loading findings">Loading</div>
@@ -812,7 +879,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="viewer-heading">Viewer Hub</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="viewer-body">[−]</button>
+                aria-controls="viewer-body"
+                aria-label="Collapse Viewer Hub panel">[−]</button>
       </div>
       <div id="viewer-body" class="panel-body">
         <div class="viewer-hub">
@@ -852,7 +920,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="drawio-heading">draw.io semantic edit</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="drawio-body">[−]</button>
+                aria-controls="drawio-body"
+                aria-label="Collapse draw.io semantic edit panel">[−]</button>
       </div>
       <div id="drawio-body" class="panel-body">
         <p class="field-hint">Semantic edits become a reviewable proposal
@@ -898,7 +967,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       <div class="panel-header">
         <h2 id="arrows-heading">Arrows embedded view</h2>
         <button type="button" class="toggle-btn" aria-expanded="true"
-                aria-controls="arrows-body">[−]</button>
+                aria-controls="arrows-body"
+                aria-label="Collapse Arrows embedded view panel">[−]</button>
       </div>
       <div id="arrows-body" class="panel-body">
         <p class="field-hint">Interactive Arrows diagram served from the local
