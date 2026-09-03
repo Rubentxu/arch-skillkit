@@ -17,10 +17,12 @@ from pathlib import Path
 
 import pytest
 
-# Path to the RUN1 fixture captured by verify-drawio-xml-roundtrip.mjs
-# (python/tests/test_drawio_delta.py → repo root is 3 parents up)
-FIXTURE_PATH = Path(__file__).parent.parent.parent / (
-    "artifacts/uat/v2.4/m5-slice-23a/fixtures/drawio-xml-export-RUN1.fixture.xml"
+# Fixture captured from real embed.diagrams.net output (M5-23a) and
+# committed under tests/fixtures so fresh clones can run this test.
+# Source of truth: scripts/uat/m5-slice-23a/verify-drawio-xml-roundtrip.mjs
+# (artifacts/ copies are local evidence, gitignored).
+FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "drawio_delta" / ("drawio-xml-export-RUN1.fixture.xml")
 )
 
 
@@ -89,6 +91,20 @@ class TestDrawioXmlRoundtrip:
         assert FIXTURE_PATH.exists(), (
             f"RUN1 fixture not found at {FIXTURE_PATH}. "
             "Run verify-drawio-xml-roundtrip.mjs first to capture fixtures."
+        )
+
+    def test_fixture_matches_sidecar_sha256(self):
+        """The committed fixture must match its recorded raw sha256."""
+        import hashlib
+
+        if not FIXTURE_PATH.exists():
+            pytest.skip("Fixture not found")
+
+        sidecar = FIXTURE_PATH.parent / (FIXTURE_PATH.name + ".sha256")
+        assert sidecar.exists(), f"missing sidecar {sidecar}"
+        raw_sha = hashlib.sha256(FIXTURE_PATH.read_bytes()).hexdigest()
+        assert raw_sha == sidecar.read_text().strip(), (
+            "fixture content drifted from its recorded sha256"
         )
 
     def test_fixture_parses_without_error(self):

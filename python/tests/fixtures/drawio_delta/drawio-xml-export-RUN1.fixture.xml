@@ -1,0 +1,44 @@
+<mxfile host="embed.diagrams.net" pages="2">
+  <diagram id="gfAB3a4cyS5p9l9LRKW1" name="Página-1">
+    <mxGraphModel dx="652" dy="534" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="6Cvd_F40PoeWZ6Rzbq-3" name="Página-1">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" page="1" pageWidth="1169" pageHeight="826">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <UserObject id="n0" label="TestService · component · DETECTED/high" archskillkit-element-name="TestService" archskillkit-element-kind="component">
+          <mxCell vertex="1" parent="1" value="TestService · component · DETECTED/high" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;">
+            <mxGeometry x="0" y="0" width="180" height="60" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject id="n1" label="TestDatabase · datastore · DETECTED/high" archskillkit-element-name="TestDatabase" archskillkit-element-kind="datastore">
+          <mxCell vertex="1" parent="1" value="TestDatabase · datastore · DETECTED/high" style="shape=cylinder3;fillColor=#ffe6cc;strokeColor=#d79b00;">
+            <mxGeometry x="220" y="0" width="180" height="60" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject id="n2" label="TestAPI · interface · DETECTED/high" archskillkit-element-name="TestAPI" archskillkit-element-kind="interface">
+          <mxCell vertex="1" parent="1" value="TestAPI · interface · DETECTED/high" style="rounded=1;dashed=1;fillColor=#ffe6cc;strokeColor=#d79b00;">
+            <mxGeometry x="440" y="0" width="180" height="60" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <mxCell id="e0" value="calls" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="n0" target="n1" archskillkit-relation-kind="calls" archskillkit-relation-source-name="TestService" archskillkit-relation-target-name="TestDatabase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="exposes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="n0" target="n2" archskillkit-relation-kind="exposes" archskillkit-relation-source-name="TestService" archskillkit-relation-target-name="TestAPI">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <UserObject id="n_roundtrip" label="new-svc · component · DETECTED/high" archskillkit-element-name="new-svc" archskillkit-element-kind="component">
+          <mxCell vertex="1" parent="1" value="new-svc · component · DETECTED/high" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;">
+            <mxGeometry x="480" y="200" width="180" height="60" as="geometry" />
+          </mxCell>
+        </UserObject>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
