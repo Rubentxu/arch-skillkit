@@ -50,10 +50,8 @@ class TestContractWiring:
 
     def test_router_routes_real_adapters(self):
         router = ProjectionRouter([LikeC4Adapter(), ArrowsAdapter()])
-        assert router.route(
-            VisualIntent(type="architecture", subject="x")).name == "likec4"
-        assert router.route(
-            VisualIntent(type="exploration", subject="x")).name == "arrows"
+        assert router.route(VisualIntent(type="architecture", subject="x")).name == "likec4"
+        assert router.route(VisualIntent(type="exploration", subject="x")).name == "arrows"
 
 
 class TestLikeC4Projection:
@@ -97,7 +95,10 @@ class TestLikeC4Projection:
         # "is not a valid shim". Treat that the same as missing.
         probe = subprocess.run(
             [likec4, "--version"],
-            capture_output=True, text=True, timeout=30, check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
         if probe.returncode != 0:
             pytest.skip(f"likec4 CLI not usable (rc={probe.returncode}): {probe.stderr[-200:]}")
@@ -111,15 +112,15 @@ class TestLikeC4Projection:
             out.mkdir()
             cp = subprocess.run(
                 [likec4, "export", "--dry-run", "-o", str(out), str(ws)],
-                capture_output=True, text=True, timeout=120, check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
             )
             assert cp.returncode == 0, (
-                f"likec4 export --dry-run failed (rc={cp.returncode}): "
-                f"{cp.stderr[-500:]}"
+                f"likec4 export --dry-run failed (rc={cp.returncode}): {cp.stderr[-500:]}"
             )
-            assert "Done" in cp.stdout, (
-                f"likec4 did not report success: stdout={cp.stdout[-500:]}"
-            )
+            assert "Done" in cp.stdout, f"likec4 did not report success: stdout={cp.stdout[-500:]}"
 
 
 class TestArrowsProjection:
@@ -158,13 +159,13 @@ class TestArrowsProjection:
         # V1 export-arrows pipeline. The in-tree schema constrains the
         # document shape — validation proves the artifact is importable.
         from archskillkit.projections.schemas import load_schema
+
         validator = jsonschema.Draft202012Validator(load_schema("arrows-v1"))
         result = project_to_workspace(promoted, ArrowsAdapter())
         doc = json.loads(Path(result["path"]).read_text())
         errors = sorted(validator.iter_errors(doc), key=lambda e: e.path)
         assert not errors, (
-            f"arch-skillkit/arrows-v1 schema violations: "
-            f"{[e.message for e in errors]}"
+            f"arch-skillkit/arrows-v1 schema violations: {[e.message for e in errors]}"
         )
         # Node ids unique — arrows.app deduplicates on id and a
         # duplicate would silently merge two elements.
@@ -215,8 +216,10 @@ class TestConsistency:
         result = project_to_workspace(promoted, LikeC4Adapter())
         snap = promoted.snapshot()
         assert result["metrics"]["nodes"] == snap["counts"]["architecture_element"]
-        assert result["metrics"]["edges"] == snap["counts"].get(
-            "architecture_relation", 0) or result["metrics"]["edges"] == 5
+        assert (
+            result["metrics"]["edges"] == snap["counts"].get("architecture_relation", 0)
+            or result["metrics"]["edges"] == 5
+        )
 
     def test_mismatch_becomes_warning(self, promoted):
         result = project_to_workspace(promoted, LikeC4Adapter())
@@ -302,14 +305,12 @@ class TestJSONCanvasProjection:
         # jsonschema validation proves the artifact is portable to
         # Obsidian Canvas and any JSON Canvas 1.0 reader.
         from archskillkit.projections.schemas import load_schema
+
         validator = jsonschema.Draft202012Validator(load_schema("jsoncanvas-1.0"))
         result = project_to_workspace(promoted, JSONCanvasAdapter())
         canvas = json.loads(Path(result["path"]).read_text())
         errors = sorted(validator.iter_errors(canvas), key=lambda e: e.path)
-        assert not errors, (
-            f"JSON Canvas schema violations: "
-            f"{[e.message for e in errors]}"
-        )
+        assert not errors, f"JSON Canvas schema violations: {[e.message for e in errors]}"
 
 
 class TestDrawioProjection:
@@ -319,15 +320,26 @@ class TestDrawioProjection:
         result = project_to_workspace(promoted, DrawioAdapter())
         root = ET.parse(result["path"]).getroot()
         assert root.tag == "mxfile"
+
+        # M5-23a: vertices are wrapped in UserObject elements
+        # The id is on UserObject, not on the nested mxCell
+        user_objects = root.findall(".//{*}UserObject")
+        node_ids = {uo.get("id") for uo in user_objects}
+        assert len(node_ids) == 10, f"Expected 10 UserObject vertex ids, got {len(node_ids)}"
+
+        # Edges are flat mxCell elements with edge="1"
         cells = root.findall(".//{*}mxCell")
-        nodes = [c for c in cells if c.get("vertex") == "1"]
         edges = [c for c in cells if c.get("edge") == "1"]
-        assert result["metrics"]["nodes"] == len(nodes) == 10
+        assert result["metrics"]["nodes"] == 10
         assert result["metrics"]["edges"] == len(edges) == 5
-        node_ids = {c.get("id") for c in nodes}
+
         for edge in edges:
-            assert edge.get("source") in node_ids
-            assert edge.get("target") in node_ids
+            assert edge.get("source") in node_ids, (
+                f"edge source {edge.get('source')} not in node_ids {node_ids}"
+            )
+            assert edge.get("target") in node_ids, (
+                f"edge target {edge.get('target')} not in node_ids {node_ids}"
+            )
 
     def test_drawio_is_deterministic(self, promoted):
         first = project_to_workspace(promoted, DrawioAdapter())
@@ -344,16 +356,76 @@ class TestDrawioProjection:
         result = project_to_workspace(promoted, DrawioAdapter())
         root = lxml_etree.parse(result["path"]).getroot()
         assert root.tag == "mxfile"
+
+        # M5-23a: UserObject-wrapped vertices
+        user_objects = root.findall(".//UserObject")
+        node_ids = {uo.get("id") for uo in user_objects}
+        assert len(node_ids) == result["metrics"]["nodes"] == 10
+
         cells = root.findall(".//mxCell")
-        vertices = [c for c in cells if c.get("vertex") == "1"]
         edges = [c for c in cells if c.get("edge") == "1"]
-        assert len(vertices) == result["metrics"]["nodes"] == 10
         assert len(edges) == result["metrics"]["edges"] == 5
-        node_ids = {c.get("id") for c in vertices}
+
         for edge in edges:
             assert edge.get("source") in node_ids
             assert edge.get("target") in node_ids
             assert edge.get("value"), (
-                f"edge {edge.get('id')} has no label (no readable edge in "
-                "the draw.io editor)"
+                f"edge {edge.get('id')} has no label (no readable edge in the draw.io editor)"
             )
+
+    def test_drawio_emits_xml_valid_metadata(self, promoted):
+        """M5-23a: Verify the adapter emits XML-valid archskillkit metadata.
+
+        Vertices: <UserObject archskillkit-element-name="..." archskillkit-element-kind="...">
+        Edges: <mxCell archskillkit-relation-kind="..." archskillkit-relation-source-name="..."
+                  archskillkit-relation-target-name="...">
+        """
+        import xml.etree.ElementTree as ET
+
+        result = project_to_workspace(promoted, DrawioAdapter())
+        root = ET.parse(result["path"]).getroot()
+
+        # Check UserObject-wrapped vertices have archskillkit metadata
+        user_objects = root.findall(".//{*}UserObject")
+        assert len(user_objects) == 10
+
+        vertex_names = set()
+        vertex_kinds = set()
+        for uo in user_objects:
+            name = uo.get("archskillkit-element-name")
+            kind = uo.get("archskillkit-element-kind")
+            if name:
+                vertex_names.add(name)
+            if kind:
+                vertex_kinds.add(kind)
+
+        assert len(vertex_names) == 10, f"Expected 10 unique element names, got {len(vertex_names)}"
+        assert len(vertex_kinds) >= 1, f"Expected at least 1 element kind, got {vertex_kinds}"
+
+        # Check flat mxCell edges have archskillkit relation metadata
+        cells = root.findall(".//{*}mxCell")
+        edges = [c for c in cells if c.get("edge") == "1"]
+
+        rel_kinds = set()
+        src_names = set()
+        tgt_names = set()
+        for edge in edges:
+            rk = edge.get("archskillkit-relation-kind")
+            sn = edge.get("archskillkit-relation-source-name")
+            tn = edge.get("archskillkit-relation-target-name")
+            if rk:
+                rel_kinds.add(rk)
+            if sn:
+                src_names.add(sn)
+            if tn:
+                tgt_names.add(tn)
+
+        assert len(rel_kinds) >= 1, f"Expected at least 1 relation kind, got {rel_kinds}"
+        assert len(src_names) >= 1, f"Expected source names, got {src_names}"
+        assert len(tgt_names) >= 1, f"Expected target names, got {tgt_names}"
+
+        # Verify all edge source/target names exist as vertex names
+        all_names = src_names | tgt_names
+        assert all_names <= vertex_names, (
+            f"Some edge endpoint names not in vertex names: {all_names - vertex_names}"
+        )
