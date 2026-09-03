@@ -1471,3 +1471,76 @@ def test_drawio_oversized_body_rejected(drawio_server):
         assert body["code"] == "BAD_REQUEST"
     finally:
         conn.close()
+
+
+# ---------- slice 23d: draw.io shell wiring + CSP -----------------------
+
+
+def test_csp_allows_only_embed_frame(server):
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        csp = resp.headers.get("Content-Security-Policy", "")
+    assert "frame-src https://embed.diagrams.net" in csp
+    assert "frame-src *" not in csp
+    assert "upgrade-insecure-requests" not in csp
+
+
+def test_shell_drawio_panel_static_semantics(server):
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # sandboxed iframe: scripts yes, same-origin NO, nothing else granted
+    assert 'sandbox="allow-scripts"' in content
+    assert "allow-same-origin" not in content
+    assert "allow-top-navigation" not in content
+    assert "allow-popups" not in content
+    # exact-origin postMessage, never wildcard
+    assert '"https://embed.diagrams.net"' in content
+    assert ', "*")' not in content
+    # accessible native controls; promote stays disabled by design
+    assert 'id="btn-edit-drawio"' in content
+    assert 'id="btn-drawio-propose"' in content
+    assert 'id="btn-drawio-promote" disabled' in content
+    assert 'id="drawio-frame"' in content
+
+
+def test_drawio_artifact_endpoint(drawio_server, repo_with_drawio):
+    s = drawio_server
+    status, body = _get(s["url"] + "/drawio-artifact", token=s["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/drawio-artifact-v1"
+    assert body["xml"] == _artifact_xml(repo_with_drawio)
+    assert body["base_drift"] is False
+    import hashlib as _h
+
+    assert body["sha256"] == _h.sha256(body["xml"].encode()).hexdigest()
+
+
+def test_drawio_artifact_requires_auth(server):
+    status, body = _get(server["url"] + "/drawio-artifact", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_drawio_artifact_missing_409(server):
+    status, body = _get(server["url"] + "/drawio-artifact", token=server["token"])
+    assert status == 409
+    assert body["code"] == "ARTIFACT_MISSING"
+
+
+def test_drawio_artifact_drift_flag(drawio_server, repo_with_drawio):
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    artifact = (
+        ArchitectureWorld.for_repo(str(repo_with_drawio)).workspace / ARTIFACT_PATHS["drawio"]
+    )
+    artifact.write_text(artifact.read_text() + "\n<!-- edited by hand -->\n")
+    status, body = _get(drawio_server["url"] + "/drawio-artifact", token=drawio_server["token"])
+    assert status == 200
+    assert body["base_drift"] is True
+
+
+def test_drawio_artifact_post_405(server):
+    status, body = _post_json(server["url"] + "/drawio-artifact", token=server["token"], payload={})
+    assert status == 405
+    assert body["code"] == "METHOD_NOT_ALLOWED"

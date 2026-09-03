@@ -99,6 +99,7 @@ _MAX_LIMIT = 500
 PROJECTIONS_SCHEMA = "arch-skillkit/projections-v1"
 LAUNCH_SCHEMA = "arch-skillkit/launch-v1"
 DRAWCAND_SCHEMA = "arch-skillkit/drawio-candidate-v1"
+DRAWIO_ARTIFACT_SCHEMA = "arch-skillkit/drawio-artifact-v1"
 
 # Candidate names become run ids (proposal-<name>): restrictive charset.
 _CANDIDATE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -119,6 +120,9 @@ _SHELL_CSP = (
     "base-uri 'self';"
     "form-action 'self';"
     "frame-ancestors 'none';"
+    # M5 slice 23d: the ONLY external frame allowed is the draw.io embed
+    # editor (exact origin, no wildcard). Everything else stays 'self'.
+    "frame-src https://embed.diagrams.net;"
 )
 
 
@@ -276,6 +280,15 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
   .panel-body {{ padding: 1rem; }}
   .panel-body.collapsed {{ display: none; }}
+
+  /* draw.io edit panel (slice 23d) */
+  .drawio-frame {
+    width: 100%;
+    height: 420px;
+    border: 1px solid var(--border);
+    background: #fff;
+    margin-bottom: 0.75rem;
+  }
 
   /* Coverage cards */
   .coverage-grid {{
@@ -783,8 +796,46 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           <div id="viewer-error" class="error-state" hidden role="alert"></div>
           <div class="hub-actions">
             <button type="button" id="launch-btn" disabled>Open viewer</button>
+            <button type="button" id="btn-edit-drawio" disabled>Edit draw.io</button>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- draw.io semantic edit panel (M5 slice 23d) -->
+  <section id="drawio-panel" aria-labelledby="drawio-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="drawio-heading">draw.io semantic edit</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="drawio-body">[−]</button>
+      </div>
+      <div id="drawio-body" class="panel-body">
+        <p class="field-hint">Semantic edits become a reviewable proposal
+        candidate — never direct architecture changes. The editor runs in a
+        sandboxed frame served from embed.diagrams.net.</p>
+        <iframe id="drawio-frame" title="draw.io editor" class="drawio-frame"
+                sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+        <div class="hub-row">
+          <div class="hub-field">
+            <label for="candidate-name">Candidate name</label>
+            <input type="text" id="candidate-name" autocomplete="off"
+                   spellcheck="false" maxlength="64" placeholder="edit-1" />
+            <p id="candidate-name-hint" class="field-hint">letters, digits, - _ (max 64)</p>
+          </div>
+          <div class="hub-actions">
+            <button type="button" id="btn-drawio-propose" disabled>Create proposal</button>
+            <button type="button" id="btn-drawio-promote" disabled
+                    title="Governance mutations require opt-in (slice 24)">Promote</button>
+            <button type="button" id="btn-drawio-close">Close editor</button>
+          </div>
+        </div>
+        <p id="promote-hint" class="field-hint">Promotion is a governance
+        mutation and stays disabled until governance opt-in (slice 24).</p>
+        <div id="drawio-status" class="field-hint" aria-live="polite"></div>
+        <div id="drawio-error" class="error-state" hidden role="alert"></div>
+        <div id="drawio-result" hidden></div>
       </div>
     </div>
   </section>
@@ -1017,6 +1068,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     viewerSelect.innerHTML = '<option value="">— select viewer —</option>';
     viewerSelect.disabled = true;
     launchBtn.disabled = true;
+    document.getElementById("btn-edit-drawio").disabled = true;
 
     if (!formatId) return;
 
@@ -1031,6 +1083,11 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     } else {
       artifactStatus.textContent = "missing";
       artifactStatus.className = "artifact-status missing";
+    }
+
+    // The semantic-edit channel is draw.io-only (slice 23).
+    if (formatId === "drawio" && fmt.artifact_status === "exists") {
+      document.getElementById("btn-edit-drawio").disabled = false;
     }
 
     // Populate compatible viewers
@@ -1146,6 +1203,176 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
     launchBtn.addEventListener("click", function () {
       launchViewer();
+    });
+
+    document.getElementById("btn-edit-drawio").addEventListener("click", openDrawio);
+    document.getElementById("btn-drawio-close").addEventListener("click", closeDrawio);
+    document.getElementById("btn-drawio-propose").addEventListener("click", proposeDrawio);
+  }
+
+  // ---------- draw.io semantic edit (slice 23d) -------------------------
+  // Trust model: the iframe is sandbox="allow-scripts" from the exact
+  // origin https://embed.diagrams.net (the only frame-src allowed by
+  // CSP). postMessage is exact-origin in BOTH directions — never "*".
+  // The artifact XML arrives via GET /drawio-artifact (bearer-gated);
+  // the edited export is POSTed to /drawio-candidate, which classifies
+  // it and records a reviewable candidate. Nothing here promotes.
+
+  var EDITOR_ORIGIN = "https://embed.diagrams.net";
+  var BLANK_XML =
+    '<mxGraphModel><root><mxCell id="0" /><mxCell id="1" parent="0" /></root></mxGraphModel>';
+  var _artifactXml = null;
+  var _drawioPhase = "closed";
+
+  function drawioStatus(msg) {
+    document.getElementById("drawio-status").textContent = msg;
+  }
+
+  function drawioError(msg) {
+    var el = document.getElementById("drawio-error");
+    el.textContent = msg;
+    el.removeAttribute("hidden");
+  }
+
+  function drawioSend(payload) {
+    var frame = document.getElementById("drawio-frame");
+    frame.contentWindow.postMessage(payload, EDITOR_ORIGIN);
+  }
+
+  function openDrawio() {
+    var fmtSel = document.getElementById("format-select");
+    if (fmtSel.value !== "drawio") return;
+    var errEl = document.getElementById("drawio-error");
+    errEl.setAttribute("hidden", "");
+    apiFetch("/drawio-artifact").then(function (result) {
+      if (result.status !== 200) {
+        drawioError(result.body.message || "artifact unavailable");
+        return;
+      }
+      _artifactXml = result.body.xml;
+      if (result.body.base_drift) {
+        drawioStatus(
+          "warning: artifact drifted since generation;"
+          + " candidate creation will refuse until regenerated"
+        );
+      }
+      var frame = document.getElementById("drawio-frame");
+      frame.src = EDITOR_ORIGIN + "/?embed=1&proto=json&spin=1&ui=dark";
+      var panel = document.getElementById("drawio-panel");
+      panel.removeAttribute("hidden");
+      _drawioPhase = "init";
+      drawioStatus("waiting for editor…");
+    });
+  }
+
+  function closeDrawio() {
+    _drawioPhase = "closed";
+    _artifactXml = null;
+    var frame = document.getElementById("drawio-frame");
+    frame.removeAttribute("src");
+    document.getElementById("drawio-panel").setAttribute("hidden", "");
+    document.getElementById("btn-drawio-propose").disabled = true;
+  }
+
+  function proposeDrawio() {
+    if (_drawioPhase !== "merged") return;
+    _drawioPhase = "proposing";
+    drawioStatus("exporting diagram…");
+    drawioSend({ action: "export", format: "xml" });
+  }
+
+  function submitProposal(xml) {
+    var name = (document.getElementById("candidate-name").value || "").trim();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) {
+      _drawioPhase = "merged";
+      drawioError("candidate name must use letters, digits, '-', '_' (max 64)");
+      return;
+    }
+    apiPost("/drawio-candidate", { name: name, format: "drawio", export: xml })
+      .then(function (result) {
+        _drawioPhase = "merged";
+        renderProposalResult(result.status, result.body);
+      })
+      .catch(function () {
+        _drawioPhase = "merged";
+        drawioError("proposal request failed");
+      });
+  }
+
+  function renderProposalResult(status, body) {
+    var out = document.getElementById("drawio-result");
+    if (status !== 200 || !body) {
+      drawioError(
+        (body && ((body.error && body.error.message) || body.message))
+        || "proposal rejected"
+      );
+      return;
+    }
+    var cls = body.classification || {};
+    var html =
+      "<p>presentation changes: " + (cls.presentation_changes || 0)
+      + " · semantic changes: " + (cls.semantic_changes || 0) + "</p>";
+    if (body.error && body.error.code === "UNSUPPORTED_EDITS") {
+      html += '<p class="fail">ambiguous cells — no candidate created:</p><ul>';
+      (body.unsupported || []).forEach(function (u) {
+        html += "<li>" + esc(u.reason) + " (" + esc(u.cell_id) + ")</li>";
+      });
+      html += "</ul>";
+    } else if (body.fork_created) {
+      html += '<p class="pass">candidate recorded: ' + esc(body.run_id) + "</p>";
+      html += "<p>review it with: archskillkit proposals review --name "
+        + esc(body.candidate) + "</p>";
+    } else {
+      html += "<p>presentation-only changes — no candidate needed.</p>";
+    }
+    html += '<p class="field-hint">Promotion stays disabled: governance'
+    html += " mutations require opt-in (slice 24).</p>";
+    out.innerHTML = html;
+    out.removeAttribute("hidden");
+    // By design: promotion is a governance mutation (slice 24 opt-in).
+    document.getElementById("btn-drawio-promote").disabled = true;
+  }
+
+  // Editor message pump: strict exact-origin gate and a small phase
+  // machine so only our own request/response pairs are acted on.
+  window.addEventListener("message", function (evt) {
+    if (evt.origin !== EDITOR_ORIGIN) return;
+    var msg;
+    try {
+      msg = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+    } catch (e) {
+      return;
+    }
+    if (_drawioPhase === "closed") return;
+    if (msg.event === "init" && _drawioPhase === "init") {
+      // Metadata channel (slice-23a rules): blank load, then merge the
+      // artifact so UserObject metadata survives the round trip.
+      _drawioPhase = "blank";
+      drawioSend({ action: "load", xml: BLANK_XML, autosave: 0 });
+    } else if (msg.event === "load" && _drawioPhase === "blank") {
+      _drawioPhase = "merge";
+      drawioSend({ action: "merge", xml: _artifactXml });
+    } else if (msg.event === "merge" && _drawioPhase === "merge") {
+      _drawioPhase = "merged";
+      document.getElementById("btn-drawio-propose").disabled = false;
+      drawioStatus("editor ready — make your edits, then Create proposal");
+    } else if (msg.event === "export" && _drawioPhase === "proposing" && msg.xml) {
+      submitProposal(msg.xml);
+    }
+  });
+
+  function apiPost(endpoint, payload) {
+    return fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + _token,
+      },
+      body: JSON.stringify(payload),
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        return { status: r.status, body: body };
+      });
     });
   }
 
@@ -1285,6 +1512,9 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/projections":
                 self._send_json(200, self._projections())
                 return
+            if parsed.path == "/drawio-artifact":
+                self._drawio_artifact_http()
+                return
             if parsed.path == "/launch":
                 # POST-only route: return 405 so clients know it exists but
                 # requires a different method
@@ -1332,6 +1562,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/gaps",
                 "/findings",
                 "/projections",
+                "/drawio-artifact",
                 "/drawio-candidate",
             }
             if parsed.path in get_only_routes:
@@ -1415,6 +1646,43 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         world, index = self._world()
         try:
             return get_findings(world).model_dump()
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _drawio_artifact_http(self) -> None:
+        """Handle GET /drawio-artifact (M5 slice 23d): serve the current
+        draw.io projection XML to the authenticated shell so it can
+        initialize the embed editor via load(blank) + merge (metadata
+        channel, slice-23a rules R3–R5). Path never leaves the server;
+        reports base drift so the UI can warn, enforcement stays in
+        POST /drawio-candidate. Sends exactly one response.
+        """
+        world, index = self._world()
+        try:
+            artifact = world.workspace / ARTIFACT_PATHS["drawio"]
+            if not artifact.exists():
+                self._error(
+                    409,
+                    "ARTIFACT_MISSING",
+                    "no drawio artifact; run: archskillkit project --format drawio",
+                )
+                return
+            artifact_bytes = artifact.read_bytes()
+            meta = load_metadata(world, "drawio")
+            generated_sha = (meta or {}).get("generated_sha256")
+            current_sha = hashlib.sha256(artifact_bytes).hexdigest()
+            self._send_json(
+                200,
+                {
+                    "schema": DRAWIO_ARTIFACT_SCHEMA,
+                    "xml": artifact_bytes.decode("utf-8"),
+                    "sha256": current_sha,
+                    "generated_sha256": generated_sha,
+                    "base_drift": bool(generated_sha) and generated_sha != current_sha,
+                },
+            )
         finally:
             if index is not None:
                 index.close()
