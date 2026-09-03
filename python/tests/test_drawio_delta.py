@@ -203,3 +203,224 @@ class TestDrawioXmlRoundtrip:
         assert "cell_ids" in result
         assert isinstance(result["cell_ids"], set)
         assert len(result["cell_ids"]) > 0
+
+
+# ---------- classify_xml unit tests (synthetic, design §6 cases) --------
+
+from archskillkit.projections.drawio_delta import (
+    DRAWIO_EMBED_ORIGIN,
+    MalformedDrawioXml,
+    NonEmbedOrigin,
+)
+from archskillkit.projections.drawio_delta import (
+    classify_xml as classify,
+)
+
+ORIGIN = DRAWIO_EMBED_ORIGIN
+
+
+def _mxfile(*cells: str) -> bytes:
+    """Build a minimal single-page mxfile with the given cell XML."""
+    body = "".join(cells)
+    return (
+        '<mxfile host="archskillkit" version="0.1.0">'
+        '<diagram id="arch" name="architecture">'
+        "<mxGraphModel><root>"
+        '<mxCell id="0" /><mxCell id="1" parent="0" />'
+        + body
+        + "</root></mxGraphModel></diagram></mxfile>"
+    ).encode()
+
+
+def _vertex(cid: str, name: str, kind: str = "component", style: str = "rounded=1;") -> str:
+    return (
+        f'<UserObject id="{cid}" archskillkit-element-name="{name}"'
+        f' archskillkit-element-kind="{kind}">'
+        f'<mxCell vertex="1" parent="1" style="{style}">'
+        '<mxGeometry x="0" y="0" width="180" height="60" as="geometry" />'
+        "</mxCell></UserObject>"
+    )
+
+
+def _edge(
+    cid: str, kind: str, src: str, dst: str, style: str = "edgeStyle=orthogonalEdgeStyle;"
+) -> str:
+    return (
+        f'<mxCell id="{cid}" edge="1" parent="1" source="{src}" target="{dst}"'
+        f' archskillkit-relation-kind="{kind}"'
+        f' archskillkit-relation-source-name="{src}"'
+        f' archskillkit-relation-target-name="{dst}"'
+        f' style="{style}"><mxGeometry relative="1" as="geometry" /></mxCell>'
+    )
+
+
+class TestClassifyXml:
+    def test_wrong_origin_rejected(self):
+        import pytest
+
+        with pytest.raises(NonEmbedOrigin):
+            classify(_mxfile(), _mxfile(), "https://evil.example")
+
+    def test_malformed_xml_rejected(self):
+        import pytest
+
+        base = _mxfile(_vertex("n0", "A"))
+        with pytest.raises(MalformedDrawioXml):
+            classify(base, "<not-xml", ORIGIN)
+
+    def test_no_change_is_zero_delta(self):
+        base = _mxfile(
+            _vertex("n0", "A"), _edge("e0", "calls", "A", "B").replace('target="B"', 'target="A"')
+        )
+        delta = classify(base, base.decode(), ORIGIN)
+        assert delta.semantic_changes == 0
+        assert delta.presentation_changes == 0
+        assert delta.semantic_candidates == []
+        assert delta.unsupported == []
+
+    def test_presentation_only_style_diff(self):
+        base = _mxfile(_vertex("n0", "A", style="rounded=1;"))
+        sub = _mxfile(_vertex("n0", "A", style="rounded=1;fillColor=#ff0000;"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert delta.semantic_changes == 0
+        assert delta.presentation_changes == 1
+
+    def test_element_added(self):
+        base = _mxfile(_vertex("n0", "A"))
+        sub = _mxfile(_vertex("n0", "A"), _vertex("n1", "B"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert delta.semantic_changes == 1
+        cand = delta.semantic_candidates[0]
+        assert cand.kind == "element_added"
+        assert cand.name == "B"
+
+    def test_element_removed(self):
+        base = _mxfile(_vertex("n0", "A"), _vertex("n1", "B"))
+        sub = _mxfile(_vertex("n0", "A"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert delta.semantic_changes == 1
+        assert delta.semantic_candidates[0].kind == "element_removed"
+        assert delta.semantic_candidates[0].name == "B"
+
+    def test_rename_is_remove_plus_add(self):
+        base = _mxfile(_vertex("n0", "A"))
+        sub = _mxfile(_vertex("n0", "A2"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        kinds = sorted(c.kind for c in delta.semantic_candidates)
+        assert kinds == ["element_added", "element_removed"]
+
+    def test_element_kind_changed(self):
+        base = _mxfile(_vertex("n0", "A", kind="component"))
+        sub = _mxfile(_vertex("n0", "A", kind="bounded_context"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert delta.semantic_changes == 1
+        cand = delta.semantic_candidates[0]
+        assert cand.kind == "element_kind_changed"
+        assert cand.evidence["old_kind"] == "component"
+        assert cand.evidence["new_kind"] == "bounded_context"
+
+    def test_relation_added_with_unresolved_endpoint_unsupported(self):
+        base = _mxfile(_vertex("n0", "A"))
+        # Edge references "Z" which does not exist anywhere.
+        sub = _mxfile(_vertex("n0", "A"), _edge("e0", "calls", "A", "Z"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert delta.semantic_changes == 0
+        assert [u.reason for u in delta.unsupported] == ["UNRESOLVED_RELATION_ENDPOINT"]
+
+    def test_relation_kind_change_is_remove_plus_add(self):
+        base = _mxfile(_vertex("n0", "A"), _vertex("n1", "B"), _edge("e0", "calls", "A", "B"))
+        sub = _mxfile(_vertex("n0", "A"), _vertex("n1", "B"), _edge("e0", "exposes", "A", "B"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        kinds = sorted(c.kind for c in delta.semantic_candidates)
+        assert kinds == ["relation_added", "relation_removed"]
+
+    def test_partial_relation_metadata_unsupported(self):
+        base = _mxfile(_vertex("n0", "A"))
+        sub = _mxfile(
+            _vertex("n0", "A"),
+            '<mxCell id="e9" edge="1" parent="1" source="n0" target="n0"'
+            ' archskillkit-relation-kind="calls"'
+            ' style=""><mxGeometry relative="1" as="geometry" /></mxCell>',
+        )
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert [u.reason for u in delta.unsupported] == ["INCOMPLETE_RELATION"]
+
+    def test_bare_vertex_unsupported(self):
+        base = _mxfile()
+        sub = _mxfile(
+            '<mxCell id="nX" vertex="1" parent="1" value="mystery ·'
+            ' component · DETECTED/high" style=""><mxGeometry'
+            ' x="0" y="0" width="1" height="1" as="geometry" />'
+            "</mxCell>"
+        )
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert [u.reason for u in delta.unsupported] == ["NO_VERTEX_NAME"]
+        assert delta.semantic_changes == 0
+
+    def test_unknown_element_kind_unsupported(self):
+        base = _mxfile()
+        sub = _mxfile(_vertex("n0", "A", kind="microservice"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert [u.reason for u in delta.unsupported] == ["UNKNOWN_ELEMENT_KIND"]
+
+    def test_duplicate_identity_unsupported(self):
+        base = _mxfile()
+        sub = _mxfile(_vertex("n0", "A"), _vertex("n1", "A"))
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert [u.reason for u in delta.unsupported] == ["DUPLICATE_IDENTITY"]
+
+    def test_vertex_and_edge_cell_unsupported(self):
+        base = _mxfile()
+        sub = _mxfile(
+            '<mxCell id="nX" vertex="1" edge="1" parent="1"'
+            ' archskillkit-relation-kind="calls"'
+            ' archskillkit-relation-source-name="A"'
+            ' archskillkit-relation-target-name="A"'
+            ' style=""><mxGeometry relative="1" as="geometry" /></mxCell>'
+        )
+        delta = classify(base, sub.decode(), ORIGIN)
+        assert [u.reason for u in delta.unsupported] == ["AMBIGUOUS_CELL"]
+
+    def test_deterministic_output(self):
+        base = _mxfile(_vertex("n0", "A"))
+        sub = _mxfile(_vertex("n0", "A"), _vertex("n1", "B"))
+        d1 = classify(base, sub.decode(), ORIGIN)
+        d2 = classify(base, sub.decode(), ORIGIN)
+        assert d1.model_dump() == d2.model_dump()
+
+    def test_real_fixture_base_vs_edited(self):
+        """Classify the REAL captured draw.io data: base export vs the
+        edited re-export must yield exactly element_added(new-svc)."""
+        import pytest
+
+        fx_dir = FIXTURE_PATH.parent
+        base_path = fx_dir / "drawio-xml-export-RUN1.base.xml"
+        if not FIXTURE_PATH.exists() or not base_path.exists():
+            pytest.skip("Captured fixtures not available")
+
+        delta = classify(
+            base_path.read_bytes(),
+            FIXTURE_PATH.read_text(encoding="utf-8"),
+            ORIGIN,
+        )
+        added = [c for c in delta.semantic_candidates if c.kind == "element_added"]
+        assert [c.name for c in added] == ["new-svc"]
+        removed = [c for c in delta.semantic_candidates if c.kind.endswith("_removed")]
+        assert removed == []
+
+    def test_module_is_pure(self):
+        """The classifier module must not import I/O, world or http."""
+
+        import archskillkit.projections.drawio_delta as mod
+
+        src = Path(mod.__file__).read_text(encoding="utf-8")
+        for banned in (
+            "import http",
+            "urllib",
+            "requests",
+            "from archskillkit.world",
+            "pathlib",
+            "open(",
+        ):
+            assert banned not in src, f"impure import/call: {banned}"
+        assert "hashlib" in src  # sha256 hashing only

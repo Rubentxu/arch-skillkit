@@ -44,6 +44,10 @@ _STYLES = {
     "interface": "rounded=1;dashed=1;fillColor=#ffe6cc;strokeColor=#d79b00;",
 }
 
+# Public set of element kinds this adapter renders; also the classifier's
+# known-kind gate (projections/drawio_delta.py).
+ELEMENT_KINDS = frozenset(_STYLES)
+
 
 class DrawioAdapter:
     name = "drawio"

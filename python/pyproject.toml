@@ -37,6 +37,7 @@ files = [
   "src/archskillkit/ids.py",
   "src/archskillkit/ports.py",
   "src/archskillkit/projections/metadata.py",
+  "src/archskillkit/projections/drawio_delta.py",
 ]
 
 [tool.coverage.run]
