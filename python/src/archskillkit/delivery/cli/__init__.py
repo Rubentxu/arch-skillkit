@@ -16,6 +16,7 @@ from archskillkit.delivery.cli import (
     explain,
     gate,
     mcp,
+    mine_conformance,
     proposals,
     replay_candidate,
     replay_fixture,
@@ -42,6 +43,7 @@ COMMANDS = (
     mcp,
     control_plane,
     distill_sensors,
+    mine_conformance,
 )
 
 __all__ = [
@@ -53,6 +55,7 @@ __all__ = [
     "explain",
     "gate",
     "mcp",
+    "mine_conformance",
     "proposals",
     "replay_candidate",
     "replay_fixture",

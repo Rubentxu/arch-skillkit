@@ -123,6 +123,7 @@ DRAWIO_ARTIFACT_SCHEMA = "arch-skillkit/drawio-artifact-v1"
 ARROWS_ARTIFACT_SCHEMA = "arch-skillkit/arrows-artifact-v1"
 ARROWSCAND_SCHEMA = "arch-skillkit/arrows-candidate-v1"
 FAVORITES_SCHEMA = "arch-skillkit/favorites-v1"
+RULE_CANDIDATE_SCHEMA = "arch-skillkit/rule-candidate-record-v1"
 
 # Candidate names become run ids (proposal-<name>): restrictive charset.
 _CANDIDATE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -2057,6 +2058,9 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/arrows-reject":
                 self._arrows_reject_http()
                 return
+            if parsed.path == "/rule-candidate-record":
+                self._rule_candidate_record_http()
+                return
             # Known GET-only routes return 405, unknown routes return 404
             get_only_routes = {
                 "/health",
@@ -2076,6 +2080,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/arrows-candidate",
                 "/arrows-promote",
                 "/arrows-reject",
+                "/rule-candidate-record",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -2115,6 +2120,9 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/drawio-promote",
                 "/drawio-reject",
                 "/arrows-candidate",
+                "/arrows-promote",
+                "/arrows-reject",
+                "/rule-candidate-record",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -2295,6 +2303,113 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         """Handle POST /arrows-reject (V2.4 M5 slice 27): reject an
         arrows candidate fork. Requires --admin."""
         self._governance_http(handle_reject, "actor")
+
+    # M6 slice 30: Conformance Miner approval path
+
+    def _rule_candidate_record_http(self) -> None:
+        """Handle POST /rule-candidate-record (V2.4 M6 slice 30).
+
+        Converts an approved conformance rule candidate into a live
+        ``architecture_rule`` object via ``world.record_architecture_rule``.
+        Requires --admin.
+
+        Strict body schema: exactly
+        {candidate_id, rel_kind, source_kind, target_kind, severity, approved_by}.
+        """
+        if not self._require_admin_or_error():
+            return
+        payload = self._parse_json_object(_MAX_LAUNCH_BODY)
+        if payload is None:
+            return
+
+        # Strict schema: exactly these six keys
+        required_keys = {
+            "candidate_id",
+            "rel_kind",
+            "source_kind",
+            "target_kind",
+            "severity",
+            "approved_by",
+        }
+        if set(payload.keys()) != required_keys:
+            self._error(
+                400,
+                "BAD_REQUEST",
+                f"request body must contain exactly {sorted(required_keys)}",
+            )
+            return
+
+        candidate_id = payload.get("candidate_id")
+        rel_kind = payload.get("rel_kind")
+        source_kind = payload.get("source_kind")
+        target_kind = payload.get("target_kind")
+        severity = payload.get("severity")
+        approved_by = payload.get("approved_by")
+
+        # Validate non-empty strings
+        for field_name, value in [
+            ("candidate_id", candidate_id),
+            ("rel_kind", rel_kind),
+            ("source_kind", source_kind),
+            ("target_kind", target_kind),
+            ("severity", severity),
+            ("approved_by", approved_by),
+        ]:
+            if not isinstance(value, str) or not value.strip():
+                self._error(400, "BAD_REQUEST", f"{field_name!r} must be a non-empty string")
+                return
+
+        # Validate severity enum
+        if severity not in {"low", "medium", "high"}:
+            self._error(400, "BAD_REQUEST", "severity must be one of: low, medium, high")
+            return
+
+        world, index = self._world()
+        try:
+            rule_name = f"{candidate_id}-rule"
+            # Check if rule already exists (record_rule is idempotent, no exception)
+            existing = world.find_objects("architecture_rule", name=rule_name)
+            if existing:
+                self._send_json(
+                    409,
+                    {
+                        "schema": RULE_CANDIDATE_SCHEMA,
+                        "error": {
+                            "code": "RULE_EXISTS",
+                            "message": f"rule {rule_name!r} already exists",
+                        },
+                        "rule_recorded": False,
+                    },
+                )
+                return
+            statement = f"Conformance rule approved from mined pattern (by {approved_by})"
+            rule_id = world.record_architecture_rule(
+                name=rule_name,
+                statement=statement,
+                forbidden_relation=rel_kind,
+                source_category=source_kind,
+                target_category=target_kind,
+                severity=severity,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._error(500, "INTERNAL", str(exc))
+            return
+            self._error(500, "INTERNAL", str(exc))
+            return
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+        self._send_json(
+            200,
+            {
+                "schema": RULE_CANDIDATE_SCHEMA,
+                "rule_recorded": True,
+                "rule_id": rule_id,
+                "rule_name": rule_name,
+            },
+        )
 
     def _drawio_artifact_http(self) -> None:
         """Handle GET /drawio-artifact (M5 slice 23d): serve the current
