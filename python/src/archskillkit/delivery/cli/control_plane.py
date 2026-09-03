@@ -37,14 +37,22 @@ Trust model for the static shell (/)
   No architecture data leaks to unauthenticated callers because every
   data-fetching API call is gated by the bearer token. The shell HTML
   itself contains no project-specific content.
+
+  POST /drawio-candidate (M5 slice 23c) records a reviewable proposal
+  candidate from a draw.io embedded edit: classify (drawio_delta),
+  apply semantic candidates on a fresh proposal-<name> fork, return
+  the structural diff. It NEVER approves or promotes — governance
+  opt-in is slice 24 (docs/v2/54 §8).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import signal
 import sys
@@ -55,11 +63,21 @@ from urllib.parse import parse_qs, urlparse
 from archskillkit.application.queries.coverage_query import get_coverage
 from archskillkit.application.queries.evidence_query import get_evidence
 from archskillkit.application.queries.findings_query import get_findings
-from archskillkit.application.queries.gaps_query import InvalidGapStatus, get_knowledge_gaps
+from archskillkit.application.queries.gaps_query import (
+    InvalidGapStatus,
+    get_knowledge_gaps,
+)
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
 from archskillkit.ids import RepoNotFound
-from archskillkit.projections.writer import ARTIFACT_PATHS
+from archskillkit.projections.drawio_delta import (
+    DRAWIO_EMBED_ORIGIN,
+    MalformedDrawioXml,
+    SemanticCandidate,
+    classify_xml,
+)
+from archskillkit.projections.writer import ARTIFACT_PATHS, load_metadata
+from archskillkit.proposals import structural_diff
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.runtime_state.runtime_registry import RuntimeEntry, RuntimeRegistry
 from archskillkit.viewers.contract import ViewerUnavailable
@@ -80,6 +98,12 @@ _MAX_LIMIT = 500
 
 PROJECTIONS_SCHEMA = "arch-skillkit/projections-v1"
 LAUNCH_SCHEMA = "arch-skillkit/launch-v1"
+DRAWCAND_SCHEMA = "arch-skillkit/drawio-candidate-v1"
+
+# Candidate names become run ids (proposal-<name>): restrictive charset.
+_CANDIDATE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_MAX_LAUNCH_BODY = 1024
+_MAX_DRAWIO_BODY = 4 * 1024 * 1024  # XML round trips are larger than JSON
 
 # CSP for the static shell. Permits only: this origin, no external
 # connections, no eval, no worker blobs, one inline script block (the
@@ -1268,6 +1292,13 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                     405, "METHOD_NOT_ALLOWED", "POST required; use the /launch endpoint with POST"
                 )
                 return
+            if parsed.path == "/drawio-candidate":
+                self._error(
+                    405,
+                    "METHOD_NOT_ALLOWED",
+                    "POST required; use the /drawio-candidate endpoint with POST",
+                )
+                return
             self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
             self._error(500, "INTERNAL", str(exc))
@@ -1287,6 +1318,9 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if parsed.path == "/launch":
                 self._launch_http()
                 return
+            if parsed.path == "/drawio-candidate":
+                self._drawio_candidate_http()
+                return
             # Known GET-only routes return 405, unknown routes return 404
             get_only_routes = {
                 "/health",
@@ -1298,6 +1332,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/gaps",
                 "/findings",
                 "/projections",
+                "/drawio-candidate",
             }
             if parsed.path in get_only_routes:
                 self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
@@ -1412,6 +1447,29 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 index.close()
             world.close()
 
+    def _parse_json_object(self, max_bytes: int) -> dict[str, Any] | None:
+        """Strict JSON body reader. Sends exactly one 400 envelope and
+        returns None on any parse failure; returns the decoded object
+        otherwise."""
+        raw_length = self.headers.get("Content-Length", "0")
+        try:
+            length = int(raw_length)
+        except ValueError:
+            self._error(400, "BAD_REQUEST", "Content-Length must be a valid integer")
+            return None
+        if length <= 0 or length > max_bytes:
+            self._error(400, "BAD_REQUEST", f"Content-Length must be 1..{max_bytes}")
+            return None
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._error(400, "BAD_REQUEST", "malformed request body")
+            return None
+        if not isinstance(payload, dict):
+            self._error(400, "BAD_REQUEST", "request body must be a JSON object")
+            return None
+        return payload
+
     def _launch_http(self) -> None:
         """Handle /launch: validate, then launch a viewer for the selected format.
 
@@ -1424,28 +1482,8 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
 
         Sends exactly one response directly and returns normally.
         """
-        # --- parsing --------------------------------------------------------
-        content_length_str = self.headers.get("Content-Length", "0")
-        try:
-            content_length = int(content_length_str)
-        except ValueError:
-            self._error(400, "BAD_REQUEST", "Content-Length must be a valid integer")
-            return
-
-        MAX_BODY = 1024
-        if content_length <= 0 or content_length > MAX_BODY:
-            self._error(400, "BAD_REQUEST", f"Content-Length must be 1..{MAX_BODY}")
-            return
-
-        try:
-            body = self.rfile.read(content_length)
-            payload = json.loads(body.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._error(400, "BAD_REQUEST", "malformed request body")
-            return
-
-        if not isinstance(payload, dict):
-            self._error(400, "BAD_REQUEST", "request body must be a JSON object")
+        payload = self._parse_json_object(_MAX_LAUNCH_BODY)
+        if payload is None:
             return
 
         # --- strict schema: only format and viewer, both non-empty strings ---
@@ -1514,6 +1552,248 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "managed": session.managed,
             },
         )
+
+    def _drawio_candidate_http(self) -> None:
+        """Handle POST /drawio-candidate (V2.4 M5 slice 23c).
+
+        Classify the submitted draw.io XML export (validated by the
+        shell against the exact embed origin) into presentation vs
+        semantic changes, and record ONLY a reviewable proposal
+        candidate fork. This endpoint never approves, rejects or
+        promotes — governance mutations stay opt-in (slice 24,
+        docs/v2/54 §8: never accept a diagram edit as architecture
+        automatically).
+
+        Sends exactly one response directly and returns normally.
+        """
+        payload = self._parse_json_object(_MAX_DRAWIO_BODY)
+        if payload is None:
+            return
+
+        # --- strict schema: exactly name + format + export ------------------
+        if set(payload.keys()) != {"name", "format", "export"}:
+            self._error(
+                400,
+                "BAD_REQUEST",
+                "request body must contain exactly 'name', 'format' and 'export'",
+            )
+            return
+        name = payload["name"]
+        fmt = payload["format"]
+        export_xml = payload["export"]
+        if not isinstance(name, str) or not _CANDIDATE_NAME_RE.fullmatch(name):
+            self._error(400, "BAD_REQUEST", "'name' must match ^[A-Za-z0-9_-]{1,64}$")
+            return
+        if fmt != "drawio":
+            self._error(400, "UNKNOWN_FORMAT", "this endpoint only accepts format 'drawio'")
+            return
+        if not isinstance(export_xml, str) or not export_xml.strip():
+            self._error(400, "BAD_REQUEST", "'export' must be a non-empty XML string")
+            return
+
+        world, index = self._world()
+        try:
+            # Base artifact is resolved server-side; the browser never
+            # supplies paths (same rule as /launch).
+            artifact = world.workspace / ARTIFACT_PATHS["drawio"]
+            if not artifact.exists():
+                self._error(
+                    409,
+                    "ARTIFACT_MISSING",
+                    "no drawio artifact; run: archskillkit project --format drawio",
+                )
+                return
+            artifact_bytes = artifact.read_bytes()
+
+            # Base drift gate: refuse to classify against an artifact that
+            # changed since generation (docs/v2/54 §11 lifecycle).
+            meta = load_metadata(world, "drawio")
+            generated_sha = (meta or {}).get("generated_sha256")
+            if not generated_sha:
+                self._error(
+                    409,
+                    "BASE_DRIFT",
+                    "drawio projection has no metadata sidecar;"
+                    " regenerate: archskillkit project --format drawio --force",
+                )
+                return
+            if hashlib.sha256(artifact_bytes).hexdigest() != generated_sha:
+                self._error(
+                    409,
+                    "BASE_DRIFT",
+                    "drawio artifact changed since generation;"
+                    " regenerate: archskillkit project --format drawio --force",
+                )
+                return
+
+            # The shell only forwards exports received from the exact
+            # embed origin; the classifier re-asserts that contract.
+            try:
+                delta = classify_xml(artifact_bytes, export_xml, DRAWIO_EMBED_ORIGIN)
+            except MalformedDrawioXml as exc:
+                self._error(400, exc.code, str(exc))
+                return
+
+            classification = {
+                "presentation_changes": delta.presentation_changes,
+                "semantic_changes": delta.semantic_changes,
+                "semantic_candidates": [c.model_dump() for c in delta.semantic_candidates],
+            }
+
+            # Ambiguous cells: refuse loudly, create nothing (docs/v2/54 §8).
+            if delta.unsupported:
+                self._send_json(
+                    422,
+                    {
+                        "schema": DRAWCAND_SCHEMA,
+                        "error": {
+                            "code": "UNSUPPORTED_EDITS",
+                            "message": "ambiguous cells present; no candidate created",
+                        },
+                        "classification": classification,
+                        "unsupported": [u.model_dump() for u in delta.unsupported],
+                    },
+                )
+                return
+
+            # Presentation-only: nothing to review.
+            if delta.semantic_changes == 0:
+                self._send_json(
+                    200,
+                    {
+                        "schema": DRAWCAND_SCHEMA,
+                        "candidate": None,
+                        "run_id": None,
+                        "fork_created": False,
+                        "message": "presentation-only changes; no candidate needed",
+                        "classification": classification,
+                        "unsupported": [],
+                    },
+                )
+                return
+
+            # Apply the semantic candidates on a fresh candidate fork.
+            # Latest submission wins: a previous fork of the same name is
+            # dropped and re-branched (never merged with stale state).
+            run_id = f"proposal-{name}"
+            with world:
+                if world.has_run(run_id):
+                    world.drop_run(run_id)
+                fork = world.fork(name)
+                apply_errors = _apply_candidates(fork, delta.semantic_candidates)
+                if not apply_errors:
+                    fork.record_proposal(name, rationale="draw.io embedded edit")
+            if apply_errors:
+                self._send_json(
+                    422,
+                    {
+                        "schema": DRAWCAND_SCHEMA,
+                        "error": {
+                            "code": "APPLY_FAILED",
+                            "message": "semantic candidates could not be applied;"
+                            " no candidate recorded",
+                        },
+                        "classification": classification,
+                        "apply_errors": apply_errors,
+                    },
+                )
+                return
+
+            with world:
+                fork = world.view(run_id)
+                diff = structural_diff(world, fork)
+            diff_dict = {k: v for k, v in vars(diff).items()}
+            diff_dict["is_empty"] = diff.is_empty()
+
+            self._send_json(
+                200,
+                {
+                    "schema": DRAWCAND_SCHEMA,
+                    "candidate": name,
+                    "run_id": run_id,
+                    "fork_created": True,
+                    "classification": classification,
+                    "unsupported": [],
+                    "structural_diff": diff_dict,
+                    "base_artifact_sha256": delta.base_artifact_sha256,
+                    "submitted_artifact_sha256": delta.submitted_artifact_sha256,
+                },
+            )
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+
+# ---------- candidate application (slice 23c) ---------------------------
+
+
+def _apply_candidates(fork: ArchitectureWorld, candidates: list[SemanticCandidate]) -> list[str]:
+    """Apply classified semantic candidates onto the candidate fork.
+
+    Returns a list of human-readable errors; an empty list means every
+    candidate was applied and the caller may record the proposal.
+    Element additions return their new id so same-submission relations
+    can reference freshly added elements.
+    """
+    errors: list[str] = []
+    elements: dict[str, str] = {
+        o["data"].get("name", ""): o["id"] for o in fork.find_objects("architecture_element")
+    }
+    for cand in candidates:
+        try:
+            if cand.kind == "element_added":
+                kind = cand.evidence.get("archskillkit-element-kind") or "component"
+                new_id = fork.add_architecture_element(
+                    cand.name, kind, origin="DECLARED", confidence="high"
+                )
+                elements[cand.name] = new_id
+            elif cand.kind == "element_removed":
+                element_id = elements.get(cand.name)
+                if element_id is None:
+                    errors.append(f"cannot remove unknown element {cand.name!r}")
+                else:
+                    fork.remove_object_by_id(element_id)
+            elif cand.kind == "element_kind_changed":
+                element_id = elements.get(cand.name)
+                new_kind = cand.evidence.get("new_kind")
+                if element_id is None:
+                    errors.append(f"cannot rekind unknown element {cand.name!r}")
+                elif not new_kind:
+                    errors.append(f"kind change for {cand.name!r} lacks new_kind")
+                else:
+                    fork.set_object_fields(element_id, {"kind": new_kind})
+            elif cand.kind == "relation_added":
+                src = elements.get(cand.evidence.get("archskillkit-relation-source-name") or "")
+                dst = elements.get(cand.evidence.get("archskillkit-relation-target-name") or "")
+                if src is None or dst is None:
+                    errors.append(f"cannot add relation {cand.rel_kind!r}: unresolved endpoints")
+                else:
+                    fork.add_architecture_relation(cand.rel_kind or "", src, dst)
+            elif cand.kind == "relation_removed":
+                name_by_id = {
+                    o["id"]: o["data"].get("name")
+                    for o in fork.find_objects("architecture_element")
+                }
+                rel_id = next(
+                    (
+                        rel["id"]
+                        for rel in fork.architecture_relations()
+                        if rel["kind"] == cand.rel_kind
+                        and name_by_id.get(rel["source"])
+                        == cand.evidence.get("archskillkit-relation-source-name")
+                        and name_by_id.get(rel["target"])
+                        == cand.evidence.get("archskillkit-relation-target-name")
+                    ),
+                    None,
+                )
+                if rel_id is None:
+                    errors.append(f"cannot remove unknown relation {cand.name!r}")
+                else:
+                    fork.remove_relation_by_id(rel_id)
+        except Exception as exc:  # noqa: BLE001 - collected, not raised
+            errors.append(f"{cand.kind} {cand.name!r}: {exc}")
+    return errors
 
 
 # ---------- server lifecycle -------------------------------------------

@@ -1170,3 +1170,304 @@ def test_shell_contains_no_color_only_signals(server):
     assert "artifact-status" in content
     # Error states have text content, not just color changes
     assert "error-state" in content
+
+
+# ---------- slice 23c: POST /drawio-candidate ---------------------------
+
+import http.client
+
+from archskillkit.world import ArchitectureWorld
+
+DRAWCAND = "/drawio-candidate"
+
+
+def _start_server(repo):
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "control-plane",
+            "--repo",
+            str(repo),
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    start = json.loads(proc.stdout.readline())
+    return proc, start
+
+
+@pytest.fixture()
+def repo_with_drawio(sandbox, repo_with_world):
+    """World with two elements + one relation, and a REAL generated
+    draw.io projection (artifact + metadata sidecar)."""
+    world = ArchitectureWorld.for_repo(str(repo_with_world)).open()
+    try:
+        with world:
+            alpha = world.add_architecture_element("Alpha", "component")
+            beta = world.add_architecture_element("Beta", "datastore")
+            world.add_architecture_relation("calls", alpha, beta)
+    finally:
+        world.close()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "project",
+            "--repo",
+            str(repo_with_world),
+            "--format",
+            "drawio",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return repo_with_world
+
+
+@pytest.fixture()
+def drawio_server(sandbox, repo_with_drawio):
+    proc, start = _start_server(repo_with_drawio)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+def _artifact_xml(repo) -> str:
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    world = ArchitectureWorld.for_repo(str(repo))
+    path = world.workspace / ARTIFACT_PATHS["drawio"]
+    return path.read_text(encoding="utf-8")
+
+
+def _post_json(url, path="", token=None, payload=None, headers=None):
+    data = json.dumps(payload).encode()
+    all_headers = {"Content-Type": "application/json"}
+    if token is not None:
+        all_headers["Authorization"] = f"Bearer {token}"
+    if headers:
+        all_headers.update(headers)
+    req = urllib.request.Request(url + path, data=data, method="POST", headers=all_headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status, json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode())
+
+
+def _inject_before_last_root(xml: str, fragment: str) -> str:
+    idx = xml.rfind("</root>")
+    return xml[:idx] + fragment + xml[idx:]
+
+
+def _vertex_xml(cid, name, kind="component"):
+    return (
+        f'<UserObject id="{cid}" archskillkit-element-name="{name}"'
+        f' archskillkit-element-kind="{kind}">'
+        f'<mxCell vertex="1" parent="1" style="rounded=1;">'
+        '<mxGeometry x="600" y="0" width="180" height="60" as="geometry" />'
+        "</mxCell></UserObject>"
+    )
+
+
+def test_drawio_get_returns_405(server):
+    status, body = _get(server["url"] + DRAWCAND, token=server["token"])
+    assert status == 405
+    assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+def test_drawio_requires_auth(server):
+    status, body = _post_json(
+        server["url"], DRAWCAND, None, {"name": "x", "format": "drawio", "export": "<a/>"}
+    )
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_drawio_strict_schema(drawio_server):
+    s = drawio_server
+    ok = {"name": "edit1", "format": "drawio", "export": "<a/>"}
+    # extra key
+    bad = dict(ok, approve=True)
+    status, body = _post_json(s["url"], DRAWCAND, s["token"], bad)
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # missing key
+    status, body = _post_json(s["url"], DRAWCAND, s["token"], {"name": "edit1", "format": "drawio"})
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # bad name charset
+    status, body = _post_json(s["url"], DRAWCAND, s["token"], dict(ok, name="bad name!"))
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+    # wrong format
+    status, body = _post_json(s["url"], DRAWCAND, s["token"], dict(ok, format="likec4"))
+    assert (status, body["code"]) == (400, "UNKNOWN_FORMAT")
+    # export not a string
+    status, body = _post_json(s["url"], DRAWCAND, s["token"], dict(ok, export={"pages": []}))
+    assert (status, body["code"]) == (400, "BAD_REQUEST")
+
+
+def test_drawio_missing_artifact_409(sandbox, repo_with_world):
+    proc, start = _start_server(repo_with_world)  # no projection generated
+    try:
+        status, body = _post_json(
+            start["url"],
+            DRAWCAND,
+            start["token"],
+            {"name": "edit1", "format": "drawio", "export": "<a/>"},
+        )
+        assert status == 409
+        assert body["code"] == "ARTIFACT_MISSING"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+def test_drawio_base_drift(drawio_server, repo_with_drawio):
+    s = drawio_server
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    artifact = (
+        ArchitectureWorld.for_repo(str(repo_with_drawio)).workspace / ARTIFACT_PATHS["drawio"]
+    )
+    artifact.write_text(artifact.read_text() + "\n<!-- tampered -->\n")
+    status, body = _post_json(
+        s["url"],
+        DRAWCAND,
+        s["token"],
+        {"name": "edit1", "format": "drawio", "export": _artifact_xml(repo_with_drawio)},
+    )
+    assert status == 409
+    assert body["code"] == "BASE_DRIFT"
+
+
+def test_drawio_malformed_xml(drawio_server):
+    s = drawio_server
+    status, body = _post_json(
+        s["url"], DRAWCAND, s["token"], {"name": "edit1", "format": "drawio", "export": "<not-xml"}
+    )
+    assert status == 400
+    assert body["code"] == "MALFORMED_XML"
+
+
+def test_drawio_unsupported_no_fork(drawio_server, repo_with_drawio):
+    s = drawio_server
+    submitted = _inject_before_last_root(
+        _artifact_xml(repo_with_drawio), _vertex_xml("nX", "mystery")
+    ).replace('archskillkit-element-name="mystery"', 'data-note="mystery"')
+    status, body = _post_json(
+        s["url"], DRAWCAND, s["token"], {"name": "edit1", "format": "drawio", "export": submitted}
+    )
+    assert status == 422
+    assert body["error"]["code"] == "UNSUPPORTED_EDITS"
+    assert body["unsupported"]
+    world = ArchitectureWorld.for_repo(str(repo_with_drawio))
+    try:
+        assert not world.has_run("proposal-edit1")
+    finally:
+        world.close()
+
+
+def test_drawio_presentation_only_no_fork(drawio_server, repo_with_drawio):
+    s = drawio_server
+    status, body = _post_json(
+        s["url"],
+        DRAWCAND,
+        s["token"],
+        {"name": "edit1", "format": "drawio", "export": _artifact_xml(repo_with_drawio)},
+    )
+    assert status == 200
+    assert body["fork_created"] is False
+    assert body["candidate"] is None
+    world = ArchitectureWorld.for_repo(str(repo_with_drawio))
+    try:
+        assert not world.has_run("proposal-edit1")
+    finally:
+        world.close()
+
+
+def test_drawio_happy_path_creates_candidate(drawio_server, repo_with_drawio):
+    s = drawio_server
+    submitted = _inject_before_last_root(
+        _artifact_xml(repo_with_drawio),
+        _vertex_xml("nG", "Gamma") + '<mxCell id="eG" edge="1" parent="1" source="nG" target="n0"'
+        ' archskillkit-relation-kind="exposes"'
+        ' archskillkit-relation-source-name="Gamma"'
+        ' archskillkit-relation-target-name="Alpha"'
+        ' style=""><mxGeometry relative="1" as="geometry" /></mxCell>',
+    )
+    status, body = _post_json(
+        s["url"], DRAWCAND, s["token"], {"name": "edit1", "format": "drawio", "export": submitted}
+    )
+    assert status == 200, body
+    assert body["fork_created"] is True
+    assert body["run_id"] == "proposal-edit1"
+    assert "Gamma" in json.dumps(body["structural_diff"])
+
+    world = ArchitectureWorld.for_repo(str(repo_with_drawio))
+    try:
+        fork = world.view("proposal-edit1")
+        try:
+            names = {o["data"].get("name") for o in fork.find_objects("architecture_element")}
+            assert "Gamma" in names
+            gamma = next(
+                o
+                for o in fork.find_objects("architecture_element")
+                if o["data"].get("name") == "Gamma"
+            )
+            assert gamma["data"].get("origin") == "DECLARED"
+            proposals = fork.find_objects("proposal")
+            assert proposals, "record_proposal should persist a proposal object"
+        finally:
+            fork.close()
+    finally:
+        world.close()
+
+
+def test_drawio_resubmit_replaces_candidate(drawio_server, repo_with_drawio):
+    s = drawio_server
+    payload = lambda frag: {
+        "name": "edit1",
+        "format": "drawio",
+        "export": _inject_before_last_root(_artifact_xml(repo_with_drawio), frag),
+    }
+    status, _ = _post_json(s["url"], DRAWCAND, s["token"], payload(_vertex_xml("nG", "Gamma")))
+    assert status == 200
+    status, _ = _post_json(
+        s["url"], DRAWCAND, s["token"], payload(_vertex_xml("nD", "Delta", "interface"))
+    )
+    assert status == 200
+    world = ArchitectureWorld.for_repo(str(repo_with_drawio))
+    try:
+        fork = world.view("proposal-edit1")
+        try:
+            names = {o["data"].get("name") for o in fork.find_objects("architecture_element")}
+            assert "Delta" in names
+            assert "Gamma" not in names  # latest submission wins
+        finally:
+            fork.close()
+    finally:
+        world.close()
+
+
+def test_drawio_oversized_body_rejected(drawio_server):
+    s = drawio_server
+    conn = http.client.HTTPConnection("127.0.0.1", s["port"], timeout=10)
+    try:
+        conn.putrequest("POST", DRAWCAND)
+        conn.putheader("Authorization", f"Bearer {s['token']}")
+        conn.putheader("Content-Type", "application/json")
+        conn.putheader("Content-Length", str(5 * 1024 * 1024))
+        conn.endheaders()
+        conn.send(b"{}")
+        resp = conn.getresponse()
+        body = json.loads(resp.read().decode())
+        assert resp.status == 400
+        assert body["code"] == "BAD_REQUEST"
+    finally:
+        conn.close()
