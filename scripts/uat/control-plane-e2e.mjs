@@ -110,9 +110,20 @@ try {
   // the panels stay at "Loading" forever while the rest complete.
   // This E2E documents the reproduction; the fix (serialize or thread
   // the data endpoints) is the follow-up slice.
+  const dataEndpoints = ["/evidence", "/coverage", "/gaps", "/findings", "/status"];
+  // DB routes are serialized by _DB_LOCK (ThreadingHTTPServer fix): wait
+  // until every data endpoint has ANSWERED (or 45s timeout).
+  await page.waitForFunction(
+    (endpoints) => {
+      const done = performance.getEntriesByType("resource")
+        .map(e => e.name.replace(location.origin, ""));
+      return endpoints.every(d => done.some(r => r.startsWith(d)));
+    },
+    dataEndpoints,
+    { timeout: 45_000, polling: 500 },
+  ).catch(() => {});
   const diagNow = await page.evaluate(() =>
     performance.getEntriesByType("resource").map(e => e.name.replace(location.origin, "")));
-  const dataEndpoints = ["/evidence", "/coverage", "/gaps", "/findings", "/status"];
   const answered = dataEndpoints.filter(d => diagNow.some(r => r.startsWith(d)));
   const hung = dataEndpoints.filter(d => !diagNow.some(r => r.startsWith(d)));
   check("data endpoints answered (P0-2 known issue)", hung.length === 0,

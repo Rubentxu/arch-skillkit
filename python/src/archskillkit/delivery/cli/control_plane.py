@@ -65,7 +65,8 @@ import re
 import secrets
 import signal
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -114,6 +115,13 @@ START_SCHEMA = "arch-skillkit/control-plane-start-v1"
 HEALTH_SCHEMA = "arch-skillkit/control-plane-health-v1"
 
 RUN_ID = "control-plane"
+
+# SQLite (ActiveGraph) raises "database is locked" when several
+# threads open/query the world simultaneously. The browser fires the
+# data endpoints in parallel, so DB-touching routes are serialized
+# with this lock; code/static routes stay lock-free (M6 fix).
+_DB_LOCK = threading.Lock()
+_LOCK_FREE_GET = frozenset({"/health", "/favorites", "/viewers", "/projections"})
 _MAX_LIMIT = 500
 
 PROJECTIONS_SCHEMA = "arch-skillkit/projections-v1"
@@ -1992,6 +2000,14 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
             return
+        # DB-touching routes serialize on _DB_LOCK (see lock definition).
+        if parsed.path in _LOCK_FREE_GET:
+            self._route_get(parsed)
+            return
+        with _DB_LOCK:
+            self._route_get(parsed)
+
+    def _route_get(self, parsed) -> None:
         try:
             if parsed.path == "/health":
                 self._send_json(
@@ -2106,6 +2122,12 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
             return
+        # Every POST route touches the world DB (candidates/governance):
+        # serialize on _DB_LOCK.
+        with _DB_LOCK:
+            self._route_post(parsed)
+
+    def _route_post(self, parsed) -> None:
         try:
             if parsed.path == "/launch":
                 self._launch_http()
@@ -3252,7 +3274,15 @@ def serve(repo_path: str, port: int, *, admin: bool = False) -> int:
     world.close()
 
     token = secrets.token_urlsafe(24)
-    server = HTTPServer((BIND_HOST, port), _ControlPlaneHandler)
+    # ThreadingHTTPServer (M6 fix): browsers fire the data endpoints in
+    # parallel over keep-alive connections; a single-threaded server
+    # left the first graph-query handler blocked and the rest queued
+    # forever (reproduced by scripts/uat/control-plane-e2e.mjs). Each
+    # request already opens its own world/CodeIndex, so per-thread
+    # isolation holds. Daemon threads so SIGINT/SIGTERM shutdown stays
+    # clean.
+    server = ThreadingHTTPServer((BIND_HOST, port), _ControlPlaneHandler)
+    server.daemon_threads = True
     server.token = token
     server.repo_path = repo_path
     # Governance opt-in (M5 slice 24): mutation endpoints refuse with the
