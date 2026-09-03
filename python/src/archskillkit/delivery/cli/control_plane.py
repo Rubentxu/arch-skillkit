@@ -1,5 +1,5 @@
 """`archskillkit control-plane` — local-only Control Plane kernel
-(V2.4 M5 slice 20–21; docs/v2/54 §7 + §12, docs/v2/66 §1, docs/v2/59 M5).
+(V2.4 M5 slice 20–26; docs/v2/54 §7 + §12, docs/v2/66 §1, docs/v2/59 M5).
 
 Slice 20 scope: the HTTP backbone — binds 127.0.0.1 ONLY (no escape
 hatch), per-process bearer token printed once on stdout (never persisted),
@@ -43,6 +43,15 @@ Trust model for the static shell (/)
   apply semantic candidates on a fresh proposal-<name> fork, return
   the structural diff. It NEVER approves or promotes — governance
   opt-in is slice 24 (docs/v2/54 §8).
+
+Slice 26 adds:
+  - GET /vendor/arrows/<path>: static file server for the Arrows.app
+    embed bundle. No auth: serves only code, not project data (same
+    rationale as the shell itself — no disclosure risk).
+  - GET /arrows-artifact: auth-gated, returns the arrows artifact
+    mapped to the bridge postMessage graph shape.
+  - GET/PUT /favorites: auth-gated viewer favorites persisted under
+    arch_config_root()/favorites.json.
 """
 
 from __future__ import annotations
@@ -57,6 +66,7 @@ import secrets
 import signal
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -71,7 +81,10 @@ from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
 from archskillkit.delivery.admin import ADMIN_DISABLED_CODE, admin_enabled
 from archskillkit.delivery.cli.proposals import handle_promote, handle_reject
-from archskillkit.ids import RepoNotFound
+from archskillkit.ids import RepoNotFound, arch_config_root, arch_data_root
+from archskillkit.projections.arrows_bridge import (
+    build_envelope as build_arrows_envelope,
+)
 from archskillkit.projections.drawio_delta import (
     DRAWIO_EMBED_ORIGIN,
     MalformedDrawioXml,
@@ -102,6 +115,8 @@ PROJECTIONS_SCHEMA = "arch-skillkit/projections-v1"
 LAUNCH_SCHEMA = "arch-skillkit/launch-v1"
 DRAWCAND_SCHEMA = "arch-skillkit/drawio-candidate-v1"
 DRAWIO_ARTIFACT_SCHEMA = "arch-skillkit/drawio-artifact-v1"
+ARROWS_ARTIFACT_SCHEMA = "arch-skillkit/arrows-artifact-v1"
+FAVORITES_SCHEMA = "arch-skillkit/favorites-v1"
 
 # Candidate names become run ids (proposal-<name>): restrictive charset.
 _CANDIDATE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -679,6 +694,24 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   .vavail-no   {{ background: var(--fail); color: #fff; }}
   .vavail-unknown {{ background: var(--border); color: var(--text); }}
 
+  /* Favorites star (slice 26) */
+  .viewer-card .fav-btn {{
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 0.2rem;
+    color: var(--text-muted);
+    line-height: 1;
+  }}
+  .viewer-card .fav-btn:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }}
+  .viewer-card .fav-btn.fav-active {{
+    color: var(--warn);
+  }}
+
   @media (prefers-contrast: high) {{
     :root {{ --bg: #000; --surface: #111; --surface-2: #1a1a1a; --border: #555; --text: #fff; --text-muted: #aaa; }}
   }}
@@ -799,6 +832,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           <div class="hub-actions">
             <button type="button" id="launch-btn" disabled>Open viewer</button>
             <button type="button" id="btn-edit-drawio" disabled>Edit draw.io</button>
+            <button type="button" id="btn-open-arrows" disabled>Open embedded Arrows</button>
           </div>
         </div>
       </div>
@@ -847,6 +881,29 @@ _CONTROL_SHELL = """<!DOCTYPE html>
         <div id="drawio-status" class="field-hint" aria-live="polite"></div>
         <div id="drawio-error" class="error-state" hidden role="alert"></div>
         <div id="drawio-result" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Arrows embed panel (M5 slice 26) -->
+  <section id="arrows-panel" aria-labelledby="arrows-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="arrows-heading">Arrows embedded view</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="arrows-body">[−]</button>
+      </div>
+      <div id="arrows-body" class="panel-body">
+        <p class="field-hint">Interactive Arrows diagram served from the local
+        vendor bundle. No server round-trip for edits in this slice
+        (export/save follow-up).</p>
+        <iframe id="arrows-frame" title="Arrows viewer" class="drawio-frame"
+                sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+        <div id="arrows-status" class="field-hint" aria-live="polite"></div>
+        <div id="arrows-error" class="error-state" hidden role="alert"></div>
+        <div class="hub-actions">
+          <button type="button" id="btn-arrows-close">Close viewer</button>
+        </div>
       </div>
     </div>
   </section>
@@ -1049,6 +1106,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
   var _viewers = [];
   var _projections = [];
+  var _favorites = [];  // slice 26
 
   function loadProjections() {
     return apiFetch("/projections").then(function (result) {
@@ -1068,6 +1126,55 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result && result.status === 200) {
         _viewers = result.body.viewers || [];
       }
+    });
+  }
+
+  // slice 26: viewer favorites
+  function loadFavorites() {
+    return apiFetch("/favorites").then(function (result) {
+      if (result && result.status === 200) {
+        _favorites = result.body.favorites || [];
+      }
+    });
+  }
+
+  function saveFavorites(favList) {
+    return apiFetch("/favorites").then(function () {
+      // PUT
+      var req = new Request("/favorites", {
+        method: "PUT",
+        headers: { "Authorization": "Bearer " + _token,
+                   "Content-Type": "application/json" },
+        body: JSON.stringify({ favorites: favList })
+      });
+      return fetch(req).then(function (r) {
+        return r.json().then(function (body) {
+          return { status: r.status, body: body };
+        });
+      });
+    });
+  }
+
+  function toggleFavorite(viewerId) {
+    var idx = _favorites.indexOf(viewerId);
+    if (idx === -1) {
+      _favorites.push(viewerId);
+    } else {
+      _favorites.splice(idx, 1);
+    }
+    saveFavorites(_favorites.slice()).then(function (result) {
+      if (result.status === 200) {
+        _favorites = result.body.favorites || [];
+        updateViewerCards();
+      }
+    });
+  }
+
+  function updateViewerCards() {
+    // Update star buttons to reflect current favorites state
+    _favorites.forEach(function (fid) {
+      var btn = document.querySelector('[data-viewer-id="' + fid + '"] .fav-btn');
+      if (btn) btn.classList.add("fav-active");
     });
   }
 
@@ -1103,6 +1210,14 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     // The semantic-edit channel is draw.io-only (slice 23).
     if (formatId === "drawio" && fmt.artifact_status === "exists") {
       document.getElementById("btn-edit-drawio").disabled = false;
+    }
+
+    // slice 26: arrows embed button
+    var arrowsBtn = document.getElementById("btn-open-arrows");
+    if (formatId === "arrows" && fmt.artifact_status === "exists") {
+      arrowsBtn.disabled = false;
+    } else {
+      arrowsBtn.disabled = true;
     }
 
     // Populate compatible viewers
@@ -1229,6 +1344,10 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     document.getElementById("btn-drawio-promote").addEventListener("click", function () {
       governanceAction("/drawio-promote", "approved_by", "promoted");
     });
+
+    // slice 26: arrows embed
+    document.getElementById("btn-open-arrows").addEventListener("click", openArrows);
+    document.getElementById("btn-arrows-close").addEventListener("click", closeArrows);
   }
 
   // ---------- draw.io semantic edit (slice 23d) -------------------------
@@ -1421,6 +1540,82 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     }
   });
 
+  // ---------- Arrows embed panel (slice 26) --------------------------------
+  // The arrows embed iframe is served from /vendor/arrows/embed.html
+  // (same origin as the shell). The bridge protocol:
+  //   iframe emits: {type:'ready', host:'iframe'}
+  //   host sends:   {type:'load', graph:{nodes,rels}, docVersion}
+  //   iframe emits: {type:'graph-changed'}
+  // Export/save round-trip is a follow-up (not in this slice).
+
+  var _arrowsPhase = "closed";
+
+  function openArrows() {
+    var fmtSel = document.getElementById("format-select");
+    if (fmtSel.value !== "arrows") return;
+    var errEl = document.getElementById("arrows-error");
+    errEl.setAttribute("hidden", "");
+    apiFetch("/arrows-artifact").then(function (result) {
+      if (result.status !== 200) {
+        errEl.removeAttribute("hidden");
+        errEl.textContent = result.body.message || "artifact unavailable";
+        return;
+      }
+      if (result.body.base_drift) {
+        document.getElementById("arrows-status").textContent =
+          "warning: artifact drifted since generation";
+      }
+      var frame = document.getElementById("arrows-frame");
+      // Serve from the local vendor dir (same origin — no CORS issues)
+      frame.src = "/vendor/arrows/embed.html";
+      var panel = document.getElementById("arrows-panel");
+      panel.removeAttribute("hidden");
+      _arrowsPhase = "waiting";
+      document.getElementById("arrows-status").textContent = "waiting for Arrows to initialise…";
+    });
+  }
+
+  function closeArrows() {
+    _arrowsPhase = "closed";
+    var frame = document.getElementById("arrows-frame");
+    frame.removeAttribute("src");
+    document.getElementById("arrows-panel").setAttribute("hidden", "");
+  }
+
+  // Arrows postMessage pump: exact-origin check (same origin in this case,
+  // but we verify evt.origin === location.origin as specified).
+  window.addEventListener("message", function (evt) {
+    // Only handle arrows messages
+    if (evt.origin !== location.origin) return;
+    var msg;
+    try {
+      msg = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+    } catch (e) {
+      return;
+    }
+    if (!msg || msg.type !== "ready" || msg.host !== "iframe") return;
+    if (_arrowsPhase !== "waiting") return;
+
+    // Fetch artifact and send load envelope to iframe
+    apiFetch("/arrows-artifact").then(function (result) {
+      if (result.status !== 200) {
+        document.getElementById("arrows-status").textContent =
+          "could not load artifact: " + (result.body.message || result.status);
+        return;
+      }
+      var frame = document.getElementById("arrows-frame");
+      frame.contentWindow.postMessage({
+        type: "load",
+        graph: result.body.graph,
+        docVersion: result.body.docVersion
+      }, location.origin);
+      _arrowsPhase = "loaded";
+      document.getElementById("arrows-status").textContent =
+        "loaded — " + (result.body.graph.nodes || []).length + " nodes, "
+        + (result.body.graph.rels || []).length + " relations";
+    });
+  });
+
   function apiPost(endpoint, payload) {
     return fetch(endpoint, {
       method: "POST",
@@ -1443,7 +1638,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     loadGaps();
     loadFindings();
     loadStatus();
-    loadProjections().then(function () {
+    loadFavorites().then(function () {
+      return loadProjections();
+    }).then(function () {
       initViewerHub();
     });
   }
@@ -1479,6 +1676,43 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 </script>
 </body>
 </html>"""
+
+
+# ---------- favorites persistence (slice 26) ----------------------------
+
+
+_FAVORITES_FILE = "favorites.json"
+
+
+def _favorites_path() -> Path:
+    """Path to the favorites JSON file under the config root."""
+    return arch_config_root() / _FAVORITES_FILE
+
+
+def _load_favorites() -> list[str]:
+    """Load viewer favorites from the config root. Returns [] if absent."""
+    path = _favorites_path()
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list) and all(isinstance(v, str) for v in data):
+            return data
+        return []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _save_favorites(favorites: list[str]) -> None:
+    """Atomically write viewer favorites to the config root.
+
+    Uses a temporary file + rename for atomicity on POSIX.
+    """
+    path = _favorites_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(favorites, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
 
 
 # ---------- HTTP layer -------------------------------------------------
@@ -1535,6 +1769,13 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             self._send_html(200, _render_shell())
             return
 
+        # /vendor/arrows/*: static files from the Arrows embed bundle.
+        # No auth: serves only code (Apache-2.0), not project data.
+        # Same rationale as the shell itself — no disclosure risk.
+        if parsed.path.startswith("/vendor/arrows/"):
+            self._vendor_arrows_http(parsed.path)
+            return
+
         if not self._authorized():
             self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
             return
@@ -1581,6 +1822,12 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/drawio-artifact":
                 self._drawio_artifact_http()
+                return
+            if parsed.path == "/arrows-artifact":
+                self._arrows_artifact_http()
+                return
+            if parsed.path == "/favorites":
+                self._favorites_http()
                 return
             if parsed.path == "/launch":
                 # POST-only route: return 405 so clients know it exists but
@@ -1650,6 +1897,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/findings",
                 "/projections",
                 "/drawio-artifact",
+                "/arrows-artifact",
                 "/drawio-candidate",
                 "/drawio-promote",
                 "/drawio-reject",
@@ -1661,9 +1909,43 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
             self._error(500, "INTERNAL", str(exc))
 
-    do_PUT = _reject
     do_PATCH = _reject
     do_DELETE = _reject
+
+    # -- slice 26: PUT /favorites -------------------------------------
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
+        if not self._authorized():
+            self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
+            return
+        try:
+            if parsed.path == "/favorites":
+                self._favorites_put_http()
+                return
+            # All other routes exist but don't support PUT → 405
+            get_only_routes = {
+                "/health",
+                "/status",
+                "/history",
+                "/viewers",
+                "/evidence",
+                "/coverage",
+                "/gaps",
+                "/findings",
+                "/projections",
+                "/drawio-artifact",
+                "/arrows-artifact",
+                "/drawio-candidate",
+                "/drawio-promote",
+                "/drawio-reject",
+            }
+            if parsed.path in get_only_routes:
+                self._error(405, "METHOD_NOT_ALLOWED", f"{self.command} not supported; use GET")
+                return
+            self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
+        except Exception as exc:  # noqa: BLE001 - envelope, not traceback
+            self._error(500, "INTERNAL", str(exc))
 
     # -- application layer (per-request open, like the MCP adapter) -----
 
@@ -1891,6 +2173,171 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             if index is not None:
                 index.close()
             world.close()
+
+    # -- slice 26: Arrows embed vendor static files ----------------------
+
+    def _vendor_arrows_http(self, path: str) -> None:
+        """Serve a file from the Arrows embed vendor bundle.
+
+        CONFINED to the vendor directory: resolves the real path and
+        verifies it stays inside. Rejects traversal with 404 NOT_FOUND.
+        No auth: serves only code, not project data (same rationale as
+        the static shell itself).
+
+        Missing vendor dir → 404 NOT_FOUND.
+        Content-types for .html, .js, .css, .map, .json, .png, .svg,
+        .woff2. All other extensions → 404 NOT_FOUND.
+        """
+        import urllib.parse
+
+        # Strip leading slash and decode
+        file_path = urllib.parse.unquote(path.lstrip("/"))
+        if not file_path.startswith("vendor/arrows/"):
+            self._error(404, "NOT_FOUND", "traversal rejected")
+            return
+
+        # Vendor dir is <data-root>/vendor/arrows/
+        # Note: arch_data_root() returns a Path; we use os.path for
+        # realpath resolution to catch any remaining traversal.
+        vendor_base = os.path.realpath(str(arch_data_root() / "vendor" / "arrows"))
+        full_path = os.path.realpath(os.path.join(vendor_base, file_path[len("vendor/arrows/") :]))
+
+        # Confine: full_path must still be inside vendor_base
+        if not full_path.startswith(vendor_base + os.sep) and full_path != vendor_base:
+            self._error(404, "NOT_FOUND", "traversal rejected")
+            return
+
+        if not Path(full_path).is_file():
+            self._error(404, "NOT_FOUND", f"not found: {file_path}")
+            return
+
+        # Content-type map
+        _CONTENT_TYPES = {
+            ".html": "text/html; charset=utf-8",
+            ".js": "application/javascript",
+            ".mjs": "application/javascript",
+            ".css": "text/css",
+            ".map": "application/json",
+            ".json": "application/json",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".woff2": "font/woff2",
+            ".ico": "image/x-icon",
+        }
+        ext = os.path.splitext(full_path)[1].lower()
+        content_type = _CONTENT_TYPES.get(ext)
+        if content_type is None:
+            self._error(404, "NOT_FOUND", f"unsupported file type: {ext}")
+            return
+
+        try:
+            body = Path(full_path).read_bytes()
+        except OSError:
+            self._error(404, "NOT_FOUND", f"cannot read: {file_path}")
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
+
+    # -- slice 26: arrows artifact -------------------------------------
+
+    def _arrows_artifact_http(self) -> None:
+        """Handle GET /arrows-artifact (M5 slice 26): serve the current
+        arrows projection mapped to the bridge postMessage graph shape.
+
+        Auth-gated. Returns 409 ARTIFACT_MISSING when no artifact exists.
+        Maps the arrows-v1 artifact to bridge shape via arrows_bridge.py.
+        Sends exactly one response.
+        """
+        world, index = self._world()
+        try:
+            artifact = world.workspace / ARTIFACT_PATHS["arrows"]
+            if not artifact.exists():
+                self._error(
+                    409,
+                    "ARTIFACT_MISSING",
+                    "no arrows artifact; run: archskillkit project --format arrows",
+                )
+                return
+            artifact_bytes = artifact.read_bytes()
+            try:
+                arrows_doc = json.loads(artifact_bytes.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._error(400, "BAD_REQUEST", "malformed arrows artifact JSON")
+                return
+
+            meta = load_metadata(world, "arrows")
+            generated_sha = (meta or {}).get("generated_sha256")
+            envelope = build_arrows_envelope(arrows_doc, generated_sha)
+            self._send_json(200, envelope)
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    # -- slice 26: viewer favorites ------------------------------------
+
+    def _favorites_http(self) -> None:
+        """Handle GET /favorites (M5 slice 26): return the current
+        viewer favorites list. Auth-gated. Sends exactly one response.
+        """
+        self._send_json(
+            200,
+            {
+                "schema": FAVORITES_SCHEMA,
+                "favorites": _load_favorites(),
+            },
+        )
+
+    def _favorites_put_http(self) -> None:
+        """Handle PUT /favorites (M5 slice 26): replace the viewer
+        favorites list. Auth-gated. Strict schema: body must be exactly
+        {favorites: [...]} where all items are known viewer ids.
+        Sends exactly one response.
+        """
+        payload = self._parse_json_object(4096)
+        if payload is None:
+            return
+
+        # Strict schema: exactly {favorites: [...]}
+        if set(payload.keys()) != {"favorites"}:
+            self._error(400, "BAD_REQUEST", "request body must contain exactly 'favorites'")
+            return
+        fav = payload.get("favorites")
+        if not isinstance(fav, list):
+            self._error(400, "BAD_REQUEST", "'favorites' must be an array")
+            return
+
+        # All items must be non-empty strings
+        for item in fav:
+            if not isinstance(item, str) or not item:
+                self._error(400, "BAD_REQUEST", "all favorite items must be non-empty strings")
+                return
+
+        # All ids must be known viewer ids
+        if fav:
+            try:
+                registry = ViewerRegistry()
+                known_ids = {a.descriptor().id for a in registry.adapters()}
+            except ViewerUnavailable:
+                known_ids = set()
+            unknown = [v for v in fav if v not in known_ids]
+            if unknown:
+                self._error(400, "BAD_REQUEST", f"unknown viewer ids: {', '.join(unknown)}")
+                return
+
+        _save_favorites(fav)
+        self._send_json(
+            200,
+            {
+                "schema": FAVORITES_SCHEMA,
+                "favorites": fav,
+            },
+        )
 
     def _require_admin_or_error(self) -> bool:
         """Governance opt-in gate (M5 slice 24). Sends 403 with the

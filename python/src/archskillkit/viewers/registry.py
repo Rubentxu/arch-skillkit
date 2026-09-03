@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from archskillkit.runtime_state.runtime_registry import RuntimeEntry, RuntimeRegistry
+from archskillkit.viewers.arrows_embed import ArrowsEmbedViewer
 from archskillkit.viewers.contract import (
     ViewerAdapter,
     ViewerUnavailable,
@@ -33,11 +34,16 @@ class ViewerSession:
 
 class ViewerRegistry:
     def __init__(self, adapters: list[ViewerAdapter] | None = None):
-        self._adapters = list(adapters) if adapters is not None else [
-            LikeC4Viewer(),
-            DrawioDesktopViewer(),
-            SystemDefaultViewer(),
-        ]
+        self._adapters = (
+            list(adapters)
+            if adapters is not None
+            else [
+                LikeC4Viewer(),
+                DrawioDesktopViewer(),
+                ArrowsEmbedViewer(),
+                SystemDefaultViewer(),
+            ]
+        )
 
     def adapters(self) -> list[ViewerAdapter]:
         return list(self._adapters)
@@ -47,8 +53,7 @@ class ViewerRegistry:
         rows = []
         for adapter in self._adapters:
             descriptor = adapter.descriptor()
-            rows.append({**descriptor.model_dump(),
-                         "probe": adapter.probe()})
+            rows.append({**descriptor.model_dump(), "probe": adapter.probe()})
         return rows
 
     def find(self, viewer_id: str) -> ViewerAdapter:
@@ -57,20 +62,19 @@ class ViewerRegistry:
                 return adapter
         raise ViewerUnavailable(f"unknown viewer: {viewer_id}")
 
-    def route(self, fmt: str, explicit: str | None = None,
-              require_available: bool = True) -> ViewerAdapter:
+    def route(
+        self, fmt: str, explicit: str | None = None, require_available: bool = True
+    ) -> ViewerAdapter:
         """First available viewer that consumes `fmt`; an explicit id
         wins and must consume the format. Preference order is the
         adapter registration order, system-default last."""
         if explicit:
             adapter = self.find(explicit)
             if fmt not in adapter.descriptor().consumes:
-                raise ViewerUnavailable(
-                    f"viewer {explicit} does not consume {fmt}")
+                raise ViewerUnavailable(f"viewer {explicit} does not consume {fmt}")
             probe = adapter.probe()
             if require_available and not probe.get("available"):
-                raise ViewerUnavailable(
-                    f"viewer {explicit} unavailable: {probe.get('detail')}")
+                raise ViewerUnavailable(f"viewer {explicit} unavailable: {probe.get('detail')}")
             return adapter
         system_default: ViewerAdapter | None = None
         for adapter in self._adapters:
@@ -81,35 +85,39 @@ class ViewerRegistry:
                 continue
             if adapter.probe().get("available"):
                 return adapter
-        if system_default is not None and system_default.probe().get(
-                "available"):
+        if system_default is not None and system_default.probe().get("available"):
             return system_default
         raise ViewerUnavailable(f"no available viewer consumes {fmt!r}")
 
 
-def launch(adapter: ViewerAdapter, artifact: Path, *,
-           runtime_registry: RuntimeRegistry | None = None,
-           ) -> ViewerSession:
+def launch(
+    adapter: ViewerAdapter,
+    artifact: Path,
+    *,
+    runtime_registry: RuntimeRegistry | None = None,
+) -> ViewerSession:
     """Start a viewer process. Managed servers (long-running) are
     registered so `stop`/orphan cleanup can track them."""
     probe = adapter.probe()
     if not probe.get("available"):
         raise ViewerUnavailable(
-            f"viewer {adapter.descriptor().id} unavailable:"
-            f" {probe.get('detail')}")
+            f"viewer {adapter.descriptor().id} unavailable: {probe.get('detail')}"
+        )
     argv = adapter.launch_argv(artifact)
     proc = subprocess.Popen(argv)
     managed = "MANAGED_SERVER" in adapter.descriptor().modes
     if managed and runtime_registry is not None:
-        runtime_registry.register(RuntimeEntry(
-            pid=proc.pid, run_id=f"viewer-{adapter.descriptor().id}",
-            command=" ".join(argv)))
-    return ViewerSession(viewer_id=adapter.descriptor().id, pid=proc.pid,
-                         argv=argv, managed=managed, process=proc)
+        runtime_registry.register(
+            RuntimeEntry(
+                pid=proc.pid, run_id=f"viewer-{adapter.descriptor().id}", command=" ".join(argv)
+            )
+        )
+    return ViewerSession(
+        viewer_id=adapter.descriptor().id, pid=proc.pid, argv=argv, managed=managed, process=proc
+    )
 
 
-def stop(session: ViewerSession, *,
-         runtime_registry: RuntimeRegistry | None = None) -> None:
+def stop(session: ViewerSession, *, runtime_registry: RuntimeRegistry | None = None) -> None:
     """Terminate a managed session, reap it and drop its registry
     entry. Reaping matters: a zombie child keeps answering signal 0."""
     if session.process is not None:

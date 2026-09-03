@@ -1744,3 +1744,328 @@ def test_shell_governance_controls_static(server):
     assert 'id="actor-name"' in content
     assert "updateGovernanceControls" in content
     assert "ARCH_SKILLKIT_ADMIN" in content
+
+
+# ---------- slice 26: Arrows embed + favorites ------------------------------
+
+
+@pytest.fixture()
+def repo_with_arrows(sandbox, repo_with_world):
+    """World with two elements + one relation, and a REAL generated
+    arrows projection (artifact + metadata sidecar)."""
+    world = ArchitectureWorld.for_repo(str(repo_with_world)).open()
+    try:
+        with world:
+            alpha = world.add_architecture_element("Alpha", "component")
+            beta = world.add_architecture_element("Beta", "datastore")
+            world.add_architecture_relation("calls", alpha, beta)
+    finally:
+        world.close()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "project",
+            "--repo",
+            str(repo_with_world),
+            "--format",
+            "arrows",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return repo_with_world
+
+
+@pytest.fixture()
+def arrows_server(sandbox, repo_with_arrows):
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "control-plane",
+            "--repo",
+            str(repo_with_arrows),
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    line = proc.stdout.readline()
+    assert line.strip(), f"server died: {proc.stderr.read()}"
+    start = json.loads(line)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+# -- /vendor/arrows static file server (no auth) --------------------
+
+
+def test_vendor_arrows_missing_dir_404(server):
+    """Missing vendor dir returns 404 NOT_FOUND."""
+    # arch_data_root() points to real user dir in test env, so this
+    # path won't exist → 404
+    status, _ = _get(server["url"] + "/vendor/arrows/embed.html", token=None)
+    assert status == 404
+
+
+def test_vendor_arrows_traversal_404(server):
+    """Path traversal returns 404 NOT_FOUND."""
+    for path in [
+        "/vendor/arrows/../../etc/passwd",
+        "/vendor/arrows/..%2F..%2Fetc%2Fpasswd",
+    ]:
+        status, _ = _get(server["url"] + path, token=None)
+        assert status == 404, f"traversal {path!r} did not return 404"
+
+
+def test_vendor_arrows_unsupported_ext_404(server):
+    """Unsupported file extension returns 404."""
+    # No file type registered for .txt → 404
+    status, _ = _get(server["url"] + "/vendor/arrows/README.txt", token=None)
+    assert status == 404
+
+
+def test_vendor_arrows_post_405(server):
+    """POST to vendor path returns 404 (no POST handler for vendor paths)."""
+    req = urllib.request.Request(
+        server["url"] + "/vendor/arrows/embed.html",
+        data=b"{}",
+        method="POST",
+        headers={"Authorization": f"Bearer {server['token']}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 404
+
+
+# -- /arrows-artifact --------------------------------------------------
+
+
+def test_arrows_artifact_requires_auth(server):
+    """401 without token."""
+    status, body = _get(server["url"] + "/arrows-artifact", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_arrows_artifact_missing_409(server):
+    """No arrows artifact → 409 ARTIFACT_MISSING."""
+    status, body = _get(server["url"] + "/arrows-artifact", token=server["token"])
+    assert status == 409
+    assert body["code"] == "ARTIFACT_MISSING"
+
+
+def test_arrows_artifact_happy_path(arrows_server, repo_with_arrows):
+    """Returns bridge-shaped graph with all required fields."""
+    from archskillkit.projections.arrows_bridge import compute_sha256
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    s = arrows_server
+
+    # Read the artifact BEFORE opening the world for the HTTP request
+    # (artifact_path is relative to world.workspace which needs world open)
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    artifact_path = world.workspace / ARTIFACT_PATHS["arrows"]
+    arrows_doc = json.loads(artifact_path.read_text(encoding="utf-8"))
+    expected_sha = compute_sha256(arrows_doc)
+    world.close()
+
+    # Now make the HTTP request
+    status, body = _get(s["url"] + "/arrows-artifact", token=s["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/arrows-artifact-v1"
+    assert body["docVersion"] == 1
+
+    # Verify bridge shape invariants
+    graph = body["graph"]
+    for node in graph["nodes"]:
+        assert "id" in node
+        assert "caption" in node
+        assert "position" in node
+        assert "x" in node["position"]
+        assert "y" in node["position"]
+        assert "labels" in node
+
+    for rel in graph["rels"]:
+        assert "id" in rel
+        assert "fromId" in rel
+        assert "toId" in rel
+        # Verify fromId/toId resolve to node ids
+        node_ids = {n["id"] for n in graph["nodes"]}
+        assert rel["fromId"] in node_ids
+        assert rel["toId"] in node_ids
+
+    # Verify SHA matches
+    assert body["sha256"] == expected_sha
+
+    # base_drift should be False (not tampered)
+    assert body["base_drift"] is False
+
+
+def test_arrows_artifact_drift_flag(arrows_server, repo_with_arrows):
+    """base_drift is True after artifact is tampered."""
+    from archskillkit.projections.writer import ARTIFACT_PATHS
+
+    s = arrows_server
+    world = ArchitectureWorld.for_repo(str(repo_with_arrows))
+    artifact_path = world.workspace / ARTIFACT_PATHS["arrows"]
+    # Read original content
+    original = artifact_path.read_text(encoding="utf-8")
+    # Tamper: add a valid JSON comment field to keep JSON parseable
+    doc = json.loads(original)
+    doc["_tampered"] = True
+    artifact_path.write_text(json.dumps(doc, sort_keys=True) + "\n")
+    world.close()
+
+    status, body = _get(s["url"] + "/arrows-artifact", token=s["token"])
+    assert status == 200
+    assert body["base_drift"] is True
+
+
+def test_arrows_artifact_post_405(arrows_server):
+    """POST returns 405."""
+    status, body = _post_json(
+        arrows_server["url"] + "/arrows-artifact",
+        token=arrows_server["token"],
+        payload={},
+    )
+    assert status == 405
+    assert body["code"] == "METHOD_NOT_ALLOWED"
+
+
+# -- /favorites -------------------------------------------------------
+
+
+def test_favorites_requires_auth(server):
+    """401 without token."""
+    status, _body = _get(server["url"] + "/favorites", token=None)
+    assert status == 401
+
+
+def test_favorites_get_empty(server):
+    """GET returns empty list when no favorites set."""
+    status, body = _get(server["url"] + "/favorites", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/favorites-v1"
+    assert body["favorites"] == []
+
+
+def test_favorites_put_and_get(server):
+    """PUT valid set → GET returns it."""
+    fav_list = ["likec4-server", "drawio-desktop"]
+    status, _ = _put_json(
+        server["url"] + "/favorites",
+        token=server["token"],
+        payload={"favorites": fav_list},
+    )
+    assert status == 200
+
+    status, body = _get(server["url"] + "/favorites", token=server["token"])
+    assert status == 200
+    assert body["favorites"] == fav_list
+
+
+def test_favorites_put_unknown_id_400(server):
+    """PUT with unknown viewer id → 400."""
+    status, body = _put_json(
+        server["url"] + "/favorites",
+        token=server["token"],
+        payload={"favorites": ["nonexistent-viewer-id"]},
+    )
+    assert status == 400
+    assert body["code"] == "BAD_REQUEST"
+
+
+def test_favorites_put_malformed_400(server):
+    """PUT with malformed body → 400."""
+    # Not a JSON object
+    req = urllib.request.Request(
+        server["url"] + "/favorites",
+        data=b"not json",
+        method="PUT",
+        headers={"Authorization": f"Bearer {server['token']}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 400
+
+    # Missing favorites key
+    status, _body = _put_json(
+        server["url"] + "/favorites",
+        token=server["token"],
+        payload={"other": []},
+    )
+    assert status == 400
+
+
+def test_favorites_persistence_across_restart(sandbox, repo_with_world):
+    """Favorites persist across server restart."""
+    proc1, start1 = _start_server(repo_with_world)
+    try:
+        fav_list = ["likec4-server"]
+        _put_json(
+            start1["url"] + "/favorites", token=start1["token"], payload={"favorites": fav_list}
+        )
+    finally:
+        proc1.terminate()
+        proc1.wait(timeout=10)
+
+    # Restart server
+    proc2, start2 = _start_server(repo_with_world)
+    try:
+        status, body = _get(start2["url"] + "/favorites", token=start2["token"])
+        assert status == 200
+        assert body["favorites"] == fav_list
+    finally:
+        proc2.terminate()
+        proc2.wait(timeout=10)
+
+
+def _put_json(url, token, payload):
+    """PUT JSON payload and return status + parsed body."""
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="PUT",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode())
+
+
+# -- Shell wiring for arrows panel ----------------------------------
+
+
+def test_shell_has_arrows_button(server):
+    """Shell contains the 'Open embedded Arrows' button."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert 'id="btn-open-arrows"' in content
+    assert 'id="arrows-panel"' in content
+    assert 'id="arrows-frame"' in content
+
+
+def test_shell_csp_allows_arrows_frame(server):
+    """CSP allows the arrows iframe (same-origin, no extra frame-src needed)."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        csp = resp.headers.get("Content-Security-Policy", "")
+    # Same-origin frame is allowed by default-src 'self'
+    # No external frame-src needed for arrows
+    assert "frame-src *" not in csp
