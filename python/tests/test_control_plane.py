@@ -1,5 +1,4 @@
-"""Control Plane kernel end-to-end (V2.4 M5 slice 20, docs/v2/59 M5
-"local-only server default").
+"""Control Plane kernel end-to-end (V2.4 M5 slice 20–21, docs/v2/59 M5).
 
 Spawns the real server as a subprocess on an ephemeral port and
 exercises the HTTP surface:
@@ -13,6 +12,14 @@ exercises the HTTP surface:
 - RuntimeRegistry: registered while running, unregistered after a
   graceful SIGTERM; process exits 0
 - no Architecture World -> exit code 2 with the standard message
+
+Slice 21 adds:
+- /evidence, /coverage, /gaps, /findings: schema-bound, auth-gated,
+  using application query use cases
+- /: static shell served without auth, operator-pasted token in JS
+  memory only, CSP enforced, native <button>, no URL token
+- Invalid gap status filter returns 400 BAD_REQUEST
+- Path traversal returns 404
 """
 
 import json
@@ -41,6 +48,7 @@ def sandbox(monkeypatch, tmp_path):
 
 @pytest.fixture()
 def repo_with_world(tmp_path):
+    """Init a minimal Architecture World."""
     repo = tmp_path / "fixture"
     (repo / "src").mkdir(parents=True)
     (repo / "src" / "main.rs").write_text("fn main() {}\n")
@@ -58,6 +66,102 @@ def repo_with_world(tmp_path):
 
 
 @pytest.fixture()
+def repo_with_content(tmp_path, monkeypatch):
+    """Init an Architecture World that has: one evidence linked to one
+    claim, one open knowledge gap, and one governance finding."""
+    repo = tmp_path / "fixture2"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "main.rs").write_text("fn main() {}\n")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    subprocess.run(
+        [sys.executable, "-m", "archskillkit", "init", "--repo", str(repo)],
+        check=True,
+        capture_output=True,
+    )
+
+    # Monkey-patch XDG env so the world opens correctly
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+
+    # Open world and record evidence, claim, gap, finding
+    from archskillkit.world import ArchitectureWorld
+
+    world = ArchitectureWorld.for_repo(str(repo)).open()
+    try:
+        # Record an evidence object
+        from archskillkit.packs.arch_core import EvidenceData
+
+        ev_id = world.record_evidence(
+            EvidenceData(
+                tool="test-sensor",
+                rule="has-main-function",
+                file="src/main.rs",
+                start_line=1,
+                end_line=1,
+            )
+        )
+
+        # Record a claim that references the evidence
+        from archskillkit.packs.arch_core import ClaimData
+
+        _claim_id = world.propose_claim(
+            ClaimData(
+                statement="The application has an entry point",
+                subjects=["main.rs"],
+                confidence="high",
+                status="accepted",
+                evidence_refs=[ev_id],
+            )
+        )
+
+        # Add an architecture element that matches the claim subject
+        _elem_id = world.add_architecture_element(
+            name="main.rs",
+            kind="component",
+            origin="DETECTED",
+            confidence="high",
+        )
+
+        # Record a knowledge gap
+        world.record_knowledge_gap(
+            question="What business logic does main.rs contain?",
+            impact="high",
+            related_refs=["main.rs"],
+            evidence_needed=["runtime behavior analysis"],
+        )
+
+        # Record a governance finding
+        world.record_architecture_rule(
+            name="no-datastore-in-frontend",
+            statement="Frontend components must not access databases directly",
+            forbidden_relation="direct_db_access",
+            source_category="component",
+            target_category="datastore",
+            severity="high",
+        )
+        world.persist_findings(
+            [
+                {
+                    "kind": "architecture_drift",
+                    "severity": "high",
+                    "target_id": "rel_test",
+                    "rule": "no-datastore-in-frontend",
+                    "detail": "FrontendComponent --[direct_db_access]--> Database",
+                }
+            ]
+        )
+    finally:
+        world.close()
+
+    return repo
+
+
+@pytest.fixture()
 def server(sandbox, repo_with_world):
     proc = subprocess.Popen(
         [
@@ -67,6 +171,32 @@ def server(sandbox, repo_with_world):
             "control-plane",
             "--repo",
             str(repo_with_world),
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    line = proc.stdout.readline()
+    assert line.strip(), f"server died before startup line: {proc.stderr.read()}"
+    start = json.loads(line)
+    assert start["schema"] == "arch-skillkit/control-plane-start-v1"
+    yield start
+    proc.terminate()
+    proc.wait(timeout=10)
+
+
+@pytest.fixture()
+def server_with_content(sandbox, repo_with_content):
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "archskillkit",
+            "control-plane",
+            "--repo",
+            str(repo_with_content),
             "--port",
             "0",
         ],
@@ -186,6 +316,363 @@ def test_unknown_route_404(server):
     assert body["code"] == "NOT_FOUND"
 
 
+# ---------- slice 21 endpoints -----------------------------------------
+
+
+def test_evidence_endpoint_schema(server):
+    """Schema envelope."""
+    status, body = _get(server["url"] + "/evidence", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/evidence-v1"
+    assert "count" in body
+    assert "items" in body
+    assert isinstance(body["items"], list)
+
+
+def test_evidence_requires_auth(server):
+    status, body = _get(server["url"] + "/evidence", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_evidence_with_content(server_with_content):
+    """Evidence list includes items with tool, file, evidence_refs."""
+    status, body = _get(
+        server_with_content["url"] + "/evidence",
+        token=server_with_content["token"],
+    )
+    assert status == 200
+    assert body["count"] >= 1
+    item = body["items"][0]
+    assert "id" in item
+    assert "tool" in item
+    assert "file" in item
+    assert "claim_ids" in item
+    assert isinstance(item["claim_ids"], list)
+    # The evidence is linked to the claim
+    assert len(item["claim_ids"]) >= 1
+
+
+def test_coverage_endpoint_schema(server):
+    status, body = _get(server["url"] + "/coverage", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/coverage-v1"
+    assert "elements" in body
+    assert "relations" in body
+    assert "evidence_coverage" in body
+    assert "unknowns" in body
+    assert 0.0 <= body["evidence_coverage"] <= 1.0
+    assert body["elements"] >= 0
+    assert body["unknowns"] >= 0
+
+
+def test_coverage_requires_auth(server):
+    status, body = _get(server["url"] + "/coverage", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_coverage_with_content(server_with_content):
+    """Coverage reflects the seeded world state."""
+    status, body = _get(
+        server_with_content["url"] + "/coverage",
+        token=server_with_content["token"],
+    )
+    assert status == 200
+    # One element from the seeded claim (main.rs)
+    assert body["elements"] >= 1
+    # Unknowns: elements without accepted claims
+    assert body["unknowns"] >= 0
+    assert 0.0 <= body["evidence_coverage"] <= 1.0
+
+
+def test_gaps_endpoint_schema(server):
+    status, body = _get(server["url"] + "/gaps", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/gaps-v1"
+    assert "count" in body
+    assert "gaps" in body
+    assert isinstance(body["gaps"], list)
+
+
+def test_gaps_endpoint_with_valid_status_filter(server):
+    """OPEN status filter is valid."""
+    status, body = _get(
+        server["url"] + "/gaps?status=OPEN",
+        token=server["token"],
+    )
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/gaps-v1"
+
+
+def test_gaps_endpoint_with_invalid_status_filter(server):
+    """Invalid status filter returns 400 BAD_REQUEST."""
+    status, body = _get(
+        server["url"] + "/gaps?status=NOT_A_REAL_STATUS",
+        token=server["token"],
+    )
+    assert status == 400
+    assert body["code"] == "INVALID_STATUS"
+    assert "NOT_A_REAL_STATUS" in body["message"]
+
+
+def test_gaps_invalid_status_single_response(server):
+    """Invalid status returns exactly one 400 response, not 400 then 500."""
+    # Use a socket-level check: if do_GET emitted two responses,
+    # the second status line would be visible. We verify the first
+    # status is 400 and the body is the error envelope.
+    import socket
+
+    url = server["url"].replace("http://", "")
+    host, port_str = url.split(":")
+    port = int(port_str)
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(5)
+    s.connect((host, port))
+    token = server["token"]
+    request = (
+        f"GET /gaps?status=NOT_A_REAL_STATUS HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        f"Authorization: Bearer {token}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    ).encode()
+    s.sendall(request)
+
+    # Read the entire response
+    chunks = []
+    while True:
+        try:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        except TimeoutError:
+            break
+    s.close()
+
+    response = b"".join(chunks).decode("utf-8", errors="replace")
+
+    # There should be exactly one HTTP status line
+    lines = response.split("\r\n")
+    status_line = lines[0]
+    assert status_line.startswith("HTTP/1.1 400"), (
+        f"expected single 400 response, got: {status_line!r}"
+    )
+
+    # Count how many "HTTP/1.1" status lines appear
+    http_lines = [l for l in lines if l.startswith("HTTP/1.1 ")]
+    assert len(http_lines) == 1, (
+        f"expected exactly 1 HTTP response, got {len(http_lines)}: {http_lines!r}"
+    )
+
+
+def test_gaps_requires_auth(server):
+    status, body = _get(server["url"] + "/gaps", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_gaps_with_content(server_with_content):
+    """Gaps list includes the seeded gap with impact and question."""
+    status, body = _get(
+        server_with_content["url"] + "/gaps",
+        token=server_with_content["token"],
+    )
+    assert status == 200
+    assert body["count"] >= 1
+    gap = body["gaps"][0]
+    assert "id" in gap
+    assert "data" in gap
+    assert gap["data"]["impact"] == "high"
+    assert "question" in gap["data"]
+    assert "What business logic" in gap["data"]["question"]
+
+
+def test_findings_endpoint_schema(server):
+    status, body = _get(server["url"] + "/findings", token=server["token"])
+    assert status == 200
+    assert body["schema"] == "arch-skillkit/findings-v1"
+    assert "count" in body
+    assert "findings" in body
+    assert isinstance(body["findings"], list)
+
+
+def test_findings_requires_auth(server):
+    status, body = _get(server["url"] + "/findings", token=None)
+    assert status == 401
+    assert body["code"] == "UNAUTHORIZED"
+
+
+def test_findings_with_content(server_with_content):
+    """Findings list includes the seeded finding with severity and kind."""
+    status, body = _get(
+        server_with_content["url"] + "/findings",
+        token=server_with_content["token"],
+    )
+    assert status == 200
+    assert body["count"] >= 1
+    finding = body["findings"][0]
+    assert "id" in finding
+    assert "data" in finding
+    assert finding["data"]["severity"] == "high"
+    assert finding["data"]["kind"] == "architecture_drift"
+
+
+# ---------- static shell (/) ------------------------------------------
+
+
+def test_shell_served_without_auth(server):
+    """The static shell is served without auth."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        content = resp.read().decode()
+        assert "<!DOCTYPE html>" in content
+        assert "Control Plane" in content
+        assert "prefers-reduced-motion" in content
+
+
+def test_shell_contains_native_button_not_div_role_button(server):
+    """Shell uses native <button> for keyboard accessibility."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # Must have native buttons
+    assert "<button" in content
+    # Must not use div role=button
+    assert 'role="button"' not in content
+
+
+def test_shell_html_contains_aria_and_semantics(server):
+    """Shell is accessible: ARIA landmarks, aria-expanded on toggles."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert 'role="main"' in content
+    assert 'aria-label' in content
+    assert 'aria-expanded' in content
+    assert 'aria-controls' in content
+    assert "prefers-reduced-motion" in content
+
+
+def test_shell_has_no_external_assets(server):
+    """Shell is zero-dependency: no CDN, no external assets."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert "cdn." not in content.lower()
+    assert "fonts.googleapis" not in content
+    assert "fonts.gstatic" not in content
+    assert 'src="http' not in content
+
+
+def test_shell_csp_header(server):
+    """CSP header is present and locks down the response."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "default-src 'self'" in csp
+        assert "script-src 'self' 'unsafe-inline'" in csp
+        assert "connect-src 'self'" in csp
+        assert "object-src 'none'" in csp
+        # upgrade-insecure-requests would upgrade same-origin fetches to
+        # HTTPS, which can break the loopback shell on plain HTTP.
+        assert "upgrade-insecure-requests" not in csp
+
+
+def test_shell_no_token_in_url(server):
+    """Shell HTML contains no token value."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # Token value from server start envelope must not appear in HTML
+    assert server["token"] not in content
+    # No URLSearchParams reads in the shell script
+    assert "window.location.search" not in content
+    assert "window.location.hash" not in content
+
+
+def test_shell_template_fully_resolved(server):
+    """Rendered shell contains no {csp} placeholder and no doubled CSS braces."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    # No unresolved CSP placeholder
+    assert "{csp}" not in content
+    # No Python format-string double-braces in CSS (raw {{ or }})
+    # CSS rules look like "color: var(--ok)" — a literal "{"
+    # followed by a CSS property. The string "{{" would be a Python format
+    # escape that was NOT resolved, meaning the template was not rendered.
+    # We check that no "{{" appears as a literal two-char sequence.
+    # Note: "{{" in JS strings is also suspicious.
+    assert "{{" not in content, "found raw {{ in rendered HTML"
+
+
+def test_shell_has_password_input_for_token(server):
+    """Token entry uses password input, not URL field."""
+    req = urllib.request.Request(server["url"] + "/")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        content = resp.read().decode()
+    assert 'type="password"' in content
+    assert 'id="token-input"' in content
+
+
+# ---------- method rejection on new endpoints ---------------------------
+
+
+def _method_rejected(server, path, method):
+    req = urllib.request.Request(
+        server["url"] + path,
+        data=b"{}",
+        method=method,
+        headers={"Authorization": f"Bearer {server['token']}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            return False
+    except urllib.error.HTTPError as exc:
+        return exc.code
+
+
+def test_evidence_write_methods_rejected(server):
+    assert _method_rejected(server, "/evidence", "POST") == 405
+    assert _method_rejected(server, "/evidence", "PUT") == 405
+    assert _method_rejected(server, "/evidence", "DELETE") == 405
+
+
+def test_coverage_write_methods_rejected(server):
+    assert _method_rejected(server, "/coverage", "POST") == 405
+    assert _method_rejected(server, "/coverage", "PATCH") == 405
+
+
+def test_gaps_write_methods_rejected(server):
+    assert _method_rejected(server, "/gaps", "POST") == 405
+    assert _method_rejected(server, "/gaps", "PUT") == 405
+    assert _method_rejected(server, "/gaps", "DELETE") == 405
+
+
+def test_findings_write_methods_rejected(server):
+    assert _method_rejected(server, "/findings", "POST") == 405
+    assert _method_rejected(server, "/findings", "PATCH") == 405
+
+
+# ---------- path traversal is blocked ----------------------------------
+
+
+def test_path_traversal_returns_404(server):
+    """Path traversal attempts return 404, not file contents."""
+    for path in [
+        "/../../etc/passwd",
+        "/..%2F..%2Fetc%2Fpasswd",
+        "/static/../../../etc/passwd",
+    ]:
+        status, _ = _get(server["url"] + path, token=server["token"])
+        assert status == 404, f"path {path!r} did not return 404"
+
+
 # ---------- runtime registry lifecycle ----------------------------------
 
 
@@ -217,8 +704,6 @@ def test_registry_registered_then_unregistered(sandbox, repo_with_world):
 
 
 def test_missing_world_exits_2(sandbox, tmp_path):
-    """Two precondition failures, both exit 2: path outside a git work
-    tree (RepoNotFound) and git repo without an initialized world."""
     empty = tmp_path / "empty"
     empty.mkdir()
     proc = subprocess.run(

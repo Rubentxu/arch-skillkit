@@ -1,30 +1,42 @@
 """`archskillkit control-plane` — local-only Control Plane kernel
-(V2.4 M5 slice 20; docs/v2/54 §7 + §12, docs/v2/66 §1, docs/v2/59 M5).
+(V2.4 M5 slice 20–21; docs/v2/54 §7 + §12, docs/v2/66 §1, docs/v2/59 M5).
 
-Scope of this slice: the HTTP backbone only. Properties:
+Slice 20 scope: the HTTP backbone — binds 127.0.0.1 ONLY (no escape
+hatch), per-process bearer token printed once on stdout (never persisted),
+RuntimeRegistry registration, read-only API (`/health`, `/status`,
+`/history`, `/viewers`).
 
-- Binds 127.0.0.1 ONLY. There is no flag, env var or config escape
-  hatch to expose it on another interface (docs/v2/54 §12 "localhost
-  por defecto" is enforced by construction, not by default value).
-- Authenticates EVERY request with a per-process bearer token
-  generated at startup and printed once on stdout. The token is never
-  persisted to disk (docs/v2/54 §12 "token/session local").
-- Registers itself in the RuntimeRegistry (ADR-0033: live PIDs live
-  there, never in the world event log) and unregisters on graceful
-  shutdown (SIGINT/SIGTERM).
-- Read-only by construction: the endpoints are projections over the
-  application layer; no write route exists in this slice. Governance
-  opt-in arrives with slice 24 and will reuse the admin gate.
+Slice 21 scope (this file): four new schema-bound read endpoints
+(`/evidence`, `/coverage`, `/gaps`, `/findings`) and a static Control
+Plane shell at `/`. All new endpoints are authenticated, read-only
+projections over the application layer.
 
-Endpoints (deterministic JSON envelopes, same schemas as the CLI):
+Trust model for the static shell (/)
 
-    GET /health    liveness, token required, inert body
-    GET /status    GetStatus projection    (arch-skillkit/status-result-v1)
-    GET /history   RunLedger read model    (arch-skillkit/history-v1)
-    GET /viewers   ViewerRegistry probes   (arch-skillkit/viewers-v1)
+  The shell is read-only. It makes no mutations. The bearer token must
+  still be supplied for every API call made from the browser — the
+  operator pastes the token into a password field in the UI. The token
+  lives only in JavaScript memory for the duration of the session and is
+  never written to storage, cookies, or URL.
 
-Errors are stable-code envelopes ({"code", "message"}), mirroring the
-admin gate convention so consumers can branch without parsing text.
+  The shell is served without authentication so that opening it in a
+  browser does not require a separate auth dance. However, it cannot
+  fetch any data without the token that the operator supplies manually.
+  An operator who can see the startup envelope stdout already has the
+  token; the shell does not add a new disclosure channel.
+
+  CSP is enforced: no external connections, no eval, no inline scripts
+  beyond the one locked script block that provides the UI.
+
+  This design intentionally does NOT put the token in the URL (not even
+  behind a fragment) because that would write it to browser history,
+  bookmarks, and server referrer logs. The operator must paste the
+  token each session — the same security property as a password manager
+  filling a login form.
+
+  No architecture data leaks to unauthenticated callers because every
+  data-fetching API call is gated by the bearer token. The shell HTML
+  itself contains no project-specific content.
 """
 
 from __future__ import annotations
@@ -40,6 +52,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from archskillkit.application.queries.coverage_query import get_coverage
+from archskillkit.application.queries.evidence_query import get_evidence
+from archskillkit.application.queries.findings_query import get_findings
+from archskillkit.application.queries.gaps_query import InvalidGapStatus, get_knowledge_gaps
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
 from archskillkit.ids import RepoNotFound
@@ -60,12 +76,730 @@ HEALTH_SCHEMA = "arch-skillkit/control-plane-health-v1"
 RUN_ID = "control-plane"
 _MAX_LIMIT = 500
 
+# CSP for the static shell. Permits only: this origin, no external
+# connections, no eval, no worker blobs, one inline script block (the
+# shell UI code itself).
+_SHELL_CSP = (
+    "default-src 'self';"
+    "connect-src 'self';"
+    "script-src 'self' 'unsafe-inline';"
+    "style-src 'self' 'unsafe-inline';"
+    "img-src 'self' data:;"
+    "font-src 'self';"
+    "object-src 'none';"
+    "base-uri 'self';"
+    "form-action 'self';"
+    "frame-ancestors 'none';"
+)
+
+
+def _render_shell() -> bytes:
+    """Render the static shell HTML.
+
+    The template contains ``{csp}`` (the CSP value) and doubled CSS
+    braces (``{{`` / ``}}``) as Python string literals. This function
+    resolves all three in one pass and returns valid UTF-8 HTML.
+    """
+    return (
+        _CONTROL_SHELL.replace("{csp}", _SHELL_CSP)
+        .replace("{{", "{")
+        .replace("}}", "}")
+    ).encode("utf-8")
+
+
+# ---------- Static Control Plane shell ----------------------------------
+# Zero-dependency embedded HTML served at /. No external assets.
+# PRODUCT.md: sober, evidence-first, WCAG 2.2 AA, reduced-motion-safe.
+# Security note: operator-pasted token in JS memory only — see module
+# docstring for the full trust trade-off rationale.
+
+_CONTROL_SHELL = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
+<title>Architecture Control Plane</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+  :root {{
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-2: #242836;
+    --border: #2e3347;
+    --text: #e2e4ea;
+    --text-muted: #7c8099;
+    --accent: #5e8af0;
+    --warn: #e09a4a;
+    --ok: #4caf7d;
+    --fail: #d4574f;
+    --font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }}
+
+  @media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }}
+  }}
+
+  body {{
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }}
+
+  a {{ color: var(--accent); text-decoration: none; }}
+  a:hover {{ text-decoration: underline; }}
+
+  header {{
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }}
+
+  header h1 {{
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }}
+
+  header h1 span {{ color: var(--text-muted); font-weight: 400; }}
+
+  #status-bar {{
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }}
+
+  #status-bar .badge {{
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }}
+  .badge-ok    {{ background: var(--ok);    color: #000; }}
+  .badge-fail  {{ background: var(--fail); color: #fff; }}
+  .badge-warn  {{ background: var(--warn); color: #000; }}
+  .badge-unknown {{ background: var(--border); color: var(--text); }}
+
+  main {{ max-width: 900px; margin: 0 auto; padding: 1.5rem; }}
+
+  section {{ margin-bottom: 2rem; }}
+
+  .panel {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }}
+
+  .panel-header {{
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: var(--surface-2);
+  }}
+
+  .panel-header h2 {{
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }}
+
+  .panel-header h2::before {{
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+  }}
+
+  .panel-header h2.ok::before    {{ background: var(--ok); }}
+  .panel-header h2.fail::before   {{ background: var(--fail); }}
+  .panel-header h2.warn::before   {{ background: var(--warn); }}
+
+  .panel-header .toggle {{
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }}
+
+  .panel-body {{ padding: 1rem; }}
+  .panel-body.collapsed {{ display: none; }}
+
+  /* Coverage cards */
+  .coverage-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }}
+
+  .coverage-card {{
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+  }}
+
+  .coverage-card .value {{
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }}
+
+  .coverage-card .value.ok     {{ color: var(--ok); }}
+  .coverage-card .value.fail   {{ color: var(--fail); }}
+  .coverage-card .value.warn   {{ color: var(--warn); }}
+  .coverage-card .value.neutral {{ color: var(--text-muted); }}
+
+  .coverage-card .label {{
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }}
+
+  /* Evidence list */
+  .evidence-list {{ list-style: none; }}
+
+  .evidence-item {{
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }}
+  .evidence-item:last-child {{ border-bottom: none; }}
+
+  .evidence-item .ev-id {{
+    font-family: ui-monospace, monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-right: 0.5rem;
+  }}
+
+  .evidence-item .ev-tool {{
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    margin-right: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+
+  .evidence-item .ev-location {{
+    font-family: ui-monospace, monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }}
+
+  .evidence-item .ev-rule {{
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 0.1rem;
+  }}
+
+  .evidence-item .ev-refs {{
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+  }}
+
+  .empty-state {{
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 1.5rem;
+  }}
+
+  /* Gaps list */
+  .gaps-list {{ list-style: none; }}
+
+  .gaps-item {{
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }}
+  .gaps-item:last-child {{ border-bottom: none; }}
+
+  .gaps-item .gap-impact {{
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    margin-right: 0.5rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+  .gap-impact.high   {{ background: var(--fail); color: #fff; }}
+  .gap-impact.medium {{ background: var(--warn); color: #000; }}
+  .gap-impact.low    {{ background: var(--border); color: var(--text); }}
+
+  .gaps-item .gap-question {{ margin-top: 0.2rem; }}
+
+  /* Findings list */
+  .findings-list {{ list-style: none; }}
+
+  .finding-item {{
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }}
+  .finding-item:last-child {{ border-bottom: none; }}
+
+  .finding-item .finding-sev {{
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    margin-right: 0.5rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+  .finding-sev.high   {{ background: var(--fail); color: #fff; }}
+  .finding-sev.medium {{ background: var(--warn); color: #000; }}
+  .finding-sev.low    {{ background: var(--border); color: var(--text); }}
+
+  .finding-item .finding-detail {{
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }}
+
+  /* Project identity strip */
+  .project-strip {{
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+  }}
+
+  .project-strip .field {{ display: flex; flex-direction: column; gap: 0.1rem; }}
+  .project-strip .field-label {{ font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }}
+  .project-strip .field-value {{ color: var(--text); font-family: ui-monospace, monospace; font-size: 0.8rem; }}
+
+  /* Token input */
+  #token-section {{
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }}
+
+  #token-section label {{
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }}
+
+  #token-section input[type="password"] {{
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 0.4em 0.6em;
+    font-family: ui-monospace, monospace;
+    font-size: 0.875rem;
+    width: 24em;
+    max-width: 100%;
+  }}
+
+  #token-section button {{
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4em 0.8em;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }}
+
+  #token-section button:hover {{ background: var(--accent-dim, #4a7ae0); }}
+  #token-section button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+
+  #token-section .hint {{
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    width: 100%;
+  }}
+
+  /* Loading state */
+  .loading {{ color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1.5rem; }}
+  .loading::after {{ content: " …"; }}
+
+  /* Error state */
+  .error-state {{
+    color: var(--fail);
+    font-size: 0.875rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--fail);
+    border-radius: 4px;
+  }}
+
+  @media (prefers-contrast: high) {{
+    :root {{ --bg: #000; --surface: #111; --surface-2: #1a1a1a; --border: #555; --text: #fff; --text-muted: #aaa; }}
+  }}
+</style>
+</head>
+<body>
+<header role="banner">
+  <h1>Control Plane <span>— Architecture Explorer</span></h1>
+  <div id="status-bar" role="status" aria-live="polite">
+    <span id="health-badge" class="badge badge-unknown">—</span>
+    <span id="project-info"></span>
+  </div>
+</header>
+
+<main id="main" role="main">
+
+  <!-- Token input (shown until token is set) -->
+  <div id="token-section" role="region" aria-label="Authentication">
+    <label for="token-input">Bearer token</label>
+    <input type="password" id="token-input" autocomplete="off" spellcheck="false"
+           aria-describedby="token-hint">
+    <button type="button" id="connect-btn">Connect</button>
+    <p id="token-hint" class="hint">
+      Start the server and paste the token from the startup line (the
+      <code>token</code> field in the JSON envelope printed to stdout).
+    </p>
+  </div>
+
+  <!-- Project identity (hidden until authenticated) -->
+  <div id="project-strip" class="project-strip" aria-label="Project identity" hidden></div>
+
+  <!-- Evidence panel -->
+  <section id="evidence-panel" aria-labelledby="evidence-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="evidence-heading">Evidence</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="evidence-body">[−]</button>
+      </div>
+      <div id="evidence-body" class="panel-body">
+        <div class="loading" aria-label="Loading evidence">Loading</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Coverage panel -->
+  <section id="coverage-panel" aria-labelledby="coverage-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="coverage-heading" class="ok">Coverage &amp; Unknowns</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="coverage-body">[−]</button>
+      </div>
+      <div id="coverage-body" class="panel-body">
+        <div class="loading" aria-label="Loading coverage">Loading</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Knowledge Gaps panel -->
+  <section id="gaps-panel" aria-labelledby="gaps-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="gaps-heading">Open Knowledge Gaps</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="gaps-body">[−]</button>
+      </div>
+      <div id="gaps-body" class="panel-body">
+        <div class="loading" aria-label="Loading knowledge gaps">Loading</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Findings panel -->
+  <section id="findings-panel" aria-labelledby="findings-heading" hidden>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="findings-heading">Governance Findings</h2>
+        <button type="button" class="toggle-btn" aria-expanded="true"
+                aria-controls="findings-body">[−]</button>
+      </div>
+      <div id="findings-body" class="panel-body">
+        <div class="loading" aria-label="Loading findings">Loading</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var _token = null;
+  var _connected = false;
+
+  var tokenInput = document.getElementById("token-input");
+  var connectBtn = document.getElementById("connect-btn");
+  var tokenSection = document.getElementById("token-section");
+
+  function headers() {
+    return { "Authorization": "Bearer " + _token };
+  }
+
+  function apiFetch(endpoint) {
+    return fetch(endpoint, { headers: headers() })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          return { status: r.status, body: body };
+        });
+      });
+  }
+
+  function esc(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function showPanels() {
+    tokenSection.setAttribute("hidden", "");
+    ["evidence-panel", "coverage-panel", "gaps-panel", "findings-panel"]
+      .forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.removeAttribute("hidden");
+      });
+  }
+
+  function loadHealth() {
+    apiFetch("/health").then(function (result) {
+      var badge = document.getElementById("health-badge");
+      if (result.status === 200 && result.body.ok) {
+        badge.textContent = "ok";
+        badge.className = "badge badge-ok";
+      } else if (result.status === 401) {
+        badge.textContent = "auth";
+        badge.className = "badge badge-fail";
+      } else {
+        badge.textContent = "fail";
+        badge.className = "badge badge-fail";
+      }
+    }).catch(function () {
+      var badge = document.getElementById("health-badge");
+      badge.textContent = "fail";
+      badge.className = "badge badge-fail";
+    });
+  }
+
+  function loadStatus() {
+    apiFetch("/status").then(function (result) {
+      if (result.status !== 200) return;
+      var body = result.body;
+      var strip = document.getElementById("project-strip");
+      strip.removeAttribute("hidden");
+      strip.innerHTML =
+        '<div class="field"><span class="field-label">Project</span><span class="field-value">' + esc(body.project_id) + '</span></div>' +
+        '<div class="field"><span class="field-label">Root</span><span class="field-value">' + esc(body.root) + '</span></div>' +
+        '<div class="field"><span class="field-label">Snapshot</span><span class="field-value">' + esc(body.snapshot && body.snapshot.snapshot_id || "—") + '</span></div>';
+    }).catch(function () {});
+  }
+
+  function loadEvidence() {
+    apiFetch("/evidence").then(function (result) {
+      var body = document.getElementById("evidence-body");
+      if (result.status === 200) {
+        var items = result.body.items || [];
+        if (items.length === 0) {
+          body.innerHTML = '<p class="empty-state">No evidence recorded.</p>';
+        } else {
+          body.innerHTML = '<ul class="evidence-list" role="list">' +
+            items.map(function (ev) {
+              var location = ev.file
+                ? (ev.start_line ? esc(ev.file) + ":" + ev.start_line : esc(ev.file))
+                : "—";
+              return '<li class="evidence-item">' +
+                '<span class="ev-id">' + esc(ev.id) + '</span>' +
+                '<span class="ev-tool">' + esc(ev.tool || "—") + '</span>' +
+                '<div class="ev-location">' + location + '</div>' +
+                (ev.rule ? '<div class="ev-rule">' + esc(ev.rule) + '</div>' : '') +
+                (ev.claim_ids && ev.claim_ids.length
+                  ? '<div class="ev-refs">Claims: ' + ev.claim_ids.map(esc).join(", ") + '</div>'
+                  : '') +
+                '</li>';
+            }).join("") + '</ul>';
+        }
+      } else {
+        body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
+      }
+    });
+  }
+
+  function loadCoverage() {
+    apiFetch("/coverage").then(function (result) {
+      var body = document.getElementById("coverage-body");
+      var heading = document.getElementById("coverage-heading");
+      if (result.status === 200) {
+        var cov = result.body;
+        var covVal = cov.evidence_coverage;
+        var unkVal = cov.unknowns;
+        var covClass = covVal >= 0.8 ? "ok" : covVal >= 0.5 ? "warn" : "fail";
+        var unkClass = unkVal === 0 ? "ok" : unkVal > 5 ? "fail" : "warn";
+        body.innerHTML = '<div class="coverage-grid" role="list" aria-label="Coverage metrics">' +
+          '<div class="coverage-card" role="listitem">' +
+            '<div class="value ' + covClass + '">' + Math.round(covVal * 100) + '%</div>' +
+            '<div class="label">Evidence Coverage</div>' +
+          '</div>' +
+          '<div class="coverage-card" role="listitem">' +
+            '<div class="value ' + unkClass + '">' + unkVal + '</div>' +
+            '<div class="label">Unknowns</div>' +
+          '</div>' +
+          '<div class="coverage-card" role="listitem">' +
+            '<div class="value neutral">' + cov.elements + '</div>' +
+            '<div class="label">Elements</div>' +
+          '</div>' +
+          '<div class="coverage-card" role="listitem">' +
+            '<div class="value neutral">' + cov.relations + '</div>' +
+            '<div class="label">Relations</div>' +
+          '</div>' +
+        '</div>';
+        heading.className = covClass;
+      } else {
+        body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
+      }
+    });
+  }
+
+  function loadGaps() {
+    apiFetch("/gaps").then(function (result) {
+      var body = document.getElementById("gaps-body");
+      if (result.status === 200) {
+        var items = result.body.gaps || [];
+        if (items.length === 0) {
+          body.innerHTML = '<p class="empty-state">No open knowledge gaps.</p>';
+        } else {
+          body.innerHTML = '<ul class="gaps-list" role="list">' +
+            items.map(function (g) {
+              var impact = g.data && g.data.impact || "low";
+              return '<li class="gaps-item" role="listitem">' +
+                '<span class="gap-impact ' + impact + '">' + esc(impact) + '</span>' +
+                '<div class="gap-question">' + esc(g.data && g.data.question || g.id) + '</div>' +
+                '</li>';
+            }).join("") + '</ul>';
+        }
+      } else {
+        body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
+      }
+    });
+  }
+
+  function loadFindings() {
+    apiFetch("/findings").then(function (result) {
+      var body = document.getElementById("findings-body");
+      if (result.status === 200) {
+        var items = result.body.findings || [];
+        if (items.length === 0) {
+          body.innerHTML = '<p class="empty-state">No governance findings.</p>';
+        } else {
+          body.innerHTML = '<ul class="findings-list" role="list">' +
+            items.map(function (f) {
+              var sev = f.data && f.data.severity || "low";
+              return '<li class="finding-item" role="listitem">' +
+                '<span class="finding-sev ' + sev + '">' + esc(sev) + '</span>' +
+                '<span>' + esc(f.data && f.data.kind || "—") + '</span>' +
+                (f.data && f.data.detail ? '<div class="finding-detail">' + esc(f.data.detail) + '</div>' : '') +
+                '</li>';
+            }).join("") + '</ul>';
+        }
+      } else {
+        body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
+      }
+    });
+  }
+
+  function loadAll() {
+    loadHealth();
+    loadEvidence();
+    loadCoverage();
+    loadGaps();
+    loadFindings();
+    loadStatus();
+  }
+
+  function connect() {
+    var val = tokenInput.value.trim();
+    if (!val) return;
+    _token = val;
+    _connected = true;
+    showPanels();
+    loadAll();
+  }
+
+  // Wire connect button and Enter-on-input
+  connectBtn.addEventListener("click", connect);
+  tokenInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") connect();
+  });
+
+  // Toggle panel via native button
+  document.addEventListener("click", function (e) {
+    var btn = e.target;
+    if (btn.classList.contains("toggle-btn")) {
+      var expanded = btn.getAttribute("aria-expanded") === "true";
+      var bodyId = btn.getAttribute("aria-controls");
+      var body = document.getElementById(bodyId);
+      btn.setAttribute("aria-expanded", String(!expanded));
+      body.classList.toggle("collapsed", !expanded);
+      btn.textContent = expanded ? "[+]" : "[−]";
+    }
+  });
+})();
+</script>
+</body>
+</html>"""
+
 
 # ---------- HTTP layer -------------------------------------------------
 
 
 class _ControlPlaneHandler(BaseHTTPRequestHandler):
-    """One handler, four GET routes, auth on every request."""
+    """One handler, eight GET routes, auth on every data route."""
 
     protocol_version = "HTTP/1.1"
     server_version = "arch-skillkit-control-plane/1"
@@ -80,6 +814,15 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_html(self, status: int, html: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Security-Policy", _SHELL_CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html)
 
     def _error(self, status: int, code: str, message: str) -> None:
         self._send_json(status, {"code": code, "message": message})
@@ -98,10 +841,17 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
     # -- verbs ----------------------------------------------------------
 
     def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        # / is the static shell — served without auth. No project data
+        # leaks because every API call from the shell carries the bearer
+        # token that the operator pastes manually. See module docstring.
+        if parsed.path == "/" or parsed.path == "/index":
+            self._send_html(200, _render_shell())
+            return
+
         if not self._authorized():
             self._error(401, "UNAUTHORIZED", "missing or invalid bearer token")
             return
-        parsed = urlparse(self.path)
         try:
             if parsed.path == "/health":
                 self._send_json(200, {"schema": HEALTH_SCHEMA, "ok": True})
@@ -120,6 +870,18 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                         "viewers": ViewerRegistry().status(),
                     },
                 )
+                return
+            if parsed.path == "/evidence":
+                self._send_json(200, self._evidence())
+                return
+            if parsed.path == "/coverage":
+                self._send_json(200, self._coverage())
+                return
+            if parsed.path == "/gaps":
+                self._gaps_http(parse_qs(parsed.query))
+                return
+            if parsed.path == "/findings":
+                self._send_json(200, self._findings())
                 return
             self._error(404, "NOT_FOUND", f"unknown route {parsed.path!r}")
         except Exception as exc:  # noqa: BLE001 - envelope, not traceback
@@ -164,6 +926,54 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         from archskillkit.application.queries.history import get_history
 
         return get_history(RunLedger(), limit=limit).model_dump()
+
+    def _evidence(self) -> dict[str, Any]:
+        world, index = self._world()
+        try:
+            return get_evidence(world).model_dump()
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _coverage(self) -> dict[str, Any]:
+        world, index = self._world()
+        try:
+            return get_coverage(world, code_index=index).model_dump()
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _gaps_http(self, query: dict[str, list[str]]) -> None:
+        """Handle /gaps: sends exactly one response.
+
+        Returns None on success (do_GET sends 200) or sends a 400 and
+        returns normally so do_GET does not add a second response.
+        """
+        status_filter = query.get("status", [None])[0]
+        world, index = self._world()
+        try:
+            result = get_knowledge_gaps(world, status=status_filter)
+        except InvalidGapStatus as exc:
+            # Send 400 and return normally — do_GET will see None and exit
+            # the handler without sending an additional response.
+            self._error(400, exc.code, str(exc))
+        else:
+            self._send_json(200, result.model_dump())
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
+
+    def _findings(self) -> dict[str, Any]:
+        world, index = self._world()
+        try:
+            return get_findings(world).model_dump()
+        finally:
+            if index is not None:
+                index.close()
+            world.close()
 
 
 # ---------- server lifecycle -------------------------------------------
