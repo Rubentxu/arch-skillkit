@@ -19,7 +19,7 @@ from archskillkit.projections.intents import IntentType, VisualIntent
 
 _GRAPHML_NS = "http://graphml.graphdrawing.org/xmlns"
 
-_NODE_KEYS = (("d_kind", "kind"), ("d_origin", "origin"),
+_NODE_KEYS = (("d_name", "name"), ("d_kind", "kind"), ("d_origin", "origin"),
               ("d_confidence", "confidence"))
 _EDGE_KEYS = (("d_relkind", "kind"), ("d_rule", "rule"),
               ("d_confidence", "confidence"))
@@ -30,7 +30,7 @@ class GraphMLAdapter:
     supported_intents = frozenset(
         {"dependency_graph", "large_graph_analysis"}
         & set(IntentType.__args__))  # type: ignore[attr-defined]
-    version = "0.1.0"
+    version = "0.2.0"  # 0.2.0: nodes carry their name (P-03 external-viewer fix)
 
     def project(self, intent: VisualIntent,
                 context: ProjectionContext) -> ProjectionResult:

@@ -271,10 +271,15 @@ class TestGraphMLProjection:
         graph = networkx.read_graphml(result["path"])
         assert graph.number_of_nodes() == result["metrics"]["nodes"] == 10
         assert graph.number_of_edges() == result["metrics"]["edges"] == 5
-        # Every node carries a label (kind) — porting to a GUI means the
-        # user sees the element kind, not a blank box.
-        kinds = [data.get("kind", "") for _, data in graph.nodes(data=True)]
-        assert all(kinds), f"nodes without kind: {[k for k in kinds if not k]}"
+        # Every node carries its element NAME and a kind — an unnamed
+        # graph is useless for architecture review (P-03 external-viewer
+        # validation caught the missing name: yEd showed "No Value",
+        # Gephi showed anonymous dots).
+        for _, data in graph.nodes(data=True):
+            assert data.get("name"), f"node without name: {data}"
+            assert data.get("kind"), f"node without kind: {data}"
+        names = [data.get("name") for _, data in graph.nodes(data=True)]
+        assert len(names) == len(set(names)), "duplicate node names"
 
 
 class TestJSONCanvasProjection:
