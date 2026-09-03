@@ -63,8 +63,8 @@ class SensorCandidate(BaseModel):
     title: str
     detector: DetectorRule
     language: str  # e.g. "python", "typescript" — used to select engine parser
-    positives: list[dict] = Field(min_length=1)
-    negatives: list[dict] = Field(min_length=1)
+    positives: list[dict] = Field(default_factory=list)
+    negatives: list[dict] = Field(default_factory=list)
     origin_run_ids: list[str] = Field(min_length=1)
     status: Literal["candidate", "accepted", "rejected"] = "candidate"
     created_at: str
@@ -86,6 +86,23 @@ class SensorCandidate(BaseModel):
             if item["expect"] not in FIXTURE_EXPECTS:
                 raise ValueError(f"expect must be one of {FIXTURE_EXPECTS}, got {item['expect']!r}")
         return v
+
+    @model_validator(mode="after")
+    def _enforce_non_empty_fixtures_when_evaluated(self) -> SensorCandidate:
+        """When status is evaluated (accepted/rejected), positives and negatives
+        must each contain at least one fixture.  Candidates (from the Distiller)
+        start with empty fixture lists that are populated during human review.
+        """
+        if self.status in ("accepted", "rejected"):
+            if len(self.positives) < 1:
+                raise ValueError(
+                    "positives must have at least 1 item when status is accepted/rejected"
+                )
+            if len(self.negatives) < 1:
+                raise ValueError(
+                    "negatives must have at least 1 item when status is accepted/rejected"
+                )
+        return self
 
     @model_validator(mode="after")
     def _deterministic_order(self) -> SensorCandidate:

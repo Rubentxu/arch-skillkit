@@ -274,6 +274,68 @@ class ArchitectureWorld:
         """All distinct run_ids present in this project's store."""
         return _list_runs(self.db_path)
 
+    def claims_by_run(self, run_id: str) -> list[dict]:
+        """Return claim objects that originated in ``run_id``.
+
+        Queries the events table directly (bypassing the graph) to avoid
+        fork-view inheritance where a forked runtime shows parent events.
+        Each returned dict has the same shape as ``find_objects`` returns.
+
+        For fork runs, events inherited from the parent (those whose event id
+        is <= ``forked_at_event_id``) are excluded; only events created after
+        the fork are returned.  This works because ActiveGraph copies parent
+        events into the fork with the same event id but a new seq.
+        """
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as conn:
+            fork_row = conn.execute(
+                "SELECT parent_run_id, forked_at_event_id FROM runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+
+            if fork_row is None:
+                return []
+
+            parent_run_id, forked_at_event_id = fork_row
+
+            if parent_run_id is None:
+                # Root run — no parent, return all claims
+                rows = conn.execute(
+                    """
+                    SELECT id, payload
+                    FROM events
+                    WHERE run_id = ? AND type = 'object.created'
+                    ORDER BY seq
+                    """,
+                    (run_id,),
+                ).fetchall()
+            else:
+                # Fork run — exclude events inherited from parent.
+                # ActiveGraph copies parent events into the fork with new seq
+                # but the same event id.  Events with id <= forked_at_event_id
+                # were inherited and should be excluded.
+                rows = conn.execute(
+                    """
+                    SELECT id, payload
+                    FROM events
+                    WHERE run_id = ?
+                      AND type = 'object.created'
+                      AND id > ?
+                    ORDER BY seq
+                    """,
+                    (run_id, forked_at_event_id),
+                ).fetchall()
+
+        out = []
+        for event_id, payload in rows:
+            obj = json.loads(payload).get("object", {})
+            if obj.get("type") == "claim":
+                out.append(
+                    {"id": obj.get("id", event_id), "type": "claim", "data": obj.get("data", {})}
+                )
+        return out
+
     def drop_run(self, run_id: str) -> bool:
         """Delete every row belonging to ``run_id`` from the project's
         sqlite store (events, archive, runs meta). Other runs are

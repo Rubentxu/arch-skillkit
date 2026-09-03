@@ -12,6 +12,7 @@ from archskillkit.delivery.cli import (
     ask,
     control_plane,
     delta,
+    distill_sensors,
     explain,
     gate,
     mcp,
@@ -40,6 +41,7 @@ COMMANDS = (
     replay_candidate,
     mcp,
     control_plane,
+    distill_sensors,
 )
 
 __all__ = [
@@ -47,6 +49,7 @@ __all__ = [
     "ask",
     "control_plane",
     "delta",
+    "distill_sensors",
     "explain",
     "gate",
     "mcp",
