@@ -44,6 +44,9 @@ def sandbox(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+    # Favorites (slice 26) persist under arch_config_root(): isolate it
+    # too, or tests would read/write the operator's real config.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     return tmp_path
 
 

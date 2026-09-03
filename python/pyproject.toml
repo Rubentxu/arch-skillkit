@@ -34,6 +34,7 @@ check_untyped_defs = true
 files = [
   "src/archskillkit/runtime_manifest.py",
   "src/archskillkit/sensors.py",
+  "src/archskillkit/sensor_candidate.py",
   "src/archskillkit/ids.py",
   "src/archskillkit/ports.py",
   "src/archskillkit/projections/metadata.py",
