@@ -1,6 +1,10 @@
 # ADR-0048 — ActiveGraph Anti-Corruption Boundary
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+`ArchitectureWorldPort` at `python/src/archskillkit/ports.py:17` and `ArchitectureQueryPort` at `python/src/archskillkit/application/ports/architecture_query.py:13` formalize the domain surface with concrete ActiveGraph confined behind the port boundary.
 
 ## Context
 

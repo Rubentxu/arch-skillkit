@@ -6,6 +6,22 @@ SemVer (docs/05): MAJOR breaks workspace/evidence/Skill contracts, MINOR
 adds compatible capabilities, PATCH covers compatible rules, prompts and
 fixes.
 
+## [0.5.0] - 2026-09-04
+
+### Added
+
+- **V2.5 — Architecture Integrity & Intelligence Kernel** (docs/v2/70-v2.5-summary.md, docs/v2/84-v2.5-milestones.md):
+  M0: Verification Baseline; M1: Governance Application API; M2: Composition Root; M3: ActiveGraph Boundary; M4: ArchitectureDelta; M5: Provider Model (with known gap — CodeGraphQueryPort not yet shipped); M6: Context & Agent Efficiency; M7: Learning Architecture.
+  Gate V2.5: 0 ARC violations · 143 tests pass.
+  - `ArchSkillKitApplication` composition root (`python/src/archskillkit/bootstrap/__init__.py`)
+  - `ArchitectureWorldPort` and `ArchitectureQueryPort` ports formalize domain surface
+  - `ArchitectureDelta` first-class delta type feeds `changes`, `impact` and PR gate
+  - `archskillkit gate` deterministic fitness gate with waivers and expiry
+  - `archskillkit distill-sensors` and `promote-sensor` / `reject-sensor` CLI
+  - `archskillkit mine-conformance` for architecture rule discovery
+  - MCP server with 5 read tools and 9 admin tools (admin-gated)
+  - Viewer Hub with `/projections` and `/launch` endpoints
+
 ## [0.3.3] - 2026-09-02
 
 ### Fixed

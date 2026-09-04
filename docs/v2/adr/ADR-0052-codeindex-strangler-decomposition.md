@@ -1,6 +1,10 @@
 # ADR-0052 — CodeIndex Strangler Decomposition
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+`python/src/archskillkit/codeindex.py:117` — `CodeIndex` class provides the canonical evidence store; the strangler decomposition proceeds by extracting provider ingestion, evidence store, query adapter, and compatibility facade in order.
 
 ## Decision
 

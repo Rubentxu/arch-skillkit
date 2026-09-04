@@ -1,6 +1,10 @@
 # ADR-0055 — Federation Is Deferred Until UAT Evidence
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+No shared multi-repo world implementation exists. Federation is deferred until three concrete UAT cases unresolvable by repo-scoped snapshots/capabilities are demonstrated.
 
 ## Decision
 

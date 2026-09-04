@@ -1,6 +1,10 @@
 # ADR-0046 — Canonical Application API and Composition Root
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+`ArchSkillKitApplication` composition root at `python/src/archskillkit/bootstrap/__init__.py:33`.
 
 ## Context
 

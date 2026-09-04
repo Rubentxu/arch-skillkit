@@ -1,4 +1,4 @@
-# Estado de implementación V2
+# Estado de implementación V2.x
 
 Última revisión documental: 2026-09-03.
 

@@ -1,6 +1,10 @@
 # ADR-0050 — ArchitectureDelta Is First-Class
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+`ArchitectureDelta` imported at `python/src/archskillkit/context.py:24` and used as first-class delta type across the codebase.
 
 ## Decision
 

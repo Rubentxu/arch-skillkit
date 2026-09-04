@@ -11,7 +11,7 @@ ArchSkillKit es una propuesta **agent-first, tool-first y repository-clean** par
 ## TL;DR
 
 ```bash
-uv tool install archskillkit==0.2.0   # instala la app
+uv tool install archskillkit==0.5.0   # instala la app
 archskillkit setup                    # instala el runtime pineado (ast-grep, Semgrep, Node/LikeC4)
 archskillkit doctor                   # verifica → "ready"
 archskillkit init --repo .            # empieza a analizar un repositorio

@@ -1,6 +1,18 @@
 # ADR-0047 — Delivery Adapters Are Siblings
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+Live direct-construction residuals confirmed at apply time (6 hits from `rg -n "ArchitectureWorld.for_repo|CodeIndex\(" python/src/archskillkit/delivery/cli/`):
+- `proposals.py:169` — `CodeIndex(index_path).open()`
+- `simulate.py:255` — `CodeIndex(code).open()`
+- `replay_fixture.py:298` — `ArchitectureWorld.for_repo(repo_path).open()`
+- `replay_fixture.py:301` — `CodeIndex(world.workspace / "code.sqlite").open()`
+- `control_plane.py:3496` — `ArchitectureWorld.for_repo(repo_path).open()`
+- `control_plane.py:3586` — `ArchitectureWorld.for_repo(repo_path)`
+
+Full closure not yet achieved; these delivery adapters retain direct world/index construction.
 
 ## Context
 

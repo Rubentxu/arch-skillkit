@@ -1,6 +1,10 @@
 # ADR-0051 — Deterministic Architecture Conformance
 
-Status: Proposed
+Status: Accepted
+
+## Verification evidence
+
+`docs/v2/verification/arch_conformance.py:18` — `Finding` dataclass drives the deterministic conformance gate; findings are stable across runs for identical source tree and contracts.
 
 ## Decision
 
