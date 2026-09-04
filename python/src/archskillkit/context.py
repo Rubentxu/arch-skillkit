@@ -111,10 +111,6 @@ class ContextCompiler:
         # 3.+4. expand one bounded hop through architecture relations
         seed_ids = {e["id"] for e in elements}
         relations = self._relations_touching(seed_ids)
-        neighbors = [e for e in self.world.find_objects("architecture_element")
-                     if e["id"] in {r["source"] for r in relations}
-                     | {r["target"] for r in relations}
-                     and e not in elements]
         # 3b. recency signals — previous→current scan delta (docs/v2/46
         # camino siguiente): recent graph delta + changed-file proximity
         recent_names = frozenset(

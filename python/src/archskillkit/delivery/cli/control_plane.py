@@ -71,17 +71,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    ProposalPromoteCommand,
+    ProposalRejectCommand,
+)
 from archskillkit.application.queries.coverage_query import get_coverage
 from archskillkit.application.queries.evidence_query import get_evidence
 from archskillkit.application.queries.findings_query import get_findings
 from archskillkit.application.queries.gaps_query import (
     InvalidGapStatus,
     get_knowledge_gaps,
-)
-from archskillkit.application.commands.governance import GovernanceApplicationService
-from archskillkit.application.models.governance import (
-    ProposalPromoteCommand,
-    ProposalRejectCommand,
 )
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex

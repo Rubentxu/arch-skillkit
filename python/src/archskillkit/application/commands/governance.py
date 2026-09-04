@@ -12,10 +12,10 @@ No adapter calls another adapter's handlers directly.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from archskillkit.agent_governance import (
     ProposalMetadata,
+    default_skills_root,
     get_proposal_metadata,
     record_proposal_metadata,
 )
@@ -33,14 +33,13 @@ from archskillkit.application.models.governance import (
     ProposalReviewCommand,
     ProposalReviewResult,
 )
-from archskillkit.application.ports.governance_command import GovernanceCommandPort
 from archskillkit.application.queries.fitness import FitnessThresholds, evaluate_gate
 from archskillkit.application.queries.report import render_json
 from archskillkit.application.snapshot_builder import build_snapshot
+from archskillkit.ports import ArchitectureWorldPort
 from archskillkit.proposals import PromotionError, promote, structural_diff
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.runtime_state.waivers import WaiverLedger
-from archskillkit.ports import ArchitectureWorldPort
 
 PROPOSAL_PREFIX = "proposal-"
 
@@ -145,7 +144,7 @@ class GovernanceApplicationService:
                 return CommandError(error="METADATA_INVALID", message=str(exc))
 
             skill_revisions = []
-            skills_root = Path.home() / ".config" / "opencode" / "skills"
+            skills_root = default_skills_root()
             for skill_name in command.skills:
                 revision = find_skill_revision(skill_name, skills_root)
                 if revision is None:

@@ -71,7 +71,7 @@ def handle(args: argparse.Namespace, world=None) -> int:
 
     try:
         main_state = SnapshotState.from_world(world)
-    except Exception as exc:
+    except RuntimeError as exc:
         print(f"error: failed to capture main world state: {exc}", file=sys.stderr)
         return 1
 
@@ -79,7 +79,7 @@ def handle(args: argparse.Namespace, world=None) -> int:
         with world:
             fork = world.view(run_id)
             fork_state = SnapshotState.from_world(fork)
-    except Exception as exc:
+    except RuntimeError as exc:
         print(f"error: failed to capture fork state: {exc}", file=sys.stderr)
         return 1
 

@@ -108,7 +108,6 @@ def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None,
 
 def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """List all proposal-* runs in the world."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
 
     service = GovernanceApplicationService(world)
     result = service.list_proposals()
@@ -118,8 +117,6 @@ def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 
 def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Fork the base world into a candidate run."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
-    from archskillkit.application.models.governance import ProposalCreateCommand
 
     prompt_name = getattr(args, "prompt_spec", None) or None
     skill_names = list(getattr(args, "skill", []) or [])
@@ -137,8 +134,6 @@ def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 
 def handle_diff(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Return the structural diff between base and the candidate."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
-    from archskillkit.application.models.governance import ProposalDiffCommand
 
     service = GovernanceApplicationService(world)
     cmd = ProposalDiffCommand(name=args.name)
@@ -153,8 +148,6 @@ def handle_diff(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 
 def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Evaluate fitness gate + structural diff against the candidate."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
-    from archskillkit.application.models.governance import ProposalReviewCommand
     from archskillkit.codeindex import CodeIndex
 
     service = GovernanceApplicationService(world)
@@ -190,8 +183,6 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 
 def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Promote a candidate to base; records approval first."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
-    from archskillkit.application.models.governance import ProposalPromoteCommand
 
     service = GovernanceApplicationService(world)
     cmd = ProposalPromoteCommand(name=args.name, approved_by=args.approved_by)
@@ -206,8 +197,6 @@ def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 
 def handle_reject(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Mark a candidate as rejected; does not mutate base."""
-    from archskillkit.application.commands.governance import GovernanceApplicationService
-    from archskillkit.application.models.governance import ProposalRejectCommand
 
     service = GovernanceApplicationService(world)
     cmd = ProposalRejectCommand(name=args.name, actor=args.actor)

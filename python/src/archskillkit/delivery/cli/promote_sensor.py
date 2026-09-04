@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 
 from archskillkit.sensor_candidate import (
-    SensorEvaluation,
     evaluate_sensor,
     meets_threshold,
 )
@@ -107,7 +106,7 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
         raw = candidate_path.read_text()
         import json as _json
         cand_dict = _json.loads(raw)
-    except Exception as exc:
+    except (OSError, _json.JSONDecodeError) as exc:
         print(f"error: could not read candidate.json: {exc}", file=sys.stderr)
         return 1
 

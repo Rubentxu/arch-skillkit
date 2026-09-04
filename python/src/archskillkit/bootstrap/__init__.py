@@ -23,7 +23,7 @@ Or as a context manager::
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from archskillkit.codeindex import CodeIndex
@@ -76,7 +76,7 @@ class ArchSkillKitApplication:
             self._world = None
         self._opened = False
 
-    def __enter__(self) -> ArchSkillKitApplication:
+    def __enter__(self) -> Self:  # type: ignore[PYI034]
         return self.open()
 
     def __exit__(self, *exc_info: object) -> None:
@@ -117,7 +117,6 @@ class ArchSkillKitApplication:
     def create_proposal(self, command):
         """Create a proposal fork."""
         from archskillkit.application.commands.governance import GovernanceApplicationService
-        from archskillkit.application.models.governance import ProposalCreateCommand
 
         service = GovernanceApplicationService(self.world)
         return service.create_proposal(command)
@@ -125,7 +124,6 @@ class ArchSkillKitApplication:
     def diff_proposal(self, command):
         """Structural diff between base and candidate."""
         from archskillkit.application.commands.governance import GovernanceApplicationService
-        from archskillkit.application.models.governance import ProposalDiffCommand
 
         service = GovernanceApplicationService(self.world)
         return service.diff_proposal(command)
@@ -133,7 +131,6 @@ class ArchSkillKitApplication:
     def review_proposal(self, command):
         """Fitness gate + structural diff against candidate."""
         from archskillkit.application.commands.governance import GovernanceApplicationService
-        from archskillkit.application.models.governance import ProposalReviewCommand
 
         service = GovernanceApplicationService(self.world)
         return service.review_proposal(command)
@@ -141,7 +138,6 @@ class ArchSkillKitApplication:
     def promote_proposal(self, command):
         """Promote candidate to base."""
         from archskillkit.application.commands.governance import GovernanceApplicationService
-        from archskillkit.application.models.governance import ProposalPromoteCommand
 
         service = GovernanceApplicationService(self.world)
         return service.promote_proposal(command)
@@ -149,7 +145,6 @@ class ArchSkillKitApplication:
     def reject_proposal(self, command):
         """Mark candidate as rejected."""
         from archskillkit.application.commands.governance import GovernanceApplicationService
-        from archskillkit.application.models.governance import ProposalRejectCommand
 
         service = GovernanceApplicationService(self.world)
         return service.reject_proposal(command)
@@ -170,8 +165,6 @@ class ArchSkillKitApplication:
 
     def search_code(self, query: str):
         """Search the code index."""
-        from archskillkit.application.queries.analyze_impact import analyze_impact
-
         if self.index is None:
             return []
         hits = self.index.search(query) if self.index else []
@@ -184,7 +177,6 @@ class ArchSkillKitApplication:
         changed in the delta are ranked higher; removed elements are ranked
         lower (M6 delta-aware context).
         """
-        from archskillkit.application.queries.context_query import ContextQuery
         from archskillkit.context import Budget, ContextCompiler
 
         compiler = ContextCompiler(self.world, self.index)

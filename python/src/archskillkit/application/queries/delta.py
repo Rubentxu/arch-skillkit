@@ -197,12 +197,6 @@ def _explain_verdict_changes(
     all_keys = set(base_idx.keys()) | set(head_idx.keys())
     changes: list[VerdictChange] = []
 
-    added_elements = set(delta.elements.added)
-    removed_elements = set(delta.elements.removed)
-    changed_elements = set(delta.elements.changed)
-    added_rels = set(delta.relations.added)
-    removed_rels = set(delta.relations.removed)
-
     for key in sorted(all_keys):
         kind, detail = key
         from_v = base_idx.get(key)

@@ -33,6 +33,14 @@ from archskillkit.agent_governance import (
     load_skill_revisions,
     prompt_specs_registry,
 )
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    ProposalCreateCommand,
+    ProposalDiffCommand,
+    ProposalPromoteCommand,
+    ProposalRejectCommand,
+    ProposalReviewCommand,
+)
 from archskillkit.application.queries.explain import SubjectNotFound, explain
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.application.queries.history import get_history
@@ -41,14 +49,6 @@ from archskillkit.delivery.admin import (
     ADMIN_TOOLS,
     AdminDisabledError,
     admin_enabled,
-)
-from archskillkit.application.commands.governance import GovernanceApplicationService
-from archskillkit.application.models.governance import (
-    ProposalCreateCommand,
-    ProposalDiffCommand,
-    ProposalPromoteCommand,
-    ProposalRejectCommand,
-    ProposalReviewCommand,
 )
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.world import ArchitectureWorld
@@ -508,7 +508,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 result = service.create_proposal(cmd)
                 if hasattr(result, "error"):
                     return _envelope(_envelope_or_error(result.model_dump()))
-                return _envelope(result.model_dump())
+                return _envelope(result.model_dump(exclude_none=True))
             if name == "arch_propose_diff":
                 service = GovernanceApplicationService(world)
                 cmd = ProposalDiffCommand(name=arguments["name"])

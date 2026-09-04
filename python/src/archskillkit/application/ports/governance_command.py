@@ -7,7 +7,7 @@ the application layer executes them and returns typed result envelopes.
 
 from __future__ import annotations
 
-from typing import Protocol, TypeVar, Union
+from typing import Protocol, TypeVar
 
 from archskillkit.application.models.governance import (
     CommandError,
@@ -24,15 +24,15 @@ from archskillkit.application.models.governance import (
     ProposalReviewResult,
 )
 
-CommandResult = Union[
-    ProposalListResult,
-    ProposalCreateResult,
-    ProposalDiffResult,
-    ProposalReviewResult,
-    ProposalPromoteResult,
-    ProposalRejectResult,
-    CommandError,
-]
+CommandResult = (
+    ProposalListResult
+    | ProposalCreateResult
+    | ProposalDiffResult
+    | ProposalReviewResult
+    | ProposalPromoteResult
+    | ProposalRejectResult
+    | CommandError
+)
 
 T = TypeVar("T")
 
