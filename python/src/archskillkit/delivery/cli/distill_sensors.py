@@ -38,6 +38,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=2,
         help="minimum total claims across all runs (default: 2)",
     )
+    p.add_argument(
+        "--record",
+        action="store_true",
+        help="record each candidate as a sensor_candidate world object "
+        "(enables archskillkit reject-sensor workflow)",
+    )
 
 
 def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
@@ -56,6 +62,29 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
                 min_runs=args.min_runs,
                 min_occurrences=args.min_occurrences,
             )
+            if args.record:
+                for c in candidates:
+                    # Skip if already recorded
+                    existing = world.find_objects(
+                        "sensor_candidate",
+                        sensor_id=c.sensor_id,
+                    )
+                    if existing:
+                        continue
+                    world.add_object(
+                        "sensor_candidate",
+                        {
+                            "sensor_id": c.sensor_id,
+                            "title": c.title,
+                            "detector_kind": c.detector.engine,
+                            "detector_rule": c.detector.rule,
+                            "language": c.language,
+                            "origin_run_ids": c.origin_run_ids,
+                            "status": c.status,
+                            "positives": c.positives,
+                            "negatives": c.negatives,
+                        },
+                    )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -65,6 +94,7 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
         "min_runs": args.min_runs,
         "min_occurrences": args.min_occurrences,
         "candidates": [json.loads(c.canonical_json()) for c in candidates],
+        "recorded": args.record,
     }
     print(json.dumps(output, indent=2))
     return 0

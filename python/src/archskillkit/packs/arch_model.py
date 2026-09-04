@@ -71,6 +71,32 @@ class SensorRuleData(BaseModel):
     origin_run_ids: list[str] = Field(min_length=1)
 
 
+SensorCandidateStatus = Literal["candidate", "accepted", "rejected"]
+
+
+class SensorCandidateData(BaseModel):
+    """A candidate sensor rule awaiting human review and fixture collection.
+
+    Stored in the world as a ``sensor_candidate`` object. The distiller
+    creates candidates (status=candidate); human review promotes them
+    via ``archskillkit promote-sensor`` or rejects them via
+    ``archskillkit reject-sensor``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sensor_id: str
+    title: str
+    detector_kind: Literal["ast-grep", "semgrep"] = "ast-grep"
+    detector_rule: str = ""
+    language: str = "python"
+    origin_run_ids: list[str] = Field(default_factory=list)
+    status: SensorCandidateStatus = "candidate"
+    rejection_reason: str = ""
+    positives: list[dict] = Field(default_factory=list)
+    negatives: list[dict] = Field(default_factory=list)
+
+
 ProposalStatus = Literal["open", "approved", "rejected", "promoted"]
 
 
@@ -110,7 +136,7 @@ def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] =
 
 
 ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule", "proposal",
-                           "knowledge_gap", "sensor_rule")
+                           "knowledge_gap", "sensor_rule", "sensor_candidate")
 
 ARCH_MODEL_RELATION_TYPES = (
     "exposes", "consumes", "depends_on", "realizes",
@@ -132,6 +158,8 @@ pack = Pack(
                    description="An open question about the architecture (V2.4 M2)."),
         ObjectType(name="sensor_rule", schema=SensorRuleData,
                    description="A promoted deterministic sensor rule (M7 Learning Architecture, ADR-0054)."),
+        ObjectType(name="sensor_candidate", schema=SensorCandidateData,
+                   description="A candidate sensor awaiting human review and fixture collection (M7 Learning Architecture)."),
     ),
     relation_types=(
         # Endpoints are typed at the object level ('architecture_element');
