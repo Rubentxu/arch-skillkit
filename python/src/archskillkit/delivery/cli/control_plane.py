@@ -792,6 +792,86 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   @media (prefers-contrast: high) {{
     :root {{ --bg: #000; --surface: #111; --surface-2: #1a1a1a; --border: #555; --text: #fff; --text-muted: #aaa; }}
   }}
+
+  /* P0-1: Global error banner */
+  #global-error {{
+    background: var(--fail);
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }}
+  #global-error[hidden] {{ display: none; }}
+  #retry-btn {{
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: #fff;
+    border-radius: 4px;
+    padding: 0.3em 0.7em;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }}
+  #retry-btn:hover {{ background: rgba(255,255,255,0.3); }}
+  #retry-btn:focus-visible {{ outline: 2px solid #fff; outline-offset: 2px; }}
+
+  /* P0-3: Evidence disclosure */
+  .evidence-item {{
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+  }}
+  .evidence-item button.evidence-item-btn {{
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 0.875rem;
+    text-align: left;
+    padding: 0.6rem 0;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }}
+  .evidence-item button.evidence-item-btn:hover {{ color: var(--accent); }}
+  .evidence-item button.evidence-item-btn:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }}
+  .evidence-item .ev-detail {{
+    padding: 0.5rem 0 0.5rem 1.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    display: none;
+  }}
+  .evidence-item .ev-detail.open {{ display: block; }}
+
+  /* P2-3: Light theme */
+  @media (prefers-color-scheme: light) {{
+    :root {{
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --surface-2: #e8e9f0;
+      --border: #c8cad4;
+      --text: #1a1d27;
+      --text-muted: #5a5f73;
+      --accent: #3a6fd8;
+      --warn: #c07830;
+      --ok: #2e8b57;
+      --fail: #c0392b;
+    }}
+    .skip-link {{
+      background: var(--surface);
+      color: var(--text);
+    }}
+    #global-error {{
+      background: var(--fail);
+      color: #fff;
+    }}
+  }}
 </style>
 </head>
 <body>
@@ -803,6 +883,12 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     <span id="project-info"></span>
   </div>
 </header>
+
+<!-- Global error banner (P0-1: silent fetch failures) -->
+  <div id="global-error" role="alert" aria-live="assertive" hidden>
+    <span id="global-error-msg"></span>
+    <button type="button" id="retry-btn" aria-label="Retry loading data">Retry</button>
+  </div>
 
 <main id="main" role="main">
 
@@ -911,6 +997,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           <div id="artifact-info" class="artifact-info" hidden>
             <span class="artifact-status" id="artifact-status"></span>
           </div>
+          <!-- P0-2: Viewer Hub — viewer cards (favorites) -->
+          <div id="viewer-cards" class="viewer-cards" hidden></div>
           <div id="viewer-error" class="error-state" hidden role="alert"></div>
           <div class="hub-actions">
             <button type="button" id="launch-btn" disabled>Open viewer</button>
@@ -1082,6 +1170,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       var badge = document.getElementById("health-badge");
       badge.textContent = "fail";
       badge.className = "badge badge-fail";
+      showGlobalError("Cannot reach the Control Plane server — is it running on 127.0.0.1?");
     });
   }
 
@@ -1098,7 +1187,20 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     }).catch(function () {});
   }
 
+  // P0-1: Global error banner
+  function showGlobalError(msg) {
+    var el = document.getElementById("global-error");
+    var msgEl = document.getElementById("global-error-msg");
+    if (msgEl) msgEl.textContent = msg;
+    if (el) el.removeAttribute("hidden");
+  }
+  function hideGlobalError() {
+    var el = document.getElementById("global-error");
+    if (el) el.setAttribute("hidden", "");
+  }
+
   function loadEvidence() {
+    hideGlobalError();
     apiFetch("/evidence").then(function (result) {
       var body = document.getElementById("evidence-body");
       if (result.status === 200) {
@@ -1106,25 +1208,37 @@ _CONTROL_SHELL = """<!DOCTYPE html>
         if (items.length === 0) {
           body.innerHTML = '<p class="empty-state">No evidence recorded.</p>';
         } else {
+          // P0-3: evidence disclosure — each item is a button that reveals detail
           body.innerHTML = '<ul class="evidence-list" role="list">' +
-            items.map(function (ev) {
+            items.map(function (ev, idx) {
               var location = ev.file
                 ? (ev.start_line ? esc(ev.file) + ":" + ev.start_line : esc(ev.file))
                 : "—";
+              var detailId = "ev-detail-" + idx;
+              var hasDetail = !!(ev.rule || (ev.claim_ids && ev.claim_ids.length));
+              var detailHtml = hasDetail
+                ? '<div id="' + detailId + '" class="ev-detail">' +
+                    (ev.rule ? '<div class="ev-rule">Rule: ' + esc(ev.rule) + '</div>' : '') +
+                    (ev.claim_ids && ev.claim_ids.length
+                      ? '<div class="ev-refs">Claims: ' + ev.claim_ids.map(esc).join(", ") + '</div>'
+                      : '') +
+                  '</div>'
+                : '';
               return '<li class="evidence-item">' +
-                '<span class="ev-id">' + esc(ev.id) + '</span>' +
-                '<span class="ev-tool">' + esc(ev.tool || "—") + '</span>' +
-                '<div class="ev-location">' + location + '</div>' +
-                (ev.rule ? '<div class="ev-rule">' + esc(ev.rule) + '</div>' : '') +
-                (ev.claim_ids && ev.claim_ids.length
-                  ? '<div class="ev-refs">Claims: ' + ev.claim_ids.map(esc).join(", ") + '</div>'
-                  : '') +
-                '</li>';
+                '<button class="evidence-item-btn" aria-expanded="false" aria-controls="' + detailId + '" type="button">' +
+                  '<span class="ev-id">' + esc(ev.id) + '</span>' +
+                  '<span class="ev-tool">' + esc(ev.tool || "—") + '</span>' +
+                  '<span class="ev-location">' + location + '</span>' +
+                '</button>' +
+                detailHtml +
+              '</li>';
             }).join("") + '</ul>';
         }
       } else {
         body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
       }
+    }).catch(function (err) {
+      showGlobalError("Evidence fetch failed: " + esc(err.message));
     });
   }
 
@@ -1160,6 +1274,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       } else {
         body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
       }
+    }).catch(function (err) {
+      showGlobalError("Coverage fetch failed: " + esc(err.message));
     });
   }
 
@@ -1183,6 +1299,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       } else {
         body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
       }
+    }).catch(function (err) {
+      showGlobalError("Gaps fetch failed: " + esc(err.message));
     });
   }
 
@@ -1207,6 +1325,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       } else {
         body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
       }
+    }).catch(function (err) {
+      showGlobalError("Findings fetch failed: " + esc(err.message));
     });
   }
 
@@ -1215,6 +1335,34 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   var _viewers = [];
   var _projections = [];
   var _favorites = [];  // slice 26
+
+  // P0-2: Render viewer cards (favorites strip) in the Viewer Hub
+  function renderViewerCards() {
+    var container = document.getElementById("viewer-cards");
+    if (!container) return;
+    if (_viewers.length === 0) {
+      container.setAttribute("hidden", "");
+      return;
+    }
+    container.removeAttribute("hidden");
+    container.innerHTML = '<h3 style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">Available viewers</h3>' +
+      _viewers.map(function (v) {
+        var avail = v.probe && v.probe.available;
+        var isFav = _favorites.indexOf(v.id) !== -1;
+        var availClass = avail ? "vavail-yes" : "vavail-no";
+        var availLabel = avail ? "available" : "unavailable";
+        return '<div class="viewer-card" data-viewer-id="' + esc(v.id) + '">' +
+          '<span class="vid">' + esc(v.id) + '</span>' +
+          '<span class="vname">' + esc(v.name) + '</span>' +
+          '<span class="vavail ' + availClass + '">' + availLabel + '</span>' +
+          '<button class="fav-btn' + (isFav ? ' fav-active' : '') + '" ' +
+            'aria-pressed="' + isFav + '" ' +
+            'aria-label="Toggle favorite for ' + esc(v.name) + '" ' +
+            'onclick="toggleFavorite(\'' + esc(v.id) + '\')" ' +
+            'type="button">' + (isFav ? "★" : "☆") + '</button>' +
+        '</div>';
+      }).join("");
+  }
 
   function loadProjections() {
     return apiFetch("/projections").then(function (result) {
@@ -1234,6 +1382,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result && result.status === 200) {
         _viewers = result.body.viewers || [];
       }
+    }).then(function () {
+      renderViewerCards();
     });
   }
 
@@ -1243,6 +1393,10 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result && result.status === 200) {
         _favorites = result.body.favorites || [];
       }
+    }).then(function () {
+      renderViewerCards();
+    }).catch(function () {
+      // Non-critical: silently fail, cards stay un-starred
     });
   }
 
@@ -1273,16 +1427,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     saveFavorites(_favorites.slice()).then(function (result) {
       if (result.status === 200) {
         _favorites = result.body.favorites || [];
-        updateViewerCards();
+        renderViewerCards();
       }
-    });
-  }
-
-  function updateViewerCards() {
-    // Update star buttons to reflect current favorites state
-    _favorites.forEach(function (fid) {
-      var btn = document.querySelector('[data-viewer-id="' + fid + '"] .fav-btn');
-      if (btn) btn.classList.add("fav-active");
     });
   }
 
@@ -1892,6 +2038,21 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       body.classList.toggle("collapsed", !expanded);
       btn.textContent = expanded ? "[+]" : "[−]";
     }
+    // P0-3: evidence disclosure — toggle detail panel
+    if (btn.classList.contains("evidence-item-btn")) {
+      var expanded = btn.getAttribute("aria-expanded") === "true";
+      var detailId = btn.getAttribute("aria-controls");
+      var detail = document.getElementById(detailId);
+      btn.setAttribute("aria-expanded", String(!expanded));
+      if (detail) detail.classList.toggle("open", !expanded);
+      btn.textContent = expanded ? "[+]" : "[−]";
+    }
+  });
+
+  // P0-1: Retry button
+  document.getElementById("retry-btn").addEventListener("click", function () {
+    hideGlobalError();
+    loadAll();
   });
 })();
 </script>
