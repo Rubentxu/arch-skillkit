@@ -868,6 +868,19 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   }}
   .evidence-item .ev-detail.open {{ display: block; }}
 
+  /* Screen-reader only heading (P3-A) */
+  .sr-only {{
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }}
+
   /* P2-3: Light theme */
   @media (prefers-color-scheme: light) {{
     :root {{
@@ -1032,7 +1045,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
             <span class="artifact-status" id="artifact-status"></span>
           </div>
           <!-- P0-2: Viewer Hub — viewer cards (favorites) -->
-          <div id="viewer-cards" class="viewer-cards" hidden></div>
+          <h3 id="viewers-section-heading" class="sr-only">Available viewers</h3>
+          <div id="viewer-cards" class="viewer-cards" hidden aria-labelledby="viewers-section-heading"></div>
           <div id="viewer-error" class="error-state" hidden role="alert"></div>
           <div class="hub-actions">
             <button type="button" id="launch-btn" disabled>Open viewer</button>
@@ -1396,7 +1410,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       return;
     }
     container.removeAttribute("hidden");
-    container.innerHTML = '<h3 style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">Available viewers</h3>' +
+    container.innerHTML =
       _viewers.map(function (v) {
         var avail = v.probe && v.probe.available;
         var isFav = _favorites.indexOf(v.id) !== -1;
