@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Literal
 
 from activegraph.packs import ObjectType, Pack, RelationType
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from archskillkit.packs.arch_core import Confidence, Origin
 
@@ -48,6 +48,27 @@ class ArchitectureRuleData(BaseModel):
     source_category: str
     target_category: str
     severity: Confidence = "high"
+
+
+class SensorRuleData(BaseModel):
+    """A promoted deterministic sensor rule (M7 Learning Architecture, ADR-0054).
+
+    Promoted from SensorCandidate when evaluation shows precision and recall
+    meet the promotion threshold. The detector field carries the rule source
+    (ast-grep YAML or Semgrep JSON). Evaluated metrics (precision, recall)
+    are recorded from the evaluation that passed the promotion gate.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sensor_id: str
+    title: str
+    detector_kind: Literal["ast-grep", "semgrep"]
+    detector_rule: str
+    language: str
+    precision: float = Field(ge=0.0, le=1.0)
+    recall: float = Field(ge=0.0, le=1.0)
+    origin_run_ids: list[str] = Field(min_length=1)
 
 
 ProposalStatus = Literal["open", "approved", "rejected", "promoted"]
@@ -89,7 +110,7 @@ def _relation(name: str, source: tuple[str, ...] = (), target: tuple[str, ...] =
 
 
 ARCH_MODEL_OBJECT_TYPES = ("architecture_element", "architecture_rule", "proposal",
-                           "knowledge_gap")
+                           "knowledge_gap", "sensor_rule")
 
 ARCH_MODEL_RELATION_TYPES = (
     "exposes", "consumes", "depends_on", "realizes",
@@ -109,6 +130,8 @@ pack = Pack(
                    description="An architectural proposal on a forked run."),
         ObjectType(name="knowledge_gap", schema=KnowledgeGapData,
                    description="An open question about the architecture (V2.4 M2)."),
+        ObjectType(name="sensor_rule", schema=SensorRuleData,
+                   description="A promoted deterministic sensor rule (M7 Learning Architecture, ADR-0054)."),
     ),
     relation_types=(
         # Endpoints are typed at the object level ('architecture_element');

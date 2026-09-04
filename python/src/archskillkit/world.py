@@ -206,6 +206,36 @@ class ArchitectureWorld:
             name, statement, forbidden_relation, source_category, target_category, severity
         )
 
+    def record_sensor_rule(
+        self,
+        sensor_id: str,
+        title: str,
+        detector_kind: str,
+        detector_rule: str,
+        language: str,
+        precision: float,
+        recall: float,
+        origin_run_ids: list[str],
+    ) -> str:
+        """Record a promoted deterministic sensor rule (M7 Learning Architecture, ADR-0054).
+
+        The sensor_rule is stored as a world object with type ``sensor_rule``.
+        Promotion requires evaluation with precision >= threshold AND recall >= threshold.
+        """
+        from archskillkit.packs.arch_model import SensorRuleData
+
+        data = SensorRuleData(
+            sensor_id=sensor_id,
+            title=title,
+            detector_kind=detector_kind,
+            detector_rule=detector_rule,
+            language=language,
+            precision=precision,
+            recall=recall,
+            origin_run_ids=origin_run_ids,
+        )
+        return self.graph.add_object("sensor_rule", data.model_dump()).id
+
     # ---- domain port (docs/v2/45 §4, V2.3-F4) --------------------------
     # ActiveGraph stays behind these domain methods: promotion/proposals
     # must never touch `.graph` directly (ADR-0024).
