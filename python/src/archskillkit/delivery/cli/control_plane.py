@@ -1246,7 +1246,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result.status === 200) {
         var items = result.body.items || [];
         if (items.length === 0) {
-          body.innerHTML = '<p class="empty-state">No evidence recorded.</p>';
+          body.innerHTML = '<p class="empty-state">No evidence recorded \u2014 run <code>archskillkit scan</code> to populate.</p>';
         } else {
           // P0-3: evidence disclosure — each item is a button that reveals detail
           body.innerHTML = '<ul class="evidence-list" role="list">' +
@@ -1336,7 +1336,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result.status === 200) {
         var items = result.body.gaps || [];
         if (items.length === 0) {
-          body.innerHTML = '<p class="empty-state">No open knowledge gaps.</p>';
+          body.innerHTML = '<p class="empty-state">No open knowledge gaps \u2014 your architecture model is complete.</p>';
         } else {
           body.innerHTML = '<ul class="gaps-list" role="list">' +
             items.map(function (g) {
@@ -1361,7 +1361,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       if (result.status === 200) {
         var items = result.body.findings || [];
         if (items.length === 0) {
-          body.innerHTML = '<p class="empty-state">No governance findings.</p>';
+          body.innerHTML = '<p class="empty-state">No governance findings \u2014 use Edit draw.io or Open Arrows to create and review a proposal.</p>';
         } else {
           body.innerHTML = '<ul class="findings-list" role="list">' +
             items.map(function (f) {
