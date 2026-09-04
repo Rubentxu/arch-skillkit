@@ -31,7 +31,8 @@ hacer que esa alineación sea **medible, reproducible y determinista**.
 - `docs/v2/70-*` a `87-*`: especificaciones, roadmap, UAT y migración.
 - `docs/v2/adr/ADR-0046-*` a `ADR-0056-*`: decisiones arquitectónicas.
 - `verification/architecture-contracts.json`: contratos ejecutables.
-- `verification/architecture-baseline.example.json`: baseline inicial de deuda.
+- `verification/architecture-baseline.json`: baseline final — **0 findings** (M0–M7 completos).
+- `verification/architecture-baseline.example.json`: plantilla para regenerar baseline.
 - `verification/arch_conformance.py`: verificador determinista.
 - `verification/quality-gates.json`: catálogo estable de gates.
 - `verification/traceability.json`: requirement -> ADR -> gate -> test -> UAT.
@@ -53,14 +54,32 @@ waiver explícito y temporal.
 
 ## Orden recomendado
 
-1. Integrar `verification/`.
-2. Ejecutar el verificador contra `main` y generar/revisar baseline.
-3. Añadir los gates como informativos.
-4. Migrar Proposal/Governance Application API.
-5. Hacer hard el gate `delivery_to_delivery`.
-6. Introducir Composition Root.
-7. Encapsular ActiveGraph.
-8. Introducir CodeGraphQueryPort.
-9. Hacer hard todos los boundaries.
-10. Implementar ArchitectureDelta.
-11. Continuar con Change Intelligence, Agent Context y Learning Architecture.
+> **V2.5 M0–M7 COMPLETO.** El roadmap está cerrado. Los pasos siguientes
+> son V2.6 u otra iniciativa, no más migración V2.5.
+
+1. ~~Integrar `verification/`.~~ ✓
+2. ~~Ejecutar el verificador contra `main` y generar/revisar baseline.~~ ✓ Baseline 0 findings.
+3. ~~Añadir los gates como informativos.~~ ✓
+4. ~~Migrar Proposal/Governance Application API.~~ ✓ M1 completo.
+5. ~~Hacer hard el gate `delivery_to_delivery`.~~ ✓
+6. ~~Introducir Composition Root.~~ ✓ M2 completo.
+7. ~~Encapsular ActiveGraph.~~ ✓ M3 completo.
+8. ~~Introducir CodeGraphQueryPort.~~ ✓ M5 completo.
+9. ~~Hacer hard todos los boundaries.~~ ✓
+10. ~~Implementar ArchitectureDelta.~~ ✓ M4 completo.
+11. ~~Change Intelligence, Agent Context y Learning Architecture.~~ ✓ M6 y M7 completos.
+
+## Estado
+
+**V2.5 Gate: 0 ARC violations · 143 tests pass · v0.5.0 tagged**
+
+| Milestone | Estado | Commits |
+|---|---|---|
+| M0 — Verification Baseline | ✓ COMPLETO | Baseline 0 findings |
+| M1 — Governance Application API | ✓ COMPLETO | ARC-001/009 resueltas |
+| M2 — Composition Root | ✓ COMPLETO | ArchSkillKitApplication |
+| M3 — ActiveGraph Boundary | ✓ COMPLETO | ARC-006 resuelta |
+| M4 — ArchitectureDelta | ✓ COMPLETO | `ark changes`, DELTA-EXPLAIN-002 |
+| M5 — CodeGraphQueryPort | ✓ COMPLETO | ARC-005 resuelta |
+| M6 — Context & Agent Efficiency | ✓ COMPLETO | delta-aware ranking, stale-session |
+| M7 — Learning Architecture | ✓ COMPLETO | promote/reject/distill --record |
