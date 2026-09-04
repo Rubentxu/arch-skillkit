@@ -310,6 +310,14 @@ _CONTROL_SHELL = """<!DOCTYPE html>
      imply "all good" before the first /coverage response arrives. */
   .panel-header h2.unknown::before {{ background: var(--border); }}
 
+  /* P1-A: Coverage panel is the primary fitness indicator.
+     Mark it with a subtle accent top-border so it reads as primary
+     before the user reads any content. */
+  .panel-header h2.primary-panel::before {{
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }}
+
   .panel-header .toggle {{
     color: var(--text-muted);
     font-size: 0.75rem;
@@ -954,11 +962,11 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     <div class="panel">
       <div class="panel-header">
         <h2 id="gaps-heading">Open Knowledge Gaps</h2>
-        <button type="button" class="toggle-btn" aria-expanded="true"
+        <button type="button" class="toggle-btn" aria-expanded="false"
                 aria-controls="gaps-body"
-                aria-label="Collapse Open Knowledge Gaps panel">[−]</button>
+                aria-label="Expand Open Knowledge Gaps panel">[+]</button>
       </div>
-      <div id="gaps-body" class="panel-body">
+      <div id="gaps-body" class="panel-body collapsed">
         <div class="loading" aria-label="Loading knowledge gaps">Loading</div>
       </div>
     </div>
@@ -969,11 +977,11 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     <div class="panel">
       <div class="panel-header">
         <h2 id="findings-heading">Governance Findings</h2>
-        <button type="button" class="toggle-btn" aria-expanded="true"
+        <button type="button" class="toggle-btn" aria-expanded="false"
                 aria-controls="findings-body"
-                aria-label="Collapse Governance Findings panel">[−]</button>
+                aria-label="Expand Governance Findings panel">[+]</button>
       </div>
-      <div id="findings-body" class="panel-body">
+      <div id="findings-body" class="panel-body collapsed">
         <div class="loading" aria-label="Loading findings">Loading</div>
       </div>
     </div>
@@ -984,11 +992,11 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     <div class="panel">
       <div class="panel-header">
         <h2 id="viewer-heading">Viewer Hub</h2>
-        <button type="button" class="toggle-btn" aria-expanded="true"
+        <button type="button" class="toggle-btn" aria-expanded="false"
                 aria-controls="viewer-body"
-                aria-label="Collapse Viewer Hub panel">[−]</button>
+                aria-label="Expand Viewer Hub panel">[+]</button>
       </div>
-      <div id="viewer-body" class="panel-body">
+      <div id="viewer-body" class="panel-body collapsed">
         <div class="viewer-hub">
           <div class="hub-row">
             <div class="hub-field">
@@ -1153,12 +1161,18 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 
   function showPanels() {
     tokenSection.setAttribute("hidden", "");
-    ["evidence-panel", "coverage-panel", "gaps-panel", "findings-panel",
-     "viewer-panel"]
+    // P1-A: Coverage and Evidence are the primary orientation panels —
+    // show them first. Gaps, Findings, and Viewer Hub are secondary;
+    // reveal them via their toggle button.
+    ["evidence-panel", "coverage-panel"]
       .forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.removeAttribute("hidden");
       });
+    // Ensure the Coverage panel heading has visual distinction as the
+    // primary fitness indicator (P1-A).
+    var covHeading = document.getElementById("coverage-heading");
+    if (covHeading) covHeading.classList.add("primary-panel");
   }
 
   function loadHealth() {
