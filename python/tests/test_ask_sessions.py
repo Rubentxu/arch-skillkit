@@ -168,6 +168,45 @@ class TestAgentSession:
         store.detect_stale(build_snapshot(world, index))
         assert store.get(session.session_id).status == "CLOSED"
 
+    def test_stale_detection_after_code_generation_changes(self, world, index):
+        """Session goes stale when code_generation differs from the leased one."""
+        store = AgentSessionStore()
+        from archskillkit.application.snapshot_builder import build_snapshot
+        session = open_agent_session(world, index, store=store)
+        # Lease a fresh snapshot
+        snap_before = build_snapshot(world, index)
+        assert session.code_generation == snap_before.code_revision.generation
+        # Simulate a new scan by bumping the generation in the session
+        # (without actually re-scanning — tests the is_current logic directly)
+        bumped = session.model_copy(
+            update={"code_generation": "gen-999-fake-scan"})
+        store._mutate(lambda s: {**s, session.session_id: bumped})
+        snap_after = build_snapshot(world, index)
+        staled = store.detect_stale(snap_after)
+        assert any(s.session_id == session.session_id for s in staled)
+        assert store.get(session.session_id).status == "STALE"
+
+    def test_stale_detection_all_three_dimensions(self, world, index):
+        """Session is stale when ANY of world/code/policy revision diverges."""
+        store = AgentSessionStore()
+        session = open_agent_session(world, index, store=store)
+        from archskillkit.application.snapshot_builder import build_snapshot
+        snap = build_snapshot(world, index)
+        # All three are current initially
+        assert session.is_current(snap) is True
+        # world_revision diverges
+        bad_world = session.model_copy(
+            update={"world_revision": "event-never-existed"})
+        assert bad_world.is_current(snap) is False
+        # code_generation diverges
+        bad_code = session.model_copy(
+            update={"code_generation": "gen-000"})
+        assert bad_code.is_current(snap) is False
+        # policy_revision diverges
+        bad_policy = session.model_copy(
+            update={"policy_revision": "policy-000"})
+        assert bad_policy.is_current(snap) is False
+
     def test_sessions_persist_across_store_instances(self, sandbox, world,
                                                      index):
         store = AgentSessionStore()
