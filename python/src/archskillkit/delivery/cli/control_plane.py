@@ -910,8 +910,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
            aria-describedby="token-hint">
     <button type="button" id="connect-btn">Connect</button>
     <p id="token-hint" class="hint">
-      Start the server and paste the token from the startup line (the
-      <code>token</code> field in the JSON envelope printed to stdout).
+      1. Start the server: <code>archskillkit control-plane</code><br>
+      2. Look for the <code>token</code> line in the terminal output<br>
+      3. Copy that value and paste it here, then click Connect
     </p>
   </div>
 
