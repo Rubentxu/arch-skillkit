@@ -23,7 +23,6 @@ from archskillkit.application.queries.report import (
     render_sarif,
 )
 from archskillkit.application.snapshot_builder import build_snapshot
-from archskillkit.codeindex import CodeIndex
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.runtime_state.waivers import WaiverLedger
 from archskillkit.world import ArchitectureWorld
@@ -56,20 +55,17 @@ def _evaluate(args: argparse.Namespace, world: ArchitectureWorld):
         max_findings=args.max_findings,
         max_run_age_days=args.max_run_age_days,
     )
-    db = world.workspace / "code.sqlite"
-    index = CodeIndex(db).open() if db.exists() else None
+    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
+    app = getattr(world, "_arch_app", None)
+    index = app.index if app else None
     ledger = RunLedger()  # state-root ledger; absence reads as empty
-    try:
-        with world:
-            snapshot: ArchitectureSnapshot = build_snapshot(
-                world, code_index=index)
-            result = evaluate_gate(world, snapshot,
-                                   thresholds=thresholds,
-                                   ledger=ledger,
-                                   waivers=WaiverLedger())
-    finally:
-        if index is not None:
-            index.close()
+    with world:
+        snapshot: ArchitectureSnapshot = build_snapshot(
+            world, code_index=index)
+        result = evaluate_gate(world, snapshot,
+                               thresholds=thresholds,
+                               ledger=ledger,
+                               waivers=WaiverLedger())
     return result, snapshot
 
 

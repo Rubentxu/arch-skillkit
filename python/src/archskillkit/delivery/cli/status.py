@@ -11,7 +11,6 @@ import json
 import sys
 
 from archskillkit.application.queries.get_status import get_status
-from archskillkit.codeindex import CodeIndex
 from archskillkit.world import ArchitectureWorld
 
 NAME = "status"
@@ -31,13 +30,10 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    db = world.workspace / "code.sqlite"
-    index = CodeIndex(db).open() if db.exists() else None
-    try:
-        with world:
-            result = get_status(world, code_index=index)
-    finally:
-        if index is not None:
-            index.close()
+    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
+    app = getattr(world, "_arch_app", None)
+    index = app.index if app else None
+    with world:
+        result = get_status(world, code_index=index)
     print(json.dumps(result.model_dump(), indent=2))
     return 0

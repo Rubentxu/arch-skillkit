@@ -11,7 +11,6 @@ import json
 import sys
 
 from archskillkit.application.queries.ask import ask
-from archskillkit.codeindex import CodeIndex
 from archskillkit.world import ArchitectureWorld
 
 NAME = "ask"
@@ -32,18 +31,15 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    db = world.workspace / "code.sqlite"
-    if not db.exists():
+    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
+    app = getattr(world, "_arch_app", None)
+    if app is None or app.index is None:
         print(f"error: no code.sqlite for {world.project_id} "
               f"(run: archskillkit ingest-code --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    index = CodeIndex(db).open()
-    try:
-        with world:
-            intent, result = ask(world, index, args.question)
-    finally:
-        index.close()
+    with world:
+        intent, result = ask(world, app.index, args.question)
     print(json.dumps({
         "schema": "arch-skillkit/ask-result-v1",
         "intent": intent.model_dump(),

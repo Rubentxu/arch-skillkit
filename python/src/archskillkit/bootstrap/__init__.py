@@ -47,7 +47,12 @@ class ArchSkillKitApplication:
     # -- lifecycle ---------------------------------------------------------
 
     def open(self) -> ArchSkillKitApplication:
-        """Open the world and code index for this repository."""
+        """Open the world and code index for this repository.
+
+        Sets ``world._arch_app = self`` so handlers that receive the world
+        can access ``app.index`` and call app methods without managing
+        their own lifecycle (M3 slice 3).
+        """
         if self._opened:
             return self
         from archskillkit.codeindex import CodeIndex
@@ -56,6 +61,8 @@ class ArchSkillKitApplication:
         self._world = ArchitectureWorld.for_repo(self._repo_path).open()
         index_path = self._world.workspace / "code.sqlite"
         self._index = CodeIndex(index_path).open() if index_path.exists() else None
+        # Reverse reference so handlers can reach app.index from world._arch_app
+        self._world._arch_app = self
         self._opened = True
         return self
 
@@ -210,3 +217,44 @@ class ArchSkillKitApplication:
         from archskillkit.application.queries.findings_query import get_findings
 
         return get_findings(self.world)
+
+    def ask(self, question: str):
+        """Answer a natural-language architecture question (routes to impact or context)."""
+        from archskillkit.application.queries.ask import ask
+
+        return ask(self.world, self.index, question)
+
+    def gate(
+        self,
+        min_coverage: float = 0.8,
+        max_unknowns: int = 0,
+        max_findings: int = 0,
+        max_run_age_days: int = 30,
+    ):
+        """Evaluate the architecture fitness gate (V2.4 M3)."""
+        from archskillkit.application.models.snapshot import ArchitectureSnapshot
+        from archskillkit.application.queries.fitness import (
+            FitnessThresholds,
+            evaluate_gate,
+        )
+        from archskillkit.application.snapshot_builder import build_snapshot
+        from archskillkit.runtime_state.run_ledger import RunLedger
+        from archskillkit.runtime_state.waivers import WaiverLedger
+
+        snapshot: ArchitectureSnapshot = build_snapshot(
+            self.world, code_index=self.index
+        )
+        thresholds = FitnessThresholds(
+            min_evidence_coverage=min_coverage,
+            max_unknowns=max_unknowns,
+            max_findings=max_findings,
+            max_run_age_days=max_run_age_days,
+        )
+        result = evaluate_gate(
+            self.world,
+            snapshot,
+            thresholds=thresholds,
+            ledger=RunLedger(),
+            waivers=WaiverLedger(),
+        )
+        return result, snapshot
