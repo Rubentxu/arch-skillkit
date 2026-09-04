@@ -86,6 +86,8 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
 
 V2.5 es una línea de evolución mergeable sobre V2.4. Objetivo: cerrar la distancia entre la arquitectura conceptual y la física, hacer la alineación medible, reproducible y determinista. Docs en `docs/v2/70-*` a `87-*` y ADRs `ADR-0046-*` a `ADR-0056-*`.
 
+**UAT evidence: EXECUTED_LOCAL · fresh_clone_reproducible: false**
+
 **M0 — Verification Baseline: COMPLETE**
 
 Entry: v0.4.0 main reproducible. Deliverables: contracts, verifier, baseline, gate catalog, traceability, smoke plan.
@@ -120,9 +122,10 @@ Slice 1 (`4b9cf57`): `ark changes` command — live ArchitectureDelta entre main
 Slice 2 (`d1d023e`): DELTA-EXPLAIN-002 — VerdictChange con atribución causal.
 Gates: DELTA-DET-001 (determinism SHA256 estable), DELTA-EXPLAIN-002 implemented.
 
-**M5 — CodeGraphQueryPort: COMPLETE**
+**M5 — CodeGraphQueryPort: PARTIAL (blocked on CodeGraphQueryPort absence — see ADR-0049)**
 
-ARC violations 17 → 0 (CodeGraphQueryPort + ArchitectureWorldPort).
+ArchitectureWorldPort implemented; ARC violations 17 → 0 resolved.
+CodeGraphQueryPort remains absent from the codebase (see ADR-0049).
 
 Cambios:
 - `application/exceptions.py`: re-export AmbiguousSymbolError.

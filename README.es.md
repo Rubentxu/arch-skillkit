@@ -169,7 +169,7 @@ siendo la única fuente de verdad. Ver el [resumen V2.2](docs/v2/24-v2.2-summary
 
 ## Estado
 
-**Las fases A–G de V2.1 están implementadas; la verificación actual y los gates de release siguen abiertos.** La siguiente prioridad es conseguir un baseline reproducible y verde, seguida de benchmarks de rendimiento y evidencia UAT consolidada. SCIP permanece como spike condicional. V2.2 es parcial: están la foundation, LikeC4 y Arrows; faltan draw.io, JSON Canvas, GraphML, redacción y routing productivo. Los nombres de iniciativa V2.1/V2.2 no son el SemVer del paquete: Python declara `0.2.0` y el último tag Git es `v0.2.0`. El mecanismo de distribución/instalación está especificado e implementado en [docs/v2/24](docs/v2/24-distribution-and-installation.md). Ver el [estado V2 actual](docs/v2/STATUS.md) y el [roadmap V2](docs/v2/16-roadmap-v2.md).
+**V2.5 (Architecture Integrity & Intelligence Kernel) está publicado en v0.5.0.** V2.5 M0–M4, M6–M7 están completos; M5 es parcial — bloqueado en la ausencia de `CodeGraphQueryPort` (ver ADR-0049). V2.1 fases A–G y V2.2 son milestones previos. Los nombres de iniciativa V2.1/V2.2/V2.5 no son el SemVer del paquete: Python declara `0.5.0` y el último tag Git es `v0.5.0`. El mecanismo de distribución/instalación está especificado e implementado en [docs/v2/24](docs/v2/24-distribution-and-installation.md). Ver el [estado V2 actual](docs/v2/STATUS.md) y el [roadmap V2](docs/v2/16-roadmap-v2.md).
 
 ## Documentación
 

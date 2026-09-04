@@ -171,7 +171,7 @@ truth. See the
 
 ## Status
 
-**V2.1 phases A–G are implemented; current verification and release gates remain open.** The next priority is a reproducible green baseline, followed by performance benchmarks and consolidated UAT evidence. SCIP remains a conditional spike. V2.2 is partial: its foundation plus LikeC4 and Arrows are present; draw.io, JSON Canvas, GraphML, redaction and production routing remain pending. Initiative names (V2.1/V2.2) are separate from package SemVer: the Python package and the latest Git tag are both `0.2.0`. The distribution/installation mechanism is specified and implemented in [docs/v2/24](docs/v2/24-distribution-and-installation.md). See the [current V2 status](docs/v2/STATUS.md) and [V2 roadmap](docs/v2/16-roadmap-v2.md).
+**V2.5 (Architecture Integrity & Intelligence Kernel) is released at v0.5.0.** V2.5 M0–M4, M6–M7 are complete; M5 is partial — blocked on `CodeGraphQueryPort` absence (see ADR-0049). V2.1 phases A–G and V2.2 are prior milestones. Initiative names (V2.1/V2.2/V2.5) are separate from package SemVer: the Python package and the latest Git tag are both `0.5.0`. The distribution/installation mechanism is specified and implemented in [docs/v2/24](docs/v2/24-distribution-and-installation.md). See the [current V2 status](docs/v2/STATUS.md) and [V2 roadmap](docs/v2/16-roadmap-v2.md).
 
 ## Documentation
 

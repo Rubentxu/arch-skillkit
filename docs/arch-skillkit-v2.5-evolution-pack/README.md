@@ -54,8 +54,9 @@ waiver explícito y temporal.
 
 ## Orden recomendado
 
-> **V2.5 M0–M7 COMPLETO.** El roadmap está cerrado. Los pasos siguientes
-> son V2.6 u otra iniciativa, no más migración V2.5.
+> **V2.5 M0–M4, M6–M7 COMPLETO. M5 PARCIAL — bloqueado en CodeGraphQueryPort ausente (ADR-0049).**
+> El roadmap está parcialmente cerrado. Los pasos siguientes son completar M5
+> u otra iniciativa, no más migración V2.5.
 
 1. ~~Integrar `verification/`.~~ ✓
 2. ~~Ejecutar el verificador contra `main` y generar/revisar baseline.~~ ✓ Baseline 0 findings.
@@ -64,7 +65,7 @@ waiver explícito y temporal.
 5. ~~Hacer hard el gate `delivery_to_delivery`.~~ ✓
 6. ~~Introducir Composition Root.~~ ✓ M2 completo.
 7. ~~Encapsular ActiveGraph.~~ ✓ M3 completo.
-8. ~~Introducir CodeGraphQueryPort.~~ ✓ M5 completo.
+8. ~~Introducir CodeGraphQueryPort.~~ ⏳ M5 parcial — CodeGraphQueryPort ausente (ADR-0049).
 9. ~~Hacer hard todos los boundaries.~~ ✓
 10. ~~Implementar ArchitectureDelta.~~ ✓ M4 completo.
 11. ~~Change Intelligence, Agent Context y Learning Architecture.~~ ✓ M6 y M7 completos.
@@ -80,6 +81,6 @@ waiver explícito y temporal.
 | M2 — Composition Root | ✓ COMPLETO | ArchSkillKitApplication |
 | M3 — ActiveGraph Boundary | ✓ COMPLETO | ARC-006 resuelta |
 | M4 — ArchitectureDelta | ✓ COMPLETO | `ark changes`, DELTA-EXPLAIN-002 |
-| M5 — CodeGraphQueryPort | ✓ COMPLETO | ARC-005 resuelta |
+| M5 — CodeGraphQueryPort | PARCIAL | Bloqueado: CodeGraphQueryPort ausente (ver ADR-0049) |
 | M6 — Context & Agent Efficiency | ✓ COMPLETO | delta-aware ranking, stale-session |
 | M7 — Learning Architecture | ✓ COMPLETO | promote/reject/distill --record |
