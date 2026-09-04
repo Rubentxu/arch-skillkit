@@ -35,6 +35,26 @@ class DeltaLists(BaseModel):
     changed: list[str] = Field(default_factory=list)
 
 
+class VerdictChange(BaseModel):
+    """A single finding that changed verdict between base and head (DELTA-EXPLAIN-002)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_kind: str
+    finding_detail: str
+    from_verdict: str | None  # None = did not exist in base
+    to_verdict: str | None    # None = disappeared in head
+    causes: list[str] = Field(
+        default_factory=list,
+        description="Delta elements or relations that explain this verdict change. "
+                    "At least one cause is required per DELTA-EXPLAIN-002.",
+    )
+    unexplained: bool = Field(
+        default=False,
+        description="True when no delta element or policy revision accounts for this change.",
+    )
+
+
 class ArchitectureDelta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -46,6 +66,7 @@ class ArchitectureDelta(BaseModel):
     unknowns: dict = Field(default_factory=dict)
     drift: dict = Field(default_factory=dict)
     policy_impacts: list[dict] = Field(default_factory=list)
+    verdict_changes: list[VerdictChange] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -148,6 +169,97 @@ def _state_view(world) -> tuple[dict, dict, int, int]:
             len(state.findings), len(state.unknowns))
 
 
+def _findings_index(findings: tuple[dict[str, Any], ...]) -> dict[tuple[str, str], str | None]:
+    """Index findings by (kind, detail) → verdict (or None if no verdict field)."""
+    result: dict[tuple[str, str], str | None] = {}
+    for f in findings:
+        kind = f.get("kind", "")
+        detail = f.get("detail", "")
+        verdict = f.get("verdict") or f.get("status")  # verdict or status
+        result[(kind, detail)] = verdict
+    return result
+
+
+def _explain_verdict_changes(
+    base: SnapshotState,
+    head: SnapshotState,
+    delta: ArchitectureDelta,
+) -> list[VerdictChange]:
+    """Compute verdict changes with causal attribution (DELTA-EXPLAIN-002).
+
+    Every finding that appeared, disappeared, or changed verdict is attributed
+    to at least one delta element or relation. Findings with no such attribution
+    are marked ``unexplained: True`` — this triggers the DELTA-EXPLAIN-002 gate.
+    """
+    base_idx = _findings_index(base.findings)
+    head_idx = _findings_index(head.findings)
+
+    all_keys = set(base_idx.keys()) | set(head_idx.keys())
+    changes: list[VerdictChange] = []
+
+    added_elements = set(delta.elements.added)
+    removed_elements = set(delta.elements.removed)
+    changed_elements = set(delta.elements.changed)
+    added_rels = set(delta.relations.added)
+    removed_rels = set(delta.relations.removed)
+
+    for key in sorted(all_keys):
+        kind, detail = key
+        from_v = base_idx.get(key)
+        to_v = head_idx.get(key)
+        if from_v == to_v:
+            continue  # no change
+
+        causes: list[str] = []
+
+        if to_v is not None and from_v is None:
+            # New finding — check if a new/changed element explains it
+            for elem in delta.elements.added:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-added:{elem}")
+            for elem in delta.elements.changed:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-changed:{elem}")
+            for rel in delta.relations.added:
+                if detail in rel:
+                    causes.append(f"relation-added:{rel}")
+
+        elif from_v is not None and to_v is None:
+            # Resolved finding — check if removed/changed element explains it
+            for elem in delta.elements.removed:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-removed:{elem}")
+            for elem in delta.elements.changed:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-changed:{elem}")
+            for rel in delta.relations.removed:
+                if detail in rel:
+                    causes.append(f"relation-removed:{rel}")
+
+        else:
+            # Verdict changed (e.g., PASS → FAIL)
+            for elem in delta.elements.changed:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-changed:{elem}")
+            for elem in delta.elements.added:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-added:{elem}")
+            for elem in delta.elements.removed:
+                if elem in detail or detail in elem:
+                    causes.append(f"element-removed:{elem}")
+
+        changes.append(VerdictChange(
+            finding_kind=kind,
+            finding_detail=detail,
+            from_verdict=from_v,
+            to_verdict=to_v,
+            causes=list(dict.fromkeys(causes)),  # dedupe preserving order
+            unexplained=len(causes) == 0,
+        ))
+
+    return changes
+
+
 def compute_delta(base, head, base_snapshot_id: str = "",
                   head_snapshot_id: str = "") -> ArchitectureDelta:
     return compute_delta_states(
@@ -191,6 +303,7 @@ def compute_delta_states(base: SnapshotState, head: SnapshotState,
     delta.drift = {"findings_base": len(base.findings),
                    "findings_head": len(base.findings),
                    "delta": len(head.findings) - len(base.findings)}
+    delta.verdict_changes = _explain_verdict_changes(base, head, delta)
     return delta
 
 
