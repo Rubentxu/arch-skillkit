@@ -10,6 +10,7 @@ arrives with M1.
 
 from archskillkit.delivery.cli import (
     ask,
+    changes,
     control_plane,
     delta,
     distill_sensors,
@@ -35,6 +36,7 @@ COMMANDS = (
     view,
     ask,
     delta,
+    changes,
     gate,
     proposals,
     simulate,
@@ -49,6 +51,7 @@ COMMANDS = (
 __all__ = [
     "COMMANDS",
     "ask",
+    "changes",
     "control_plane",
     "delta",
     "distill_sensors",
