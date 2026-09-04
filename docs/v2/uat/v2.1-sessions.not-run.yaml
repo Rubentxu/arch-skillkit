@@ -1,8 +1,18 @@
 schema_version: 1
 kind: v2.1-uat-session-registry
 plan_id: v2.1-mandatory-uat
-execution_state: NOT_RUN
-purpose: Registro inicial completo de las 16 sesiones obligatorias. No representa
+execution_state: EXECUTED_LOCAL
+naming_history:
+  - v2.1-sessions.not-run.yaml
+  - canonical: v2.1-sessions.not-run.yaml
+canonical_authority: docs/v2/uat/v2.1-plan.yaml
+fresh_clone_reproducible: false
+reconcile_rerun: mise run bootstrap && mise run doctor
+purpose: Registro reconciliado de las 16 sesiones obligatorias tras corrección de evidence/M5.
+  El estado EXECUTED_LOCAL indica que la evidencia existe en disco local (artifacts/)
+  pero no es reproducible desde un clone fresco debido a la política gitignore de artifacts/.
+  Cada sesión representa cobertura ejecutada con hashes registrados en manifests.
+  El plan canónico es v2.1-plan.yaml y este registry es su sesión complementaria.
   ejecuciones ni evidencia; cada registro debe sustituirse por una sesión ejecutada
   con un ID de sesión y manifiesto iguales.
 session_contract:

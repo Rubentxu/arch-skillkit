@@ -1,7 +1,9 @@
 schema_version: 1
 plan_id: v2.1-mandatory-uat
 initiative: V2.1
-execution_state: NOT_RUN
+execution_state: EXECUTED_LOCAL
+fresh_clone_reproducible: false
+reconcile_rerun: mise run bootstrap && mise run doctor
 purpose: >-
   Definir el gate UAT V2.1 sin declarar resultados. Un escenario sólo cuenta
   como cubierto cuando una sesión con el mismo scenario_id tiene un verdict
@@ -80,7 +82,7 @@ scenarios:
     requirement_ref: UAT2-001
     title: Repository remains read-only during analysis
     orchestration: existing-runner
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/evidence/checkout-before.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/checkout-before.json
@@ -96,7 +98,7 @@ scenarios:
     requirement_ref: UAT2-002
     title: Each project owns separate Code Index and Architecture World stores
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-002/store-layout.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/store-layout.json
@@ -109,7 +111,7 @@ scenarios:
     requirement_ref: UAT2-003
     title: Code Index can be recreated without losing Architecture World
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-003/world-before.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/world-before.json
@@ -125,7 +127,7 @@ scenarios:
     requirement_ref: UAT2-004
     title: EventStore replay reproduces current state
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-004/event-log.jsonl
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/event-log.jsonl
@@ -138,7 +140,7 @@ scenarios:
     requirement_ref: UAT2-005
     title: Automatic high-confidence relations retain evidence provenance
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-005/relations.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/relations.json
@@ -151,7 +153,7 @@ scenarios:
     requirement_ref: UAT2-006
     title: Contradictory observations are not silently promoted
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-006/observations.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/observations.json
@@ -164,7 +166,7 @@ scenarios:
     requirement_ref: UAT2-007
     title: Context Compiler enforces node edge and source-line budgets
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-007/request.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/request.json
@@ -180,7 +182,7 @@ scenarios:
     requirement_ref: UAT2-008
     title: Context Compiler reads source only from resolved locations
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-008/resolved-locations.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/resolved-locations.json
@@ -196,7 +198,7 @@ scenarios:
     requirement_ref: UAT2-009
     title: LikeC4 projection regenerates with equivalent semantics
     orchestration: existing-runner-plus-v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/payloads/project.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/project.json
@@ -212,7 +214,7 @@ scenarios:
     requirement_ref: UAT2-010
     title: Arrows projection regenerates with equivalent semantics
     orchestration: existing-runner-plus-v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/payloads/project.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/runner/project.json
@@ -228,7 +230,7 @@ scenarios:
     requirement_ref: UAT2-011
     title: Forbidden dependency yields a deterministic finding without an LLM
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-011/forbidden-dependency.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/forbidden-dependency.json
@@ -241,7 +243,7 @@ scenarios:
     requirement_ref: UAT2-012
     title: Forked proposal cannot mutate main architecture
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-012/main-before.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/main-before.json
@@ -257,7 +259,7 @@ scenarios:
     requirement_ref: UAT2-013
     title: Structural diff identifies added removed and changed elements
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-013/base.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/base.json
@@ -273,7 +275,7 @@ scenarios:
     requirement_ref: UAT2-014
     title: Promotion requires satisfied policy and recorded approval
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-014/promotion-without-approval.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/promotion-without-approval.json
@@ -289,7 +291,7 @@ scenarios:
     requirement_ref: UAT2-017
     title: Performance baseline persists ingest query context and memory metrics
     orchestration: benchmark-harness
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: artifacts/benchmarks/context-compiler/<benchmark-run-id>.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/benchmark/context-compiler.json
@@ -302,7 +304,7 @@ scenarios:
     requirement_ref: UAT2-018
     title: Projects cannot exchange events or claims
     orchestration: v2-orchestrator
-    execution_state: NOT_RUN
+    execution_state: EXECUTED_LOCAL
     expected_evidence:
       - source_path: runs/<run-id>/uat2-018/project-a.json
         evidence_ref_path: artifacts/uat/v2.1/sessions/<session-id>/evidence/orchestrator/project-a.json

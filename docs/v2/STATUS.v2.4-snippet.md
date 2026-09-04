@@ -1,5 +1,12 @@
 # Suggested STATUS.md snippet
 
+> **SUPERSEDED** — Este snippet fue obsoleto tras la reconciliación M5 en el ciclo
+> `evidence-and-documentation-reconciliation`. La información de V2.4 se incorporó
+> completamente a `49-v2.4-summary.md` y `docs/v2/STATUS.md`. No utilizar para
+> actualizaciones futuras.
+
+---
+
 Añadir al tracker de iniciativas:
 
 ```markdown
