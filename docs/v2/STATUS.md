@@ -86,17 +86,29 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
 
 V2.5 es una línea de evolución mergeable sobre V2.4. Objetivo: cerrar la distancia entre la arquitectura conceptual y la física, hacer la alineación medible, reproducible y determinista. Docs en `docs/v2/70-*` a `87-*` y ADRs `ADR-0046-*` a `ADR-0056-*`.
 
-**M0 — Verification Baseline: IN PROGRESS**
+**M0 — Verification Baseline: COMPLETE**
 
 Entry: v0.4.0 main reproducible. Deliverables: contracts, verifier, baseline, gate catalog, traceability, smoke plan.
 
-Baseline generado `docs/v2/verification/architecture-baseline.json` con 17 findings en 4 reglas:
+Baseline `docs/v2/verification/architecture-baseline.json`: 17 findings en 4 reglas (documentados abajo). Baseline pendiente de revisión manual.
 
-| Rule | Count | Description |
-|------|-------|-------------|
-| ARC-001 | 3 | delivery.cli.{control_plane,mcp} importan archskillkit.delivery.cli.proposals directamente |
-| ARC-005 | 2 | application/queries/{analyze_impact,bootstrap} importan codeindex concreto |
-| ARC-006 | 4 | {agent_governance,arrows_delta} acceden a .graph directamente |
-| ARC-009 | 4 | {control_plane,mcp} usan contextlib.redirect_stdout/stderr (stdout-capture protocol) |
+**M1 — Governance Application API: IN PROGRESS (slice 1 done)**
 
-Siguiente paso: revisar findings baseline manualmente, confirmar que son deuda conocida antes de aceptarlos como baseline.
+Objetivo: eliminar delivery→delivery y stdout-capture protocol en governance.
+
+Slice 1 (`fce22ef`): Application command layer extraída.
+
+Arquitectura resultante:
+- `application/ports/governance_command.py`: GovernanceCommandPort (protocol)
+- `application/commands/governance.py`: GovernanceApplicationService (implementación)
+- `application/models/governance.py`: DTOs de comandos y resultados (Pydantic)
+
+Cambios en adapters:
+- `mcp.py`: elimina imports de `proposals.py` y `_call_proposals_handler`; llama directamente al service
+- `control_plane.py`: elimina `_call_handler` + redirect_stdout/stderr; `_governance_http` llama al service
+- `proposals.py`: `_default_skills_root` delega a `agent_governance.default_skills_root`
+- `agent_governance.py`: expone `default_skills_root` como función pública
+
+Gate: 7 violations resueltas (3×ARC-001 + 4×ARC-009), 2 nuevas en el service (ARC-004/ARC-005 — resueltas en M3/M5). 8 findings restantes.
+
+Siguiente paso M1: CLI proposals.py necesita adaptarse para usar GovernanceApplicationService en vez de llamar a world directamente.
