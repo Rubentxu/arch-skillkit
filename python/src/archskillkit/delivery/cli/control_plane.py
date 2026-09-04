@@ -857,7 +857,8 @@ _CONTROL_SHELL = """<!DOCTYPE html>
       --surface-2: #e8e9f0;
       --border: #c8cad4;
       --text: #1a1d27;
-      --text-muted: #5a5f73;
+      /* #5a5f73 on #e8e9f0 = 2.06:1 (FAIL); use #3d4159 for >= 5:1 */
+      --text-muted: #3d4159;
       --accent: #3a6fd8;
       --warn: #c07830;
       --ok: #2e8b57;
@@ -870,6 +871,16 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     #global-error {{
       background: var(--fail);
       color: #fff;
+    }}
+  }}
+
+  /* Restore dark-theme --text-muted so it does not inherit the light value.
+     The light-theme media query changes --text-muted to #3d4159, which
+     would otherwise apply to dark mode too (CSS custom properties cascade
+     across all media queries that don't re-declare them). */
+  @media (prefers-color-scheme: dark) {{
+    :root {{
+      --text-muted: #9ea3bd;
     }}
   }}
 </style>
