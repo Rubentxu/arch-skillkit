@@ -2458,12 +2458,17 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
 
     # -- application layer (per-request open, like the MCP adapter) -----
 
-    def _world(self) -> tuple[ArchitectureWorld, CodeIndex | None]:
+    def _app(self):
+        from archskillkit.bootstrap import ArchSkillKitApplication
+
         repo_path: str = getattr(self.server, "repo_path", "")
-        world = ArchitectureWorld.for_repo(repo_path).open()
-        index_path = world.workspace / "code.sqlite"
-        index = CodeIndex(index_path).open() if index_path.exists() else None
-        return world, index
+        app = ArchSkillKitApplication.for_repo(repo_path)
+        app.open()
+        return app
+
+    def _world(self) -> tuple[ArchitectureWorld, CodeIndex | None]:
+        app = self._app()
+        return app.world, app.index
 
     def _status(self) -> dict[str, Any]:
         world, index = self._world()

@@ -36,7 +36,6 @@ from archskillkit.agent_governance import (
 from archskillkit.application.queries.explain import SubjectNotFound, explain
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.application.queries.history import get_history
-from archskillkit.codeindex import CodeIndex
 from archskillkit.context import Budget, ContextCompiler
 from archskillkit.delivery.admin import (
     ADMIN_TOOLS,
@@ -419,11 +418,11 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
             tools.extend(admin_tool_descriptors[t] for t in ADMIN_TOOLS)
         return tools
 
-    def _world() -> tuple[ArchitectureWorld, CodeIndex | None]:
-        world = ArchitectureWorld.for_repo(repo_path).open()
-        index_path = world.workspace / "code.sqlite"
-        index = CodeIndex(index_path).open() if index_path.exists() else None
-        return world, index
+    def _app():
+        from archskillkit.bootstrap import ArchSkillKitApplication
+        app = ArchSkillKitApplication.for_repo(repo_path)
+        app.open()
+        return app
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
@@ -462,8 +461,10 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
             return _envelope(result.model_dump())
 
-        world, index = _world()
+        app = _app()
         try:
+            world = app.world
+            index = app.index
             if name == "arch_get_status":
                 return _envelope(get_status(world, code_index=index).model_dump())
             if name == "arch_get_explain":
@@ -557,9 +558,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 return _envelope(_handle_admin_simulate(arguments, world))
             return _envelope({"error": f"unknown tool {name!r}"})
         finally:
-            if index is not None:
-                index.close()
-            world.close()
+            app.close()
 
     return server
 
