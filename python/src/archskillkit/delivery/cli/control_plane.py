@@ -503,6 +503,17 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   .project-strip .field-label {{ font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }}
   .project-strip .field-value {{ color: var(--text); font-family: ui-monospace, monospace; font-size: 0.8rem; }}
 
+  /* P1-B: Orientation message shown after first successful fetch */
+  .orientation-msg {{
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }}
+  .orientation-msg strong {{ color: var(--text); font-weight: 600; }}
+
   /* Token input */
   #token-section {{
     margin-bottom: 1.5rem;
@@ -927,6 +938,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   <!-- Project identity (hidden until authenticated) -->
   <div id="project-strip" class="project-strip" aria-label="Project identity" hidden></div>
 
+  <!-- P1-B: Orientation summary — visible after first successful fetch -->
+  <div id="orientation-msg" class="orientation-msg" hidden aria-live="polite"></div>
+
   <!-- Evidence panel -->
   <section id="evidence-panel" aria-labelledby="evidence-heading" hidden>
     <div class="panel">
@@ -1299,6 +1313,15 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           '</div>' +
         '</div>';
         heading.className = covClass;
+        // P1-B: Render orientation message after coverage loads
+        var orient = document.getElementById("orientation-msg");
+        if (orient) {
+          var pct = Math.round(covVal * 100);
+          var unkLabel = unkVal === 0 ? "no unknowns" : unkVal === 1 ? "1 unknown" : unkVal + " unknowns";
+          var covLabel = covVal >= 0.8 ? "strong" : covVal >= 0.5 ? "partial" : "low";
+          orient.innerHTML = "<strong>Coverage is " + pct + "%</strong> \u2014 " + covLabel + " evidence. " + unkLabel + ". Expand panels below to explore Evidence, Gaps, Findings, and Viewer Hub.";
+          orient.removeAttribute("hidden");
+        }
       } else {
         body.innerHTML = '<p class="error-state">Error ' + result.status + ': ' + esc(result.body.message || result.body.code) + '</p>';
       }
