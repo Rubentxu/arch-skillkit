@@ -1075,9 +1075,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           <div class="hub-actions">
             <button type="button" id="btn-drawio-propose" disabled>Create proposal</button>
             <button type="button" id="btn-drawio-reject" disabled
-                    title="Governance mutation: requires --admin">Reject</button>
+                    title="Reject this proposal and archive it (governance mutation)">Reject</button>
             <button type="button" id="btn-drawio-promote" disabled
-                    title="Governance mutation: requires --admin">Promote</button>
+                    title="Promote this proposal into the active architecture (irreversible governance mutation)">Promote</button>
             <button type="button" id="btn-drawio-close">Close editor</button>
           </div>
         </div>
@@ -1122,9 +1122,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
           <div class="hub-actions">
             <button type="button" id="btn-arrows-propose" disabled>Create proposal</button>
             <button type="button" id="btn-arrows-reject" disabled
-                    title="Governance mutation: requires --admin">Reject</button>
+                    title="Reject this proposal and archive it (governance mutation)">Reject</button>
             <button type="button" id="btn-arrows-promote" disabled
-                    title="Governance mutation: requires --admin">Promote</button>
+                    title="Promote this proposal into the active architecture (irreversible governance mutation)">Promote</button>
             <button type="button" id="btn-arrows-close">Close viewer</button>
           </div>
         </div>
