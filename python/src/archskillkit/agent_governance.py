@@ -228,3 +228,21 @@ def get_proposal_metadata(world, run_id: str) -> ProposalMetadata | None:
     finally:
         fork.close()
     return None
+
+
+def default_skills_root() -> Path:
+    """Resolve the skills root from env, then from the well-known
+    install location, then from the local `skills/` directory next
+    to the arch-skillkit package.
+
+    MCP and CLI processes share this default so a candidate
+    produced via MCP carries the same skill revisions as one
+    produced via the CLI."""
+    import os
+
+    env = os.environ.get("ARCH_SKILLKIT_SKILLS_ROOT")
+    if env:
+        return Path(env)
+    # Local repo: <arch-skillkit>/skills.
+    repo_root = Path(__file__).resolve().parents[2]
+    return repo_root / "skills"

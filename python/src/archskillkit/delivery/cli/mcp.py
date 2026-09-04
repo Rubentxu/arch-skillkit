@@ -43,13 +43,13 @@ from archskillkit.delivery.admin import (
     AdminDisabledError,
     admin_enabled,
 )
-from archskillkit.delivery.cli.proposals import (
-    _candidate_status,
-    handle_create,
-    handle_diff,
-    handle_promote,
-    handle_reject,
-    handle_review,
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    ProposalCreateCommand,
+    ProposalDiffCommand,
+    ProposalPromoteCommand,
+    ProposalRejectCommand,
+    ProposalReviewCommand,
 )
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.world import ArchitectureWorld
@@ -91,40 +91,13 @@ def _envelope_or_error(envelope: dict[str, Any]) -> dict[str, Any]:
     return envelope
 
 
-class _ArgNamespace:
-    """Minimal argparse.Namespace stand-in for the proposals handlers.
-
-    The proposals handlers are wired through argparse on the CLI
-    side; from MCP we drive them with a tiny namespace so the
-    handlers stay single-source-of-truth and never duplicate
-    validation logic."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-
 def _handle_admin_propose_list(
     arguments: dict[str, Any], world: ArchitectureWorld
 ) -> dict[str, Any]:
     """List candidate proposals (proposal-* runs)."""
-    from archskillkit.agent_governance import get_proposal_metadata
-
-    rows = []
-    for run_id in world.list_runs():
-        if not run_id.startswith("proposal-"):
-            continue
-        status = _candidate_status(world, run_id)
-        row: dict[str, Any] = {"run_id": run_id, "status": status}
-        metadata = get_proposal_metadata(world, run_id)
-        if metadata is not None:
-            row["metadata"] = metadata.to_object()
-        rows.append(row)
-    return {
-        "schema": "arch-skillkit/proposals-list-v1",
-        "project_id": world.project_id,
-        "candidates": rows,
-    }
+    service = GovernanceApplicationService(world)
+    result = service.list_proposals()
+    return result.model_dump()
 
 
 def _handle_admin_prompt_registry(
@@ -158,9 +131,9 @@ def _handle_admin_skill_registry(
     Only skills with a `version:` line in SKILL.md frontmatter
     appear; unversioned skills are excluded by design (they have
     no stable provenance)."""
-    from archskillkit.delivery.cli.proposals import _default_skills_root
+    from archskillkit.agent_governance import default_skills_root
 
-    root = _default_skills_root()
+    root = default_skills_root()
     revisions = load_skill_revisions(root)
     return {
         "schema": "arch-skillkit/skill-registry-v1",
@@ -205,46 +178,6 @@ def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) 
         envelope = exc.to_envelope()
         raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
     return result.model_dump()
-
-
-def _call_proposals_handler(handler, world: ArchitectureWorld, **kwargs: Any) -> dict[str, Any]:
-    """Drive a proposals handler with a synthetic namespace; the
-    handler returns 0/1 and prints to stdout. We don't want stdout
-    noise on the wire, so we capture the JSON envelope via a
-    lightweight in-process call.
-
-    The proposals handlers print the envelope to stdout, then
-    return an exit code. We re-run them with stdout AND stderr
-    redirected to a buffer and parse the envelope back. This keeps
-    the handlers single-source-of-truth without rewriting them as
-    return-value functions (a bigger refactor we don't need today).
-
-    Precedence on failure: try stderr first (the error path), then
-    stdout (the success path that nonetheless failed at a later
-    step)."""
-    import contextlib
-    import io
-
-    out_buf = io.StringIO()
-    err_buf = io.StringIO()
-    ns = _ArgNamespace(**kwargs)
-    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
-        rc = handler(ns, world)
-    out_text = out_buf.getvalue().strip()
-    err_text = err_buf.getvalue().strip()
-    if rc != 0:
-        # Error path: handler writes envelope to stderr. Fall back
-        # to stdout if a future handler writes to stdout on failure.
-        text = err_text or out_text
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            payload = {"error": "HANDLER_FAILED", "message": text or "handler returned non-zero"}
-        return _envelope_or_error(payload)
-    try:
-        return json.loads(out_text)
-    except json.JSONDecodeError:
-        return {"error": "BAD_ENVELOPE", "message": out_text}
 
 
 # ---------- server ----------
@@ -565,47 +498,57 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
             if name == "arch_propose_list":
                 return _envelope(_handle_admin_propose_list(arguments, world))
             if name == "arch_propose_create":
-                return _envelope(
-                    _call_proposals_handler(
-                        handle_create,
-                        world,
-                        name=arguments["name"],
-                        prompt_spec=arguments.get("prompt_spec"),
-                        skill=list(arguments.get("skill") or []),
-                    )
+                service = GovernanceApplicationService(world)
+                cmd = ProposalCreateCommand(
+                    name=arguments["name"],
+                    prompt_spec=arguments.get("prompt_spec"),
+                    skills=list(arguments.get("skill") or []),
                 )
+                result = service.create_proposal(cmd)
+                if hasattr(result, "error"):
+                    return _envelope(_envelope_or_error(result.model_dump()))
+                return _envelope(result.model_dump())
             if name == "arch_propose_diff":
-                return _envelope(
-                    _call_proposals_handler(handle_diff, world, name=arguments["name"])
-                )
+                service = GovernanceApplicationService(world)
+                cmd = ProposalDiffCommand(name=arguments["name"])
+                result = service.diff_proposal(cmd)
+                if hasattr(result, "error"):
+                    return _envelope(_envelope_or_error(result.model_dump()))
+                return _envelope(result.model_dump())
             if name == "arch_propose_review":
-                return _envelope(
-                    _call_proposals_handler(
-                        handle_review,
-                        world,
-                        name=arguments["name"],
-                        min_coverage=arguments.get("min_coverage", 0.8),
-                        max_unknowns=arguments.get("max_unknowns", 0),
-                        max_findings=arguments.get("max_findings", 0),
-                        max_run_age_days=arguments.get("max_run_age_days", 30),
-                        require_pass=arguments.get("require_pass", False),
-                    )
+                service = GovernanceApplicationService(world)
+                cmd = ProposalReviewCommand(
+                    name=arguments["name"],
+                    min_coverage=arguments.get("min_coverage", 0.8),
+                    max_unknowns=arguments.get("max_unknowns", 0),
+                    max_findings=arguments.get("max_findings", 0),
+                    max_run_age_days=arguments.get("max_run_age_days", 30),
+                    require_pass=arguments.get("require_pass", False),
                 )
+                result = service.review_proposal(cmd)
+                if hasattr(result, "error"):
+                    return _envelope(_envelope_or_error(result.model_dump()))
+                return _envelope(result.model_dump())
             if name == "arch_propose_promote":
-                return _envelope(
-                    _call_proposals_handler(
-                        handle_promote,
-                        world,
-                        name=arguments["name"],
-                        approved_by=arguments["approved_by"],
-                    )
+                service = GovernanceApplicationService(world)
+                cmd = ProposalPromoteCommand(
+                    name=arguments["name"],
+                    approved_by=arguments["approved_by"],
                 )
+                result = service.promote_proposal(cmd)
+                if hasattr(result, "error"):
+                    return _envelope(_envelope_or_error(result.model_dump()))
+                return _envelope(result.model_dump())
             if name == "arch_propose_reject":
-                return _envelope(
-                    _call_proposals_handler(
-                        handle_reject, world, name=arguments["name"], actor=arguments["actor"]
-                    )
+                service = GovernanceApplicationService(world)
+                cmd = ProposalRejectCommand(
+                    name=arguments["name"],
+                    actor=arguments["actor"],
                 )
+                result = service.reject_proposal(cmd)
+                if hasattr(result, "error"):
+                    return _envelope(_envelope_or_error(result.model_dump()))
+                return _envelope(result.model_dump())
             if name == "arch_prompt_registry":
                 return _envelope(_handle_admin_prompt_registry(arguments, world))
             if name == "arch_skill_registry":

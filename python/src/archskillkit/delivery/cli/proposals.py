@@ -68,14 +68,8 @@ def _default_skills_root() -> Path:
     MCP and CLI processes share this default so a candidate
     produced via MCP carries the same skill revisions as one
     produced via the CLI."""
-    import os
-
-    env = os.environ.get("ARCH_SKILLKIT_SKILLS_ROOT")
-    if env:
-        return Path(env)
-    # Local repo: <arch-skillkit>/skills.
-    repo_root = Path(__file__).resolve().parents[4]
-    return repo_root / "skills"
+    from archskillkit.agent_governance import default_skills_root as _resolve
+    return _resolve()
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

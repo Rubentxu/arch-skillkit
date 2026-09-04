@@ -78,10 +78,14 @@ from archskillkit.application.queries.gaps_query import (
     InvalidGapStatus,
     get_knowledge_gaps,
 )
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    ProposalPromoteCommand,
+    ProposalRejectCommand,
+)
 from archskillkit.application.queries.get_status import get_status
 from archskillkit.codeindex import CodeIndex
 from archskillkit.delivery.admin import ADMIN_DISABLED_CODE, admin_enabled
-from archskillkit.delivery.cli.proposals import handle_promote, handle_reject
 from archskillkit.ids import RepoNotFound, arch_config_root, arch_data_root
 from archskillkit.projections.arrows_bridge import (
     build_envelope as build_arrows_envelope,
@@ -2527,30 +2531,6 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
                 index.close()
             world.close()
 
-    def _call_handler(
-        self, handler: Any, world: ArchitectureWorld, **kwargs: Any
-    ) -> tuple[int, dict[str, Any]]:
-        """Drive a proposals CLI handler as single source of truth,
-        capturing its printed envelope (same pattern as the MCP admin
-        tools). Returns (exit_code, parsed_envelope)."""
-        import contextlib
-        import io
-
-        out_buf, err_buf = io.StringIO(), io.StringIO()
-        ns = argparse.Namespace(**kwargs)
-        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
-            rc = handler(ns, world)
-        if rc != 0:
-            text = err_buf.getvalue().strip() or out_buf.getvalue().strip()
-            try:
-                return rc, json.loads(text)
-            except json.JSONDecodeError:
-                return rc, {"error": "HANDLER_FAILED", "message": text or "handler failed"}
-        try:
-            return rc, json.loads(out_buf.getvalue())
-        except json.JSONDecodeError:
-            return rc, {"error": "HANDLER_FAILED", "message": "no envelope printed"}
-
     def _handler_error_status(self, payload: dict[str, Any]) -> int:
         code = payload.get("error", "")
         return {
@@ -2583,47 +2563,57 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
             return
 
         world, index = self._world()
+        service = GovernanceApplicationService(world)
         try:
-            kwargs = {"name": name, name_key: actor}
-            rc, envelope = self._call_handler(handler, world, **kwargs)
+            if handler == "promote":
+                cmd = ProposalPromoteCommand(name=name, approved_by=actor)
+                result = service.promote_proposal(cmd)
+            elif handler == "reject":
+                cmd = ProposalRejectCommand(name=name, actor=actor)
+                result = service.reject_proposal(cmd)
+            else:
+                self._error(500, "INTERNAL", f"unknown governance handler: {handler}")
+                return
         finally:
             if index is not None:
                 index.close()
             world.close()
-        if rc != 0:
+
+        if hasattr(result, "error"):
+            err = result
             self._send_json(
-                self._handler_error_status(envelope),
+                self._handler_error_status(err.model_dump()),
                 {
                     "schema": DRAWCAND_SCHEMA,
                     "error": {
-                        "code": envelope.get("error", "HANDLER_FAILED"),
-                        "message": envelope.get("message", "governance action failed"),
+                        "code": err.error,
+                        "message": err.message,
                     },
                 },
             )
             return
-        self._send_json(200, {"schema": DRAWCAND_SCHEMA, **envelope})
+        self._send_json(200, {"schema": DRAWCAND_SCHEMA, **result.model_dump()})
 
     def _drawio_promote_http(self) -> None:
         """Handle POST /drawio-promote (M5 slice 24, opt-in): approve and
         promote a candidate fork into the base world via the proposals
         pipeline. Requires --admin."""
-        self._governance_http(handle_promote, "approved_by")
+        self._governance_http("promote", "approved_by")
 
     def _drawio_reject_http(self) -> None:
         """Handle POST /drawio-reject (M5 slice 24, opt-in): mark a
         candidate rejected. Requires --admin."""
-        self._governance_http(handle_reject, "actor")
+        self._governance_http("reject", "actor")
 
     def _arrows_promote_http(self) -> None:
         """Handle POST /arrows-promote (V2.4 M5 slice 27): promote an
         arrows candidate fork. Requires --admin."""
-        self._governance_http(handle_promote, "approved_by")
+        self._governance_http("promote", "approved_by")
 
     def _arrows_reject_http(self) -> None:
         """Handle POST /arrows-reject (V2.4 M5 slice 27): reject an
         arrows candidate fork. Requires --admin."""
-        self._governance_http(handle_reject, "actor")
+        self._governance_http("reject", "actor")
 
     # M6 slice 30: Conformance Miner approval path
 
