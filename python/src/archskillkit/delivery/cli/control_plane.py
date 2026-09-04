@@ -262,7 +262,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
   .badge-warn  {{ background: var(--warn); color: #000; }}
   .badge-unknown {{ background: var(--border); color: var(--text); }}
 
-  main {{ max-width: 900px; margin: 0 auto; padding: 1.5rem; }}
+  main {{ max-width: min(900px, calc(100vw - 3rem)); margin: 0 auto; padding: 1.5rem; }}
 
   section {{ margin-bottom: 2rem; }}
 
@@ -898,7 +898,7 @@ _CONTROL_SHELL = """<!DOCTYPE html>
 <!-- Global error banner (P0-1: silent fetch failures) -->
   <div id="global-error" role="alert" aria-live="assertive" hidden>
     <span id="global-error-msg"></span>
-    <button type="button" id="retry-btn" aria-label="Retry loading data">Retry</button>
+    <button type="button" id="retry-btn">Retry</button>
   </div>
 
 <main id="main" role="main">
@@ -1236,7 +1236,9 @@ _CONTROL_SHELL = """<!DOCTYPE html>
                   '</div>'
                 : '';
               return '<li class="evidence-item">' +
-                '<button class="evidence-item-btn" aria-expanded="false" aria-controls="' + detailId + '" type="button">' +
+                '<button class="evidence-item-btn" aria-expanded="false" aria-controls="' + detailId + '" ' +
+                  'aria-label="Show details for evidence ' + esc(ev.id) + '" ' +
+                  'data-ev-id="' + esc(ev.id) + '" type="button">' +
                   '<span class="ev-id">' + esc(ev.id) + '</span>' +
                   '<span class="ev-tool">' + esc(ev.tool || "—") + '</span>' +
                   '<span class="ev-location">' + location + '</span>' +
@@ -2053,10 +2055,13 @@ _CONTROL_SHELL = """<!DOCTYPE html>
     if (btn.classList.contains("evidence-item-btn")) {
       var expanded = btn.getAttribute("aria-expanded") === "true";
       var detailId = btn.getAttribute("aria-controls");
+      var evId = btn.getAttribute("data-ev-id") || "";
       var detail = document.getElementById(detailId);
-      btn.setAttribute("aria-expanded", String(!expanded));
-      if (detail) detail.classList.toggle("open", !expanded);
-      btn.textContent = expanded ? "[+]" : "[−]";
+      var isOpen = !expanded;
+      btn.setAttribute("aria-expanded", String(isOpen));
+      btn.setAttribute("aria-label", (isOpen ? "Hide" : "Show") + " details for evidence " + evId);
+      if (detail) detail.classList.toggle("open", isOpen);
+      btn.textContent = isOpen ? "[−]" : "[+]";
     }
   });
 
