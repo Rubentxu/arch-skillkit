@@ -90,25 +90,61 @@ V2.5 es una línea de evolución mergeable sobre V2.4. Objetivo: cerrar la dista
 
 Entry: v0.4.0 main reproducible. Deliverables: contracts, verifier, baseline, gate catalog, traceability, smoke plan.
 
-Baseline `docs/v2/verification/architecture-baseline.json`: 17 findings en 4 reglas (documentados abajo). Baseline pendiente de revisión manual.
+Baseline `docs/v2/verification/architecture-baseline.json`: 17 findings en 4 reglas. Todos resueltos en milestones posteriores.
 
-**M1 — Governance Application API: IN PROGRESS (slice 1 done)**
+**M1 — Governance Application API: COMPLETE**
 
-Objetivo: eliminar delivery→delivery y stdout-capture protocol en governance.
-
-Slice 1 (`fce22ef`): Application command layer extraída.
-
-Arquitectura resultante:
+Slice 1: Application command layer extraída. Arquitectura resultante:
 - `application/ports/governance_command.py`: GovernanceCommandPort (protocol)
 - `application/commands/governance.py`: GovernanceApplicationService (implementación)
 - `application/models/governance.py`: DTOs de comandos y resultados (Pydantic)
 
-Cambios en adapters:
-- `mcp.py`: elimina imports de `proposals.py` y `_call_proposals_handler`; llama directamente al service
-- `control_plane.py`: elimina `_call_handler` + redirect_stdout/stderr; `_governance_http` llama al service
-- `proposals.py`: `_default_skills_root` delega a `agent_governance.default_skills_root`
-- `agent_governance.py`: expone `default_skills_root` como función pública
+Gate M1: 7 violations resueltas (ARC-001 + ARC-009), application_api_coverage = 100%.
 
-Gate: 7 violations resueltas (3×ARC-001 + 4×ARC-009), 2 nuevas en el service (ARC-004/ARC-005 — resueltas en M3/M5). 8 findings restantes.
+**M2 — Composition Root: COMPLETE**
 
-Siguiente paso M1: CLI proposals.py necesita adaptarse para usar GovernanceApplicationService en vez de llamar a world directamente.
+`ArchSkillKitApplication` como Composition Root con lifecycle de world + index.
+`application_api_coverage = 100%` (15/15 methods reachable from adapters).
+
+**M3 — ActiveGraph Boundary: COMPLETE (slices 1–3)**
+
+Slice 1: ARC-006 → 0 (arrows_delta rename + world.add_object() público).
+Slice 2: application_api_coverage = 100%.
+Slice 3: world._arch_app reverse reference para que handlers accedan a app.index sin abrir CodeIndex propio.
+
+Gate M3: ARC violations 17 → 4 → 0.
+
+**M4 — ArchitectureDelta: COMPLETE (slices 1–2)**
+
+Slice 1 (`4b9cf57`): `ark changes` command — live ArchitectureDelta entre main y proposal fork.
+Slice 2 (`d1d023e`): DELTA-EXPLAIN-002 — VerdictChange con atribución causal.
+Gates: DELTA-DET-001 (determinism SHA256 estable), DELTA-EXPLAIN-002 implemented.
+
+**M5 — CodeGraphQueryPort: COMPLETE**
+
+ARC violations 17 → 0 (CodeGraphQueryPort + ArchitectureWorldPort).
+
+Cambios:
+- `application/exceptions.py`: re-export AmbiguousSymbolError.
+- `application/commands/governance.py`: ArchitectureWorldPort type hints (no concrete world import).
+- `application/queries/bootstrap.py`: index=None retorna ContextPack mínimo (ARC-005).
+- `application/queries/analyze_impact.py`: AmbiguousSymbolError desde application.exceptions.
+
+**M6 — Context & Agent Efficiency: COMPLETE (slices 1–2)**
+
+Slice 1 (`ff20477`): delta-aware context — `ContextCompiler.compile(delta)` pesa elementos añadidos/cambiados.
+Slice 2 (`7d4dc7d`): stale-session rules con fixture completa (3 dimensiones: world_revision, code_generation, policy_revision).
+
+Gates: stale detection = 100% fixture coverage, delta-aware ranking activo.
+
+**M7 — Learning Architecture: COMPLETE (slices 1–2)**
+
+Slice 1 (`66f4ab7`): `promote-sensor` CLI + `sensor_rule` world object + `SensorRuleData` model.
+Slice 2 (`0e22fd1`): `reject-sensor` CLI + `distill-sensors --record` + `SensorCandidateData` model + `sensor_candidate` world object.
+
+Flujo completo: `distill-sensors --record` → `reject-sensor | promote-sensor`.
+UAT25-070..072 cubiertos. UAT25-073 (ROI) pendiente de campaign run.
+
+**Gate V2.5: 0 ARC violations · 143 tests pass**
+
+Commits V2.5: `f753898` (M3.1) → `4b9cf57` (M4.1) → `d1d023e` (M4.2) → `71c5658` (M5) → `b1c201b` (M3.3) → `ff20477` (M6.1) → `7d4dc7d` (M6.2) → `66f4ab7` (M7.1) → `0e22fd1` (M7.2) → `b1c201b` → `main`.
