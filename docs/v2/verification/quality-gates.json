@@ -1,0 +1,133 @@
+{
+  "gates": [
+    {
+      "class": "MIGRATION-BLOCKING",
+      "id": "ARCH-BASELINE-001",
+      "metric": "new_architecture_violations",
+      "milestone": "M0",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "DET-REPORT-001",
+      "metric": "verification_report_repeat_mismatches",
+      "milestone": "M0",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "PKG-WHEEL-001",
+      "metric": "clean_wheel_smoke_pass",
+      "milestone": "M0",
+      "operator": "==",
+      "threshold": 1
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARCH-DELIVERY-001",
+      "metric": "delivery_cross_adapter_imports",
+      "milestone": "M1",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "PARITY-GOV-001",
+      "metric": "governance_parity_mismatches",
+      "milestone": "M1",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARCH-WIRING-001",
+      "metric": "inbound_concrete_store_constructions",
+      "milestone": "M2",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "APP-COVERAGE-001",
+      "metric": "application_api_coverage",
+      "milestone": "M2",
+      "operator": ">=",
+      "threshold": 0.9
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARCH-ACTIVEGRAPH-001",
+      "metric": "activegraph_import_leaks",
+      "milestone": "M3",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARCH-GRAPH-LEAK-001",
+      "metric": "graph_structural_leaks",
+      "milestone": "M3",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARCH-APP-CONCRETE-001",
+      "metric": "application_concrete_imports",
+      "milestone": "M3",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "DELTA-DET-001",
+      "metric": "delta_repeat_mismatches",
+      "milestone": "M4",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "GATE-NO-NEW-DRIFT-001",
+      "metric": "undetected_new_drift",
+      "milestone": "M4",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "PROVIDER-PROVENANCE-001",
+      "metric": "provider_edges_missing_provenance",
+      "milestone": "M5",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "CTX-BUDGET-001",
+      "metric": "context_budget_violations",
+      "milestone": "M6",
+      "operator": "==",
+      "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "SESSION-STALE-001",
+      "metric": "stale_session_detection_rate",
+      "milestone": "M6",
+      "operator": ">=",
+      "threshold": 1.0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "LEARN-NO-AUTO-ACCEPT-001",
+      "metric": "automatic_sensor_promotions",
+      "milestone": "M7",
+      "operator": "==",
+      "threshold": 0
+    }
+  ],
+  "schema": "arch-skillkit/quality-gates-v1"
+}

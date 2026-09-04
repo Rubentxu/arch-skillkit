@@ -81,3 +81,22 @@ El bundle ignorado `arch-skillkit-v2.2-projection-applications/` es material his
   **M5 Slice 27** cerrado: Arrows round-trip candidate (arrows_delta.py pure classifier: identity by caption/(type,fromCaption,toCaption), semantic element/relation added/removed, unsupported NO_CAPTION/DUPLICATE_IDENTITY/UNRESOLVED_RELATION_ENDPOINT, POST /arrows-candidate mirroring drawio-candidate flow, shell Create proposal flow via bridge cypher export, promote/reject handlers wired). Still no auto-accept; promote/reject remain slice-24 gated.
   **M6 Slice 29** cerrado: Sensor Distiller (`sensor_distiller.py`) — detecta inferencias LLM repetidas (origin=INFERRED) vía `world.claims_by_run()` que evita herencia de eventos fork, agrupa por `(sorted_subjects, normalised_statement)`, propone `SensorCandidate` con status="candidate" y fixtures vacías (human review antes de promoción). CLI: `archskillkit distill-sensors --repo PATH [--min-runs N]`. `claims_by_run` en world.py filtra por `id > forked_at_event_id` para excluir eventos heredados del parent en runs de tipo fork. Schema salida: arch-skillkit/sensor-distillation-v1.
   **M6 Slice 30** cerrado: Conformance Miner (`conformance_miner.py`) — escanea `world.architecture_relations()` agrupadas por `(rel_kind, source_kind, target_kind)`, propone `ArchitectureRuleCandidate` para patrones con `support >= min_support`, candidate_id determinista como slug `<relkind>-<sourcekind>-<targetkind>`, pre-fill DRAFT rule con statement que dice explícitamente "DRAFT from observed pattern — requires approval". Relaciones con kind de endpoint desconocido son silenciosamente saltadas. Nunca muta el world. CLI: `archskillkit mine-conformance --repo PATH [--min-support N]`, schema `arch-skillkit/conformance-mining-v1`. Approval path: `POST /rule-candidate-record` (admin-gated, schema estricto, 403 sin admin) convierte candidate en `architecture_rule` via `world.record_architecture_rule()` con nombre `<candidate_id>-rule`, idempotente por nombre, 409 `RULE_EXISTS` en duplicados. Tests en `test_conformance_miner.py`.
+
+## V2.5 — Architecture Integrity & Intelligence Kernel
+
+V2.5 es una línea de evolución mergeable sobre V2.4. Objetivo: cerrar la distancia entre la arquitectura conceptual y la física, hacer la alineación medible, reproducible y determinista. Docs en `docs/v2/70-*` a `87-*` y ADRs `ADR-0046-*` a `ADR-0056-*`.
+
+**M0 — Verification Baseline: IN PROGRESS**
+
+Entry: v0.4.0 main reproducible. Deliverables: contracts, verifier, baseline, gate catalog, traceability, smoke plan.
+
+Baseline generado `docs/v2/verification/architecture-baseline.json` con 17 findings en 4 reglas:
+
+| Rule | Count | Description |
+|------|-------|-------------|
+| ARC-001 | 3 | delivery.cli.{control_plane,mcp} importan archskillkit.delivery.cli.proposals directamente |
+| ARC-005 | 2 | application/queries/{analyze_impact,bootstrap} importan codeindex concreto |
+| ARC-006 | 4 | {agent_governance,arrows_delta} acceden a .graph directamente |
+| ARC-009 | 4 | {control_plane,mcp} usan contextlib.redirect_stdout/stderr (stdout-capture protocol) |
+
+Siguiente paso: revisar findings baseline manualmente, confirmar que son deuda conocida antes de aceptarlos como baseline.

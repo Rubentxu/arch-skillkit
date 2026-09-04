@@ -1,0 +1,118 @@
+{
+  "root_package": "archskillkit",
+  "rules": [
+    {
+      "description": "Inbound adapters must not use CLI proposal handlers.",
+      "forbidden": [
+        "archskillkit.delivery.cli.proposals"
+      ],
+      "id": "ARC-001",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "adapters/inbound/mcp",
+        "adapters/inbound/http",
+        "delivery/cli/mcp.py",
+        "delivery/cli/control_plane.py"
+      ]
+    },
+    {
+      "description": "Application must not depend on delivery.",
+      "forbidden": [
+        "archskillkit.delivery",
+        "archskillkit.adapters.inbound"
+      ],
+      "id": "ARC-002",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "application"
+      ]
+    },
+    {
+      "description": "Application must not import ActiveGraph.",
+      "forbidden": [
+        "activegraph"
+      ],
+      "id": "ARC-003",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "application"
+      ]
+    },
+    {
+      "description": "Application must not import concrete ArchitectureWorld.",
+      "forbidden": [
+        "archskillkit.world"
+      ],
+      "id": "ARC-004",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "application"
+      ]
+    },
+    {
+      "description": "Application must consume CodeGraphQueryPort, not CodeIndex concrete implementation.",
+      "forbidden": [
+        "archskillkit.codeindex"
+      ],
+      "id": "ARC-005",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "application"
+      ]
+    },
+    {
+      "allow": [
+        "adapters/outbound/activegraph",
+        "world.py",
+        "repositories.py"
+      ],
+      "attribute": "graph",
+      "description": "Direct .graph access is transitional and must converge to the ActiveGraph adapter only.",
+      "id": "ARC-006",
+      "kind": "forbidden_attribute",
+      "scope": [
+        "."
+      ]
+    },
+    {
+      "description": "Application use cases do not print.",
+      "id": "ARC-007",
+      "kind": "forbidden_call_name",
+      "names": [
+        "print"
+      ],
+      "scope": [
+        "application"
+      ]
+    },
+    {
+      "description": "argparse belongs to CLI inbound adapter only.",
+      "forbidden": [
+        "argparse"
+      ],
+      "id": "ARC-008",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "application",
+        "adapters/inbound/mcp",
+        "adapters/inbound/http"
+      ]
+    },
+    {
+      "description": "stdout/stderr capture is not an internal application protocol.",
+      "id": "ARC-009",
+      "kind": "forbidden_name",
+      "names": [
+        "redirect_stdout",
+        "redirect_stderr"
+      ],
+      "scope": [
+        "adapters/inbound/mcp",
+        "adapters/inbound/http",
+        "delivery/cli/mcp.py",
+        "delivery/cli/control_plane.py"
+      ]
+    }
+  ],
+  "schema": "arch-skillkit/architecture-contracts-v1"
+}

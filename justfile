@@ -78,6 +78,15 @@ verify-release version="0.3.0":
 verify-release-full version="0.3.0":
     ./scripts/verify/run-verify.sh "{{version}}"
 
+[group('verify')]
+[doc('Arquitectura: verificar que el código cumple los contratos arquitectónicos (V2.5 M0)')]
+verify:architecture:
+    python3 docs/v2/verification/arch_conformance.py \
+      --root python/src/archskillkit \
+      --contracts docs/v2/verification/architecture-contracts.json \
+      --baseline docs/v2/verification/architecture-baseline.json \
+      --output build/architecture-report.json
+
 [group('dogfood')]
 [doc('ArchSkillKit analizando ArchSkillKit con su propio runtime (drift + evidencia)')]
 dogfood:

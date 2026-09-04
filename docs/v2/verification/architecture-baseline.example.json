@@ -1,0 +1,5 @@
+{
+  "findings": [],
+  "note": "EXAMPLE ONLY. Generate on the exact main commit, review it, then commit the generated file.",
+  "schema": "arch-skillkit/architecture-baseline-v1"
+}
