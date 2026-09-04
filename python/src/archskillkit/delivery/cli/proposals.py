@@ -22,30 +22,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from archskillkit.agent_governance import (
-    ProposalMetadata,
-    SkillRevision,
-    find_skill_revision,
-    get_prompt_spec,
-    get_proposal_metadata,
-    record_proposal_metadata,
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    ProposalCreateCommand,
+    ProposalDiffCommand,
+    ProposalPromoteCommand,
+    ProposalRejectCommand,
+    ProposalReviewCommand,
 )
-from archskillkit.application.queries.fitness import (
-    FitnessThresholds,
-    evaluate_gate,
-)
-from archskillkit.application.queries.report import render_json
-from archskillkit.application.snapshot_builder import build_snapshot
-from archskillkit.codeindex import CodeIndex
-from archskillkit.proposals import (
-    PromotionError,
-    promote,
-    structural_diff,
-)
-from archskillkit.runtime_state.run_ledger import RunLedger
-from archskillkit.runtime_state.waivers import WaiverLedger
 from archskillkit.world import ArchitectureWorld
 
 NAME = "proposals"
@@ -58,18 +43,6 @@ SCHEMA_DIFF = "arch-skillkit/proposal-diff-v1"
 SCHEMA_REVIEW = "arch-skillkit/proposal-review-v1"
 SCHEMA_PROMOTE = "arch-skillkit/proposal-promote-v1"
 SCHEMA_REJECT = "arch-skillkit/proposal-reject-v1"
-
-
-def _default_skills_root() -> Path:
-    """Resolve the skills root from env, then from the well-known
-    install location, then from the local `skills/` directory next
-    to the arch-skillkit package.
-
-    MCP and CLI processes share this default so a candidate
-    produced via MCP carries the same skill revisions as one
-    produced via the CLI."""
-    from archskillkit.agent_governance import default_skills_root as _resolve
-    return _resolve()
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -117,49 +90,6 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 # ---------- shared helpers ----------
 
 
-def _candidate_runs(world: ArchitectureWorld) -> list[str]:
-    """All runs that begin with the proposal- prefix in this project."""
-    out: list[str] = []
-    for run_id in world.list_runs():
-        if run_id.startswith(PROPOSAL_PREFIX):
-            out.append(run_id)
-    return out
-
-
-def _candidate_status(world: ArchitectureWorld, run_id: str) -> str:
-    """Best-effort status: approved > rejected > open.
-
-    Best-effort because the proposal object may live in a fork
-    that has since been deleted; in that case the candidate is
-    effectively open (no decision recorded)."""
-    try:
-        fork = world.view(run_id)
-    except (KeyError, RuntimeError) as exc:
-        print(f"warning: cannot inspect candidate '{run_id}': {exc}", file=sys.stderr)
-        return "open"
-    try:
-        for obj in fork.find_objects("proposal"):
-            data = obj.get("data") or {}
-            status = data.get("status")
-            if status in ("approved", "rejected"):
-                return status
-    finally:
-        fork.close()
-    return "open"
-
-
-def _require_main_world(world: ArchitectureWorld) -> dict | None:
-    """Return a base-world-missing error envelope or None."""
-    if not world.db_path.exists():
-        return {
-            "error": "BASE_WORLD_MISSING",
-            "message": f"no Architecture World for {world.project_id}"
-            f" (run: archskillkit discover --repo"
-            f" {world.root or '.'})",
-        }
-    return None
-
-
 def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None, dict | None]:
     """Return (run_id, error_envelope). Exactly one is None."""
     run_id = f"{PROPOSAL_PREFIX}{name}"
@@ -173,263 +103,107 @@ def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None,
     return run_id, None
 
 
-class ProposalMetadataError(Exception):
-    """Raised when a caller asks to record provenance but the
-    inputs cannot be resolved (unknown prompt spec, unversioned
-    skill, etc). Carries a stable error code so the MCP wire
-    layer surfaces it without parsing free-form text."""
-
-    code = "METADATA_INVALID"
-
-    def __init__(self, message: str, **details) -> None:
-        super().__init__(message)
-        self.message = message
-        self.details = dict(details)
-
-    def to_envelope(self) -> dict:
-        return {"error": self.code, "message": self.message, **self.details}
-
-
-def _resolve_metadata(
-    world: ArchitectureWorld, name: str, prompt_name: str | None, skill_names: list[str]
-) -> ProposalMetadata:
-    """Resolve a ProposalMetadata from CLI/MCP inputs.
-
-    Raises ProposalMetadataError if any input cannot be resolved
-    to a known, versioned, content-addressed reference."""
-    if not prompt_name:
-        raise ProposalMetadataError(
-            "metadata requires --prompt-spec (the candidate's "
-            "embedded agent must declare its prompt)"
-        )
-    try:
-        spec = get_prompt_spec(prompt_name)
-    except KeyError as exc:
-        raise ProposalMetadataError(str(exc), prompt_spec=prompt_name)
-    skill_revisions: list[SkillRevision] = []
-    skills_root = _default_skills_root()
-    for skill_name in skill_names:
-        revision = find_skill_revision(skill_name, skills_root)
-        if revision is None:
-            raise ProposalMetadataError(
-                f"skill {skill_name!r} is not versioned in"
-                f" {skills_root}; add a 'version:' line to its"
-                f" SKILL.md frontmatter",
-                skill=skill_name,
-                skills_root=str(skills_root),
-            )
-        skill_revisions.append(revision)
-    return ProposalMetadata(
-        prompt_spec_name=spec.name,
-        prompt_spec_version=spec.version,
-        prompt_spec_hash=spec.digest(),
-        skill_revisions=skill_revisions,
-    )
-
-
 # ---------- actions ----------
 
 
 def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-    rows = []
-    for run_id in sorted(_candidate_runs(world)):
-        name = run_id.removeprefix(PROPOSAL_PREFIX)
-        status = _candidate_status(world, run_id)
-        metadata = get_proposal_metadata(world, run_id)
-        row = {"name": name, "run_id": run_id, "status": status}
-        if metadata is not None:
-            row["metadata"] = {
-                "prompt_spec_name": metadata.prompt_spec_name,
-                "prompt_spec_version": metadata.prompt_spec_version,
-                "prompt_spec_hash": metadata.prompt_spec_hash,
-                "skill_count": len(metadata.skill_revisions),
-            }
-        rows.append(row)
-    envelope = {"schema": SCHEMA_LIST, "project_id": world.project_id, "candidates": rows}
-    print(json.dumps(envelope, indent=2))
+    """List all proposal-* runs in the world."""
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+
+    service = GovernanceApplicationService(world)
+    result = service.list_proposals()
+    print(json.dumps(result.model_dump(), indent=2))
     return 0
 
 
 def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
-    """Fork the base world into a candidate run.
+    """Fork the base world into a candidate run."""
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+    from archskillkit.application.models.governance import ProposalCreateCommand
 
-    When the caller passes --prompt-spec and/or --skill, record
-    the provenance metadata (prompt spec name+version+hash, skill
-    name+version+content hash) into the fork so a later review
-    can answer "what produced this candidate?"."""
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-    name = args.name
-    metadata: ProposalMetadata | None = None
-    metadata_error: dict | None = None
-    prompt_name = getattr(args, "prompt_spec", None)
+    prompt_name = getattr(args, "prompt_spec", None) or None
     skill_names = list(getattr(args, "skill", []) or [])
-    if prompt_name or skill_names:
-        try:
-            metadata = _resolve_metadata(world, name, prompt_name, skill_names)
-        except ProposalMetadataError as exc:
-            metadata_error = exc.to_envelope()
-            # Bail out: we will NOT create the fork if provenance
-            # cannot be resolved. The caller must fix the inputs.
-            print(json.dumps(metadata_error), file=sys.stderr)
-            return 1
-    # Fork first (one transaction: copies events into the new run).
-    with world:
-        fork = world.fork(name)
-        # Record metadata inside the same world transaction so the
-        # writes commit atomically with the fork itself. A second
-        # transaction outside `with world:` would risk a stale read
-        # from a freshly-opened sqlite handle.
-        if metadata is not None:
-            record_proposal_metadata(world, fork.run_id, metadata)
-    envelope = {
-        "schema": SCHEMA_CREATE,
-        "name": name,
-        "run_id": fork.run_id,
-        "project_id": world.project_id,
-    }
-    if metadata is not None:
-        envelope["metadata"] = metadata.to_object()
-    print(json.dumps(envelope, indent=2))
+    cmd = ProposalCreateCommand(name=args.name, prompt_spec=prompt_name, skills=skill_names)
+
+    service = GovernanceApplicationService(world)
+    result = service.create_proposal(cmd)
+    if hasattr(result, "error"):
+        err = result
+        print(json.dumps(err.model_dump()), file=sys.stderr)
+        return 1
+    print(json.dumps(result.model_dump(), indent=2))
     return 0
 
 
 def handle_diff(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Return the structural diff between base and the candidate."""
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+    from archskillkit.application.models.governance import ProposalDiffCommand
+
+    service = GovernanceApplicationService(world)
+    cmd = ProposalDiffCommand(name=args.name)
+    result = service.diff_proposal(cmd)
+    if hasattr(result, "error"):
+        err = result
+        print(json.dumps(err.model_dump()), file=sys.stderr)
         return 1
-    run_id, err = _require_candidate(world, args.name)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-    with world:
-        fork = world.view(run_id)
-        diff = structural_diff(world, fork)
-    diff_dict = {k: v for k, v in vars(diff).items()}
-    diff_dict["is_empty"] = diff.is_empty()
-    envelope = {
-        "schema": SCHEMA_DIFF,
-        "name": args.name,
-        "run_id": run_id,
-        "structural_diff": diff_dict,
-    }
-    print(json.dumps(envelope, indent=2))
+    print(json.dumps(result.model_dump(), indent=2))
     return 0
 
 
 def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Evaluate fitness gate + structural diff against the candidate."""
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+    from archskillkit.application.models.governance import ProposalReviewCommand
+
+    service = GovernanceApplicationService(world)
+    cmd = ProposalReviewCommand(
+        name=args.name,
+        min_coverage=args.min_coverage,
+        max_unknowns=args.max_unknowns,
+        max_findings=args.max_findings,
+        max_run_age_days=args.max_run_age_days,
+        require_pass=args.require_pass,
+    )
+    result = service.review_proposal(cmd)
+    if hasattr(result, "error"):
+        err = result
+        print(json.dumps(err.model_dump()), file=sys.stderr)
         return 1
-    run_id, err = _require_candidate(world, args.name)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-
-    with world:
-        fork = world.view(run_id)
-        diff = structural_diff(world, fork)
-        index_path = fork.workspace / "code.sqlite"
-        index = CodeIndex(index_path).open() if index_path.exists() else None
-        try:
-            snapshot = build_snapshot(fork, code_index=index)
-            thresholds = FitnessThresholds(
-                min_evidence_coverage=args.min_coverage,
-                max_unknowns=args.max_unknowns,
-                max_findings=args.max_findings,
-                max_run_age_days=args.max_run_age_days,
-            )
-            result = evaluate_gate(
-                fork, snapshot, thresholds=thresholds, ledger=RunLedger(), waivers=WaiverLedger()
-            )
-        finally:
-            if index is not None:
-                index.close()
-
-    diff_dict = {k: v for k, v in vars(diff).items()}
-    diff_dict["is_empty"] = diff.is_empty()
-
-    metadata = get_proposal_metadata(world, run_id)
-
-    envelope = {
-        "schema": SCHEMA_REVIEW,
-        "candidate": args.name,
-        "run_id": run_id,
-        "structural_diff": diff_dict,
-        "gate": json.loads(render_json(result)),
-    }
-    if metadata is not None:
-        envelope["metadata"] = metadata.to_object()
-    print(json.dumps(envelope, indent=2))
-    if args.require_pass and result.verdict != "pass":
-        return 1
+    print(json.dumps(result.model_dump(), indent=2))
+    # require_pass is handled inside the service (exit 1 on fail verdict)
     return 0
 
 
 def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Promote a candidate to base; records approval first."""
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+    from archskillkit.application.models.governance import ProposalPromoteCommand
+
+    service = GovernanceApplicationService(world)
+    cmd = ProposalPromoteCommand(name=args.name, approved_by=args.approved_by)
+    result = service.promote_proposal(cmd)
+    if hasattr(result, "error"):
+        err = result
+        print(json.dumps(err.model_dump()), file=sys.stderr)
         return 1
-    name = args.name
-    run_id, err = _require_candidate(world, name)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-    with world:
-        fork = world.view(run_id)
-        fork.record_proposal(name)
-        try:
-            fork.approve_proposal(name, actor=args.approved_by)
-            summary = promote(world, fork)
-        except PromotionError as exc:
-            err = {"error": "PROMOTION_FAILED", "message": str(exc), "name": name, "run_id": run_id}
-            print(json.dumps(err), file=sys.stderr)
-            return 1
-    envelope = {"schema": SCHEMA_PROMOTE, **summary}
-    print(json.dumps(envelope, indent=2))
+    print(json.dumps(result.model_dump(), indent=2))
     return 0
 
 
 def handle_reject(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Mark a candidate as rejected; does not mutate base."""
-    err = _require_main_world(world)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
+    from archskillkit.application.commands.governance import GovernanceApplicationService
+    from archskillkit.application.models.governance import ProposalRejectCommand
+
+    service = GovernanceApplicationService(world)
+    cmd = ProposalRejectCommand(name=args.name, actor=args.actor)
+    result = service.reject_proposal(cmd)
+    if hasattr(result, "error"):
+        err = result
+        print(json.dumps(err.model_dump()), file=sys.stderr)
         return 1
-    name = args.name
-    run_id, err = _require_candidate(world, name)
-    if err is not None:
-        print(json.dumps(err), file=sys.stderr)
-        return 1
-    with world:
-        fork = world.view(run_id)
-        fork.record_proposal(name)
-        try:
-            fork.reject_proposal(name, actor=args.actor)
-        except PromotionError as exc:
-            err = {"error": "REJECTION_FAILED", "message": str(exc), "name": name, "run_id": run_id}
-            print(json.dumps(err), file=sys.stderr)
-            return 1
-    envelope = {
-        "schema": SCHEMA_REJECT,
-        "name": name,
-        "run_id": run_id,
-        "actor": args.actor,
-        "status": "rejected",
-    }
-    print(json.dumps(envelope, indent=2))
+    print(json.dumps(result.model_dump(), indent=2))
     return 0
 
 
