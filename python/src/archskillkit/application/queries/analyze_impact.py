@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from archskillkit.codeindex import AmbiguousSymbolError
+from archskillkit.application.exceptions import AmbiguousSymbolError
 
 IMPACT_SCHEMA = "arch-skillkit/impact-result-v1"
 

@@ -37,16 +37,15 @@ from archskillkit.application.ports.governance_command import GovernanceCommandP
 from archskillkit.application.queries.fitness import FitnessThresholds, evaluate_gate
 from archskillkit.application.queries.report import render_json
 from archskillkit.application.snapshot_builder import build_snapshot
-from archskillkit.codeindex import CodeIndex
 from archskillkit.proposals import PromotionError, promote, structural_diff
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.runtime_state.waivers import WaiverLedger
-from archskillkit.world import ArchitectureWorld
+from archskillkit.ports import ArchitectureWorldPort
 
 PROPOSAL_PREFIX = "proposal-"
 
 
-def _require_main_world(world: ArchitectureWorld) -> CommandError | None:
+def _require_main_world(world: ArchitectureWorldPort) -> CommandError | None:
     if not world.db_path.exists():
         return CommandError(
             error="BASE_WORLD_MISSING",
@@ -56,7 +55,7 @@ def _require_main_world(world: ArchitectureWorld) -> CommandError | None:
     return None
 
 
-def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str, None] | tuple[None, CommandError]:
+def _require_candidate(world: ArchitectureWorldPort, name: str) -> tuple[str, None] | tuple[None, CommandError]:
     run_id = f"{PROPOSAL_PREFIX}{name}"
     if not world.has_run(run_id):
         return None, CommandError(
@@ -68,11 +67,11 @@ def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str, None] 
     return run_id, None
 
 
-def _candidate_runs(world: ArchitectureWorld) -> list[str]:
+def _candidate_runs(world: ArchitectureWorldPort) -> list[str]:
     return [rid for rid in world.list_runs() if rid.startswith(PROPOSAL_PREFIX)]
 
 
-def _candidate_status(world: ArchitectureWorld, run_id: str) -> str:
+def _candidate_status(world: ArchitectureWorldPort, run_id: str) -> str:
     try:
         fork = world.view(run_id)
     except (KeyError, RuntimeError):
@@ -93,7 +92,7 @@ class GovernanceApplicationService:
     Implements GovernanceCommandPort. All inbound adapters delegate here.
     """
 
-    def __init__(self, world: ArchitectureWorld) -> None:
+    def __init__(self, world: ArchitectureWorldPort) -> None:
         self._world = world
 
     def list_proposals(self) -> ProposalListResult:
@@ -208,7 +207,16 @@ class GovernanceApplicationService:
             structural_diff=diff_dict,
         )
 
-    def review_proposal(self, command: ProposalReviewCommand) -> ProposalReviewResult | CommandError:
+    def review_proposal(
+        self, command: ProposalReviewCommand, index=None
+    ) -> ProposalReviewResult | CommandError:
+        """Evaluate a proposal against fitness thresholds.
+
+        The ``index`` parameter is optional. When provided it must be an open
+        CodeIndex instance opened by the delivery layer (ARC-005: application
+        must not instantiate CodeIndex). When None, build_snapshot will report
+        INDEX_MISSING in the gate result.
+        """
         err = _require_main_world(self._world)
         if err is not None:
             return err
@@ -220,22 +228,16 @@ class GovernanceApplicationService:
         with self._world:
             fork = self._world.view(run_id)
             diff = structural_diff(self._world, fork)
-            index_path = fork.workspace / "code.sqlite"
-            index = CodeIndex(index_path).open() if index_path.exists() else None
-            try:
-                snapshot = build_snapshot(fork, code_index=index)
-                thresholds = FitnessThresholds(
-                    min_evidence_coverage=command.min_coverage,
-                    max_unknowns=command.max_unknowns,
-                    max_findings=command.max_findings,
-                    max_run_age_days=command.max_run_age_days,
-                )
-                result = evaluate_gate(
-                    fork, snapshot, thresholds=thresholds, ledger=RunLedger(), waivers=WaiverLedger()
-                )
-            finally:
-                if index is not None:
-                    index.close()
+            snapshot = build_snapshot(fork, code_index=index)
+            thresholds = FitnessThresholds(
+                min_evidence_coverage=command.min_coverage,
+                max_unknowns=command.max_unknowns,
+                max_findings=command.max_findings,
+                max_run_age_days=command.max_run_age_days,
+            )
+            result = evaluate_gate(
+                fork, snapshot, thresholds=thresholds, ledger=RunLedger(), waivers=WaiverLedger()
+            )
 
         diff_dict = {k: v for k, v in vars(diff).items()}
         diff_dict["is_empty"] = diff.is_empty()

@@ -64,7 +64,10 @@ def world(sandbox, repo):
 
 class TestAgentBootstrap:
     def test_assembles_coherent_starting_state(self, world):
-        boot = bootstrap_agent(world)
+        # No CodeIndex provided -> delivery layer is responsible for opening
+        # and passing it. Here we pass None explicitly to test the "no index"
+        # path (ARC-005: application must not instantiate CodeIndex).
+        boot = bootstrap_agent(world, index=None)
         assert boot.schema == BOOTSTRAP_SCHEMA
         assert boot.snapshot.snapshot_id.startswith("snap-")
         assert boot.session.status == "ACTIVE"
@@ -87,19 +90,19 @@ class TestAgentBootstrap:
         assert len(custom.context_pack.architecture["elements"]) == 1
 
     def test_suggestions_reflect_state(self, world):
-        boot = bootstrap_agent(world)
+        boot = bootstrap_agent(world, index=None)
         # no code index open -> INDEX_MISSING expected
         assert any(s.reason_code == "INDEX_MISSING"
                    for s in boot.suggestions)
 
     def test_world_event_log_untouched(self, world):
         before = len(world.graph.events)
-        bootstrap_agent(world)
-        bootstrap_agent(world)
+        bootstrap_agent(world, index=None)
+        bootstrap_agent(world, index=None)
         assert len(world.graph.events) == before
 
     def test_extra_fields_forbidden(self, world):
         from pydantic import ValidationError
-        boot = bootstrap_agent(world)
+        boot = bootstrap_agent(world, index=None)
         with pytest.raises(ValidationError):
             type(boot)(**{**boot.model_dump(), "extra": 1})

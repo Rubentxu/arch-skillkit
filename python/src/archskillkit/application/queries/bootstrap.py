@@ -54,25 +54,25 @@ def bootstrap_agent(world, index=None, query: ContextQuery | None = None,
                     store: AgentSessionStore | None = None,
                     ) -> AgentBootstrap:
     """Compile the agent's starting state in one deterministic shot.
-    Without an explicit index, the workspace code index is opened for
-    the call (an absent index degrades to an empty one, and status
-    reports INDEX_MISSING instead of failing)."""
-    own_index = index is None
-    if own_index:
-        from archskillkit.codeindex import CodeIndex
 
-        index = CodeIndex(world.workspace / "code.sqlite").open()
-    try:
-        status = get_status(world, code_index=index)
-        effective_query = query or ContextQuery(
-            goal=f"project overview: {world.project_name}")
-        pack = compile_context(_compiler_for(world, index),
-                               effective_query)
-        session = open_agent_session(world, index, scope=scope,
-                                     budget=session_budget, store=store)
-    finally:
-        if own_index:
-            index.close()
+    The ``index`` parameter is required — the caller (delivery layer) opens
+    the CodeIndex and passes the open instance. Passing ``None`` signals
+    "no index available" (ARC-005: application must not instantiate
+    CodeIndex); status will report INDEX_MISSING and a minimal context pack
+    is returned rather than a code-enriched one.
+    """
+    status = get_status(world, code_index=index)
+    effective_query = query or ContextQuery(
+        goal=f"project overview: {world.project_name}")
+    if index is None:
+        # ARC-005: cannot instantiate CodeIndex in application layer.
+        # Return a minimal pack without code enrichment; status carries
+        # the INDEX_MISSING suggestion so the caller knows to run discover.
+        pack = ContextPack(goal=effective_query.goal, intent="overview")
+    else:
+        pack = compile_context(_compiler_for(world, index), effective_query)
+    session = open_agent_session(world, index, scope=scope,
+                                 budget=session_budget, store=store)
     return AgentBootstrap(
         project_id=world.project_id,
         project_name=world.project_name,

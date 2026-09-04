@@ -526,7 +526,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                     max_run_age_days=arguments.get("max_run_age_days", 30),
                     require_pass=arguments.get("require_pass", False),
                 )
-                result = service.review_proposal(cmd)
+                result = service.review_proposal(cmd, index=None)  # delivery layer has no CodeIndex
                 if hasattr(result, "error"):
                     return _envelope(_envelope_or_error(result.model_dump()))
                 return _envelope(result.model_dump())

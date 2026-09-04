@@ -155,6 +155,7 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Evaluate fitness gate + structural diff against the candidate."""
     from archskillkit.application.commands.governance import GovernanceApplicationService
     from archskillkit.application.models.governance import ProposalReviewCommand
+    from archskillkit.codeindex import CodeIndex
 
     service = GovernanceApplicationService(world)
     cmd = ProposalReviewCommand(
@@ -165,7 +166,19 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
         max_run_age_days=args.max_run_age_days,
         require_pass=args.require_pass,
     )
-    result = service.review_proposal(cmd)
+    # Delivery layer opens the CodeIndex (ARC-005: application must not).
+    fork_run = f"proposal-{args.name}"
+    index = None
+    if world.has_run(fork_run):
+        with world:
+            fork = world.view(fork_run)
+            index_path = fork.workspace / "code.sqlite"
+            index = CodeIndex(index_path).open() if index_path.exists() else None
+    try:
+        result = service.review_proposal(cmd, index=index)
+    finally:
+        if index is not None:
+            index.close()
     if hasattr(result, "error"):
         err = result
         print(json.dumps(err.model_dump()), file=sys.stderr)
