@@ -52,6 +52,7 @@ def bootstrap_agent(world, index=None, query: ContextQuery | None = None,
                     budget: dict | None = None,
                     session_budget: dict | None = None,
                     store: AgentSessionStore | None = None,
+                    delta=None,
                     ) -> AgentBootstrap:
     """Compile the agent's starting state in one deterministic shot.
 
@@ -60,6 +61,10 @@ def bootstrap_agent(world, index=None, query: ContextQuery | None = None,
     "no index available" (ARC-005: application must not instantiate
     CodeIndex); status will report INDEX_MISSING and a minimal context pack
     is returned rather than a code-enriched one.
+
+    When ``delta`` (ArchitectureDelta) is provided, the context compiler
+    uses it to weight elements: added/changed elements are ranked higher,
+    removed elements lower (M6 delta-aware context).
     """
     status = get_status(world, code_index=index)
     effective_query = query or ContextQuery(
@@ -70,7 +75,8 @@ def bootstrap_agent(world, index=None, query: ContextQuery | None = None,
         # the INDEX_MISSING suggestion so the caller knows to run discover.
         pack = ContextPack(goal=effective_query.goal, intent="overview")
     else:
-        pack = compile_context(_compiler_for(world, index), effective_query)
+        pack = compile_context(
+            _compiler_for(world, index), effective_query, delta=delta)
     session = open_agent_session(world, index, scope=scope,
                                  budget=session_budget, store=store)
     return AgentBootstrap(

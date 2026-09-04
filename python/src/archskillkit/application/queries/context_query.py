@@ -28,9 +28,21 @@ class ContextQuery(BaseModel):
     budget: Budget = Field(default_factory=Budget)
 
 
-def compile_context(compiler: ContextCompiler,
-                    query: ContextQuery) -> ContextPack:
+def compile_context(
+    compiler: ContextCompiler,
+    query: ContextQuery,
+    delta=None,
+) -> ContextPack:
     """Run a typed query through the compiler. Read-only: compiling
-    never mutates the world."""
-    return compiler.compile(goal=query.goal, subject=query.subject,
-                            budget=query.budget)
+    never mutates the world.
+
+    When ``delta`` (ArchitectureDelta) is provided, the compiler uses it
+    to weight elements: added/changed elements are ranked higher, removed
+    elements are ranked lower (M6 delta-aware context).
+    """
+    return compiler.compile(
+        goal=query.goal,
+        subject=query.subject,
+        budget=query.budget,
+        delta=delta,
+    )

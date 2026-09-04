@@ -13,11 +13,15 @@ The compiler is read-only: compiling never mutates the world.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from archskillkit.codeindex import CodeIndex
 from archskillkit.world import ArchitectureWorld
+
+if TYPE_CHECKING:
+    from archskillkit.application.queries.delta import ArchitectureDelta
 
 SNIPPET_CONTEXT_LINES = 3
 
@@ -81,8 +85,21 @@ class ContextCompiler:
         self._source_file_reads = 0
         self._source_bytes_read = 0
 
-    def compile(self, goal: str, subject: str | None = None,
-                budget: Budget | None = None) -> ContextPack:
+    def compile(
+        self,
+        goal: str,
+        subject: str | None = None,
+        budget: Budget | None = None,
+        delta: ArchitectureDelta | None = None,
+    ) -> ContextPack:
+        """Compile a context pack for the given goal.
+
+        When ``delta`` is provided (e.g., an ArchitectureDelta between main
+        and a proposal fork), elements that are added or changed in the delta
+        receive a positive score boost, and removed elements receive a penalty.
+        This makes the context delta-aware: agents reviewing a proposal see
+        elements that are new or modified ranked higher (M6 deliverable).
+        """
         budget = budget or Budget()
         self._compiler_calls += 1
         intent = classify_intent(goal)
@@ -105,9 +122,10 @@ class ContextCompiler:
         changed_files = frozenset(self.index.changed_files())
         evidence_files = self._evidence_files(relations)
         elements = self._ranked(
-            elements + neighbors, seeds=seed_ids, goal=goal,
+            elements, seeds=seed_ids, goal=goal,
             relations=relations, recent_names=recent_names,
-            changed_files=changed_files, evidence_files=evidence_files)
+            changed_files=changed_files, evidence_files=evidence_files,
+            delta=delta)
 
         # 8. budget: nodes first, then relations among the kept nodes
         elements = elements[:budget.max_nodes]
@@ -223,12 +241,14 @@ class ContextCompiler:
         return matched
 
     @staticmethod
-    def _ranked(elements: list[dict], *, seeds: set[str], goal: str,
-                relations: list[dict],
-                recent_names: frozenset[str] = frozenset(),
-                changed_files: frozenset[str] = frozenset(),
-                evidence_files: dict[str, frozenset[str]] | None = None,
-                ) -> list[dict]:
+    def _ranked(
+        elements: list[dict], *, seeds: set[str], goal: str,
+        relations: list[dict],
+        recent_names: frozenset[str] = frozenset(),
+        changed_files: frozenset[str] = frozenset(),
+        evidence_files: dict[str, frozenset[str]] | None = None,
+        delta: ArchitectureDelta | None = None,
+        ) -> list[dict]:
         """Deterministic relevance ranking (docs/v2/46, review P2):
         graph distance (seeds first), goal-term match, origin and
         confidence, centrality (relation degree), evidence count, recent
@@ -251,6 +271,17 @@ class ContextCompiler:
         origin_rank = {"DECLARED": 3, "DETECTED": 2, "INFERRED": 1}
         conf_rank = {"high": 3, "medium": 2, "low": 1}
 
+        # Delta-aware scoring: ArchitectureDelta informs element ranking.
+        # Elements added or changed in the delta get a boost; removed get a penalty.
+        # Names in delta are compared against element names (not IDs).
+        delta_added: frozenset[str] = frozenset()
+        delta_changed: frozenset[str] = frozenset()
+        delta_removed: frozenset[str] = frozenset()
+        if delta is not None:
+            delta_added = frozenset(a.lower() for a in delta.elements.added)
+            delta_changed = frozenset(c.lower() for c in delta.elements.changed)
+            delta_removed = frozenset(r.lower() for r in delta.elements.removed)
+
         def score(e: dict) -> tuple:
             data = e["data"]
             name = data["name"].lower()
@@ -269,6 +300,13 @@ class ContextCompiler:
             s += conf_rank.get(data.get("confidence"), 0) * 2
             s += min(degree.get(e["id"], 0), 5) * 2
             s += min(evidence.get(e["id"], 0), 5)
+            # Delta-aware boost (M6 deliverable: ArchitectureDelta informs ranking)
+            if name in delta_added:
+                s -= 35  # negative: smaller score = higher rank
+            elif name in delta_changed:
+                s -= 15
+            elif name in delta_removed:
+                s += 35  # positive: larger score = lower rank
             return (-s, data["name"])
 
         return sorted(elements, key=score)

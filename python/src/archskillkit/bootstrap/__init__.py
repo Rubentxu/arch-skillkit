@@ -177,13 +177,22 @@ class ArchSkillKitApplication:
         hits = self.index.search(query) if self.index else []
         return hits
 
-    def get_context(self, goal: str, subject: str | None = None, max_tokens: int = 1024):
-        """Compile a context pack for an agent goal."""
+    def get_context(self, goal: str, subject: str | None = None, max_tokens: int = 1024, delta=None):
+        """Compile a context pack for an agent goal.
+
+        When ``delta`` (ArchitectureDelta) is provided, elements added or
+        changed in the delta are ranked higher; removed elements are ranked
+        lower (M6 delta-aware context).
+        """
         from archskillkit.application.queries.context_query import ContextQuery
         from archskillkit.context import Budget, ContextCompiler
 
         compiler = ContextCompiler(self.world, self.index)
-        pack = compiler.compile(goal, subject=subject, budget=Budget(max_tokens=max_tokens))
+        pack = compiler.compile(
+            goal, subject=subject,
+            budget=Budget(max_tokens=max_tokens),
+            delta=delta,
+        )
         return pack
 
     def get_history(self, limit: int = 50, status: str | None = None):
