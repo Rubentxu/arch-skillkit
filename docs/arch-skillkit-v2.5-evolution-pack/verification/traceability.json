@@ -1,0 +1,84 @@
+{
+  "links": [
+    {
+      "adr": "ADR-0047",
+      "gates": [
+        "ARCH-DELIVERY-001"
+      ],
+      "requirement": "INV-12",
+      "uat": [
+        "UAT25-013",
+        "UAT25-014"
+      ]
+    },
+    {
+      "adr": "ADR-0046",
+      "gates": [
+        "APP-COVERAGE-001",
+        "ARCH-WIRING-001"
+      ],
+      "requirement": "INV-13",
+      "uat": [
+        "UAT25-020",
+        "UAT25-022"
+      ]
+    },
+    {
+      "adr": "ADR-0048",
+      "gates": [
+        "ARCH-ACTIVEGRAPH-001",
+        "ARCH-GRAPH-LEAK-001"
+      ],
+      "requirement": "INV-14",
+      "uat": [
+        "UAT25-030",
+        "UAT25-031",
+        "UAT25-032"
+      ]
+    },
+    {
+      "adr": "ADR-0051",
+      "gates": [
+        "ARCH-BASELINE-001"
+      ],
+      "requirement": "INV-15",
+      "uat": [
+        "UAT25-001",
+        "UAT25-002"
+      ]
+    },
+    {
+      "adr": "ADR-0050",
+      "gates": [
+        "DELTA-DET-001"
+      ],
+      "requirement": "INV-16",
+      "uat": [
+        "UAT25-044"
+      ]
+    },
+    {
+      "adr": "ADR-0049",
+      "gates": [
+        "PROVIDER-PROVENANCE-001"
+      ],
+      "requirement": "G5",
+      "uat": [
+        "UAT25-050",
+        "UAT25-051"
+      ]
+    },
+    {
+      "adr": "ADR-0054",
+      "gates": [
+        "LEARN-NO-AUTO-ACCEPT-001"
+      ],
+      "requirement": "G4",
+      "uat": [
+        "UAT25-070",
+        "UAT25-071"
+      ]
+    }
+  ],
+  "schema": "arch-skillkit/traceability-v1"
+}

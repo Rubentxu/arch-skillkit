@@ -1,0 +1,39 @@
+{
+  "$id": "arch-skillkit/metrics-v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "commit": {
+      "minLength": 7,
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "type": "object"
+    },
+    "schema": {
+      "const": "arch-skillkit/metrics-v1"
+    }
+  },
+  "required": [
+    "schema",
+    "commit",
+    "metrics"
+  ],
+  "type": "object"
+}

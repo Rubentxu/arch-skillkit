@@ -1,0 +1,143 @@
+{
+  "scenarios": [
+    {
+      "id": "UAT25-001",
+      "mandatory": true,
+      "milestone": "M0",
+      "title": "Reproducible architecture report"
+    },
+    {
+      "id": "UAT25-002",
+      "mandatory": true,
+      "milestone": "M0",
+      "title": "Baseline detects replacement debt"
+    },
+    {
+      "id": "UAT25-004",
+      "mandatory": true,
+      "milestone": "M0",
+      "title": "Clean wheel install"
+    },
+    {
+      "id": "UAT25-010",
+      "mandatory": true,
+      "milestone": "M1",
+      "title": "Candidate create parity"
+    },
+    {
+      "id": "UAT25-011",
+      "mandatory": true,
+      "milestone": "M1",
+      "title": "Candidate review parity"
+    },
+    {
+      "id": "UAT25-013",
+      "mandatory": true,
+      "milestone": "M1",
+      "title": "No delivery chaining"
+    },
+    {
+      "id": "UAT25-014",
+      "mandatory": true,
+      "milestone": "M1",
+      "title": "No stdout protocol"
+    },
+    {
+      "id": "UAT25-020",
+      "mandatory": true,
+      "milestone": "M2",
+      "title": "Central wiring"
+    },
+    {
+      "id": "UAT25-022",
+      "mandatory": true,
+      "milestone": "M2",
+      "title": "Delivery semantic parity"
+    },
+    {
+      "id": "UAT25-030",
+      "mandatory": true,
+      "milestone": "M3",
+      "title": "Forbidden ActiveGraph import"
+    },
+    {
+      "id": "UAT25-031",
+      "mandatory": true,
+      "milestone": "M3",
+      "title": "Structural graph leak detection"
+    },
+    {
+      "id": "UAT25-032",
+      "mandatory": true,
+      "milestone": "M3",
+      "title": "Replay semantics preserved"
+    },
+    {
+      "id": "UAT25-040",
+      "mandatory": true,
+      "milestone": "M4",
+      "title": "Empty delta"
+    },
+    {
+      "id": "UAT25-042",
+      "mandatory": true,
+      "milestone": "M4",
+      "title": "No-new-drift"
+    },
+    {
+      "id": "UAT25-044",
+      "mandatory": true,
+      "milestone": "M4",
+      "title": "Delta determinism"
+    },
+    {
+      "id": "UAT25-050",
+      "mandatory": true,
+      "milestone": "M5",
+      "title": "Provider parity baseline"
+    },
+    {
+      "id": "UAT25-051",
+      "mandatory": true,
+      "milestone": "M5",
+      "title": "Provider provenance"
+    },
+    {
+      "id": "UAT25-060",
+      "mandatory": true,
+      "milestone": "M6",
+      "title": "Context budget"
+    },
+    {
+      "id": "UAT25-062",
+      "mandatory": true,
+      "milestone": "M6",
+      "title": "Stale session"
+    },
+    {
+      "id": "UAT25-063",
+      "mandatory": true,
+      "milestone": "M6",
+      "title": "Unknown honesty"
+    },
+    {
+      "id": "UAT25-070",
+      "mandatory": true,
+      "milestone": "M7",
+      "title": "Sensor candidate only"
+    },
+    {
+      "id": "UAT25-071",
+      "mandatory": true,
+      "milestone": "M7",
+      "title": "Negative fixture rejection"
+    },
+    {
+      "id": "UAT25-073",
+      "mandatory": true,
+      "milestone": "M7",
+      "title": "Sensor ROI"
+    }
+  ],
+  "schema": "arch-skillkit/uat-plan-v2.5"
+}

@@ -149,6 +149,10 @@ class ArchitectureWorld:
     def record_evidence(self, evidence: EvidenceData) -> str:
         return self.graph.add_object("evidence", evidence.model_dump()).id
 
+    def add_object(self, object_type: str, data: dict) -> str:
+        """Add a typed object to the world graph. Returns the object id."""
+        return self.graph.add_object(object_type, data).id
+
     def propose_claim(self, claim: ClaimData) -> str:
         return self.claims.add(claim)
 

@@ -160,7 +160,7 @@ class _BridgeRelation:
         return ("relation", self.rel_type, self.from_caption, self.to_caption)
 
 
-def _parse_bridge_graph(graph: dict[str, Any]) -> tuple[
+def _parse_bridge_graph(data: dict[str, Any]) -> tuple[
     dict[tuple, _BridgeNode], dict[tuple, _BridgeRelation], list[UnsupportedChange]
 ]:
     """Parse a bridge-shaped graph into semantic cells + unsupported reports.
@@ -169,11 +169,11 @@ def _parse_bridge_graph(graph: dict[str, Any]) -> tuple[
     """
     unsupported: list[UnsupportedChange] = []
 
-    if not isinstance(graph, dict):
-        raise MalformedArrowsGraph("graph must be a JSON object")
+    if not isinstance(data, dict):
+        raise MalformedArrowsGraph("data must be a JSON object")
 
-    nodes_in = graph.get("nodes")
-    rels_in = graph.get("rels")
+    nodes_in = data.get("nodes")
+    rels_in = data.get("rels")
 
     if not isinstance(nodes_in, list):
         raise MalformedArrowsGraph("graph.nodes must be an array")

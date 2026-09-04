@@ -1,0 +1,195 @@
+{
+  "files": [
+    {
+      "bytes": 2962,
+      "path": "README.md",
+      "sha256": "6c43d44659ceec5880dc9c34db598cc9297b4e4aac85bbf0f912cf3665d8d277"
+    },
+    {
+      "bytes": 2809,
+      "path": "docs/v2/70-v2.5-summary.md",
+      "sha256": "c17ad7e1c6e4df6864a04cb5024ca0a7aad302ace603f7d34e5c35ea57b2b13c"
+    },
+    {
+      "bytes": 3124,
+      "path": "docs/v2/71-v2.5-product-goals-invariants.md",
+      "sha256": "d3f3a7ffd1a551567b9eb59f212e4ea52166d98554afb43235e185c3ba2b766e"
+    },
+    {
+      "bytes": 4473,
+      "path": "docs/v2/72-v2.5-target-architecture.md",
+      "sha256": "ca1a52d70baceb780962ab6c0757231201b4d11cb5c93271d9696343dcbc4052"
+    },
+    {
+      "bytes": 2161,
+      "path": "docs/v2/73-v2.5-application-api-composition-root.md",
+      "sha256": "6b36a96f1adf7a31c0e0ffdb1a9b2d5cac867a5204cc120d5e0ba3e6795a6b73"
+    },
+    {
+      "bytes": 2423,
+      "path": "docs/v2/74-v2.5-architectural-conformance-connascence.md",
+      "sha256": "adf674e8a5f327255ca5c5b240aa82318bcdce00d32f707168328409047d3253"
+    },
+    {
+      "bytes": 2009,
+      "path": "docs/v2/75-v2.5-code-intelligence-providers.md",
+      "sha256": "7188d8db75a7f5ea17e429afd4fe63f54d41b4a61f7f50be2fab718210100ebd"
+    },
+    {
+      "bytes": 1575,
+      "path": "docs/v2/76-v2.5-architecture-delta.md",
+      "sha256": "fb0790c8e7ae009fe4c990c54d43284f396b8cefc698f504d85654abdbe4aec7"
+    },
+    {
+      "bytes": 1261,
+      "path": "docs/v2/77-v2.5-control-plane-delivery.md",
+      "sha256": "415505a6bb9c7f79a748b4cc639e67f96607f804156db635d3c0223ba3ecc97b"
+    },
+    {
+      "bytes": 912,
+      "path": "docs/v2/78-v2.5-extension-model.md",
+      "sha256": "71d80c51c8872941e8066b0a4572b3c6ce422a4fb301ce36af9565437aaf6eb8"
+    },
+    {
+      "bytes": 1097,
+      "path": "docs/v2/79-v2.5-learning-architecture.md",
+      "sha256": "009ccb8b5740303649beaa4b17889b315fd4a9ccad18b4ed0d60ead0580f8b2a"
+    },
+    {
+      "bytes": 1961,
+      "path": "docs/v2/80-v2.5-deterministic-verification.md",
+      "sha256": "cde43058af96054903ee1eccb7ad882a14c612655cfd080b090fdbb701f97638"
+    },
+    {
+      "bytes": 1839,
+      "path": "docs/v2/81-v2.5-metrics-quality-gates.md",
+      "sha256": "c5228f30cc4f1f8e962c686157dda35c641ccf70e9d6f07958b5b64426d87f42"
+    },
+    {
+      "bytes": 1926,
+      "path": "docs/v2/82-v2.5-test-strategy.md",
+      "sha256": "61e0a56fdd6a337d2040e4208d6618d3102452074e6e33fab967d41a20933e73"
+    },
+    {
+      "bytes": 2948,
+      "path": "docs/v2/83-v2.5-roadmap.md",
+      "sha256": "702f9cbd39f6b81d8b30425dc98871517c61a856fb5ade81ee31da798a5714c6"
+    },
+    {
+      "bytes": 1645,
+      "path": "docs/v2/84-v2.5-milestones.md",
+      "sha256": "1657fe0cf17b9e110509692468f2ad7d9f4cf3c047c63c648ccc7921e6332991"
+    },
+    {
+      "bytes": 4226,
+      "path": "docs/v2/85-v2.5-uat-plan.md",
+      "sha256": "631850b39c8e97d9ca5f359cefc9fa2f06054c212a9dbdfc3a9ee0d0b9ff6dcf"
+    },
+    {
+      "bytes": 1662,
+      "path": "docs/v2/86-v2.5-migration-plan.md",
+      "sha256": "74ec810593b61f36607b701a3e0d45c64415cd0e0c9ccea491d29b0ebea91826"
+    },
+    {
+      "bytes": 1063,
+      "path": "docs/v2/87-v2.5-backlog-deferred.md",
+      "sha256": "2e18484119420f8c5ee552b791e769473ed4ffb363b936f16f614113d5239c13"
+    },
+    {
+      "bytes": 659,
+      "path": "docs/v2/adr/ADR-0046-application-api-composition-root.md",
+      "sha256": "88f16a091b8f518d4433496f5e13c483065ddfa30991ed742f1f4223ae0df250"
+    },
+    {
+      "bytes": 391,
+      "path": "docs/v2/adr/ADR-0047-delivery-adapters-are-siblings.md",
+      "sha256": "4f24d0b3042325c18e94bbc6325ad4d51c5e8652ba468f7fb40fb7a70e598b9c"
+    },
+    {
+      "bytes": 603,
+      "path": "docs/v2/adr/ADR-0048-activegraph-anti-corruption-boundary.md",
+      "sha256": "a673c7c020d96c4df2f0384e22206b1ec4fcb16178eeb8b9b567cc9050c6313b"
+    },
+    {
+      "bytes": 398,
+      "path": "docs/v2/adr/ADR-0049-codegraph-query-port-provider-spi.md",
+      "sha256": "14d2a80f9699f9a7bcd03494bea19119a35ebce29bbbd68edd6ff08b80116d38"
+    },
+    {
+      "bytes": 344,
+      "path": "docs/v2/adr/ADR-0050-architecture-delta-first-class.md",
+      "sha256": "d41b34583190cf5e57dbf211b2e4889ddef8023a3b93012652e10aba52cf0f9b"
+    },
+    {
+      "bytes": 383,
+      "path": "docs/v2/adr/ADR-0051-deterministic-architecture-conformance.md",
+      "sha256": "1191cbbb5ff07eba429facdeb1cccccd4cf370ed80ba455b58b25e9a5e771b48"
+    },
+    {
+      "bytes": 309,
+      "path": "docs/v2/adr/ADR-0052-codeindex-strangler-decomposition.md",
+      "sha256": "d9fbc3d6f1e0bd11d1deb7fa514207bf19fa000952392bf1a8082a6369f27e3f"
+    },
+    {
+      "bytes": 360,
+      "path": "docs/v2/adr/ADR-0053-thin-control-plane.md",
+      "sha256": "224e6e9935b67b5af5665d0760e0d261d37ba67c6d7969f672de15df454c8796"
+    },
+    {
+      "bytes": 287,
+      "path": "docs/v2/adr/ADR-0054-learning-to-deterministic-sensors.md",
+      "sha256": "329e15732a4b584e79f0b1b98917e2d56276942974bf11edcce6ce16439ccf8f"
+    },
+    {
+      "bytes": 296,
+      "path": "docs/v2/adr/ADR-0055-federation-deferred-until-uat.md",
+      "sha256": "fca92fe6389ecd33928002639c9097c4e86453300d1d9cc9b3c7fba68181aa77"
+    },
+    {
+      "bytes": 372,
+      "path": "docs/v2/adr/ADR-0056-direct-dependencies-clean-wheel.md",
+      "sha256": "0b811b5556c8cedd8f89c1aba8a1ea08e4e1c81ed04525692b60369c5db5f090"
+    },
+    {
+      "bytes": 1730,
+      "path": "verification/README.md",
+      "sha256": "b396125f0f488d7052b5fba3ffff5e183c77c54b5c4e0dc62d3d239011df0518"
+    },
+    {
+      "bytes": 7154,
+      "path": "verification/arch_conformance.py",
+      "sha256": "d31b01914436c93aa2bb137f17247e5378d6f291a1f695c1ca4cf1eb19df6352"
+    },
+    {
+      "bytes": 180,
+      "path": "verification/architecture-baseline.example.json",
+      "sha256": "2509a1264ed07bed3ece4d9e40d9ffba9519f0480ef6e32c079fd79b4f06e6b0"
+    },
+    {
+      "bytes": 2879,
+      "path": "verification/architecture-contracts.json",
+      "sha256": "053d6ba130e20708775ad74a7786245138e5a80b129d3bd25425a3a5d18a4dce"
+    },
+    {
+      "bytes": 706,
+      "path": "verification/metrics.schema.json",
+      "sha256": "237d796a4eb8c64043bb1fb7585fedde61639fbe0bf720b1ce9642447abc14ec"
+    },
+    {
+      "bytes": 3128,
+      "path": "verification/quality-gates.json",
+      "sha256": "c3f27d7fb81a4386142bf549fc807f30a7f684c6e2775d86cc0654a2c8aba046"
+    },
+    {
+      "bytes": 1435,
+      "path": "verification/traceability.json",
+      "sha256": "1284fbf9e72d7ff1357b0b350ef3bd753a081ec4c46f368994bde9e48162aa1d"
+    },
+    {
+      "bytes": 2978,
+      "path": "verification/uat-v2.5-plan.json",
+      "sha256": "d0ee0d29c1e44229ae7ad7557e06fc74d5d89254a5a9c13ab6c84740364d4699"
+    }
+  ],
+  "schema": "arch-skillkit/v2.5-evolution-pack-manifest-v1"
+}

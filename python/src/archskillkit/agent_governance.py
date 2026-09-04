@@ -200,7 +200,7 @@ def record_proposal_metadata(world, run_id: str, metadata: ProposalMetadata) -> 
         )
         if existing:
             return existing[0]["id"]
-        obj_id = fork.graph.add_object(METADATA_OBJECT_TYPE, metadata.model_dump()).id
+        obj_id = fork.add_object(METADATA_OBJECT_TYPE, metadata.model_dump())
         # Force the fork's sqlite sink to commit before we close
         # the view. Without this, a follow-up read on a freshly
         # opened world can miss the row because the parent's
