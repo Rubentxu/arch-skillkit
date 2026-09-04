@@ -166,6 +166,11 @@
       "sha256": "2509a1264ed07bed3ece4d9e40d9ffba9519f0480ef6e32c079fd79b4f06e6b0"
     },
     {
+      "path": "verification/architecture-baseline.json",
+      "sha256": "0c54b7e283b24ef7991b013aeebef8a4d81bb93b6f4be6115a601c74ba708123",
+      "bytes": 20
+    },
+    {
       "bytes": 2879,
       "path": "verification/architecture-contracts.json",
       "sha256": "053d6ba130e20708775ad74a7786245138e5a80b129d3bd25425a3a5d18a4dce"
