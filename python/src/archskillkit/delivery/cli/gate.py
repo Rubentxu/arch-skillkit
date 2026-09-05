@@ -12,19 +12,11 @@ import argparse
 import json
 import sys
 
-from archskillkit.application.models.snapshot import ArchitectureSnapshot
-from archskillkit.application.queries.fitness import (
-    FitnessThresholds,
-    evaluate_gate,
-)
 from archskillkit.application.queries.report import (
     render_json,
     render_markdown,
     render_sarif,
 )
-from archskillkit.application.snapshot_builder import build_snapshot
-from archskillkit.runtime_state.run_ledger import RunLedger
-from archskillkit.runtime_state.waivers import WaiverLedger
 from archskillkit.world import ArchitectureWorld
 
 NAME = "gate"
@@ -48,29 +40,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    " stdout")
 
 
-def _evaluate(args: argparse.Namespace, world: ArchitectureWorld):
-    thresholds = FitnessThresholds(
-        min_evidence_coverage=args.min_coverage,
-        max_unknowns=args.max_unknowns,
-        max_findings=args.max_findings,
-        max_run_age_days=args.max_run_age_days,
-    )
-    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
-    app = getattr(world, "_arch_app", None)
-    index = app.index if app else None
-    ledger = RunLedger()  # state-root ledger; absence reads as empty
-    with world:
-        snapshot: ArchitectureSnapshot = build_snapshot(
-            world, code_index=index)
-        result = evaluate_gate(world, snapshot,
-                               thresholds=thresholds,
-                               ledger=ledger,
-                               waivers=WaiverLedger())
-    return result, snapshot
-
-
 def _render(args, result, snapshot) -> str:
-    project = world_project_label(args)
+    project = args.repo
     if args.format == "json":
         return render_json(result)
     if args.format == "markdown":
@@ -79,17 +50,24 @@ def _render(args, result, snapshot) -> str:
         + "\n"
 
 
-def world_project_label(args) -> str:
-    return args.repo
-
-
 def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     if not world.db_path.exists():
         print(f"error: no Architecture World for {world.project_id} "
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    result, snapshot = _evaluate(args, world)
+    # Route through Composition Root (M3 slice 3).
+    app = getattr(world, "_arch_app", None)
+    if app is None:
+        print(f"error: no application context for {world.project_id}",
+              file=sys.stderr)
+        return 1
+    result, snapshot = app.gate(
+        min_coverage=args.min_coverage,
+        max_unknowns=args.max_unknowns,
+        max_findings=args.max_findings,
+        max_run_age_days=args.max_run_age_days,
+    )
     rendered = _render(args, result, snapshot)
     if args.out:
         from pathlib import Path
