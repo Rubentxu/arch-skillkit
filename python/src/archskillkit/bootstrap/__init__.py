@@ -18,6 +18,43 @@ Or as a context manager::
 
     with ArchSkillKitApplication.for_repo("/path/to/repo") as app:
         result = app.status()
+
+Wrapper reference (21 wrappers total):
+
+=== Governance commands (M1) ===
+  app.list_proposals(command)           -> ProposalListResult
+  app.create_proposal(command)          -> ProposalCreateResult
+  app.diff_proposal(command)            -> ProposalDiffResult
+  app.review_proposal(command)         -> ProposalReviewResult
+  app.promote_proposal(command)        -> ProposalPromoteResult
+  app.reject_proposal(command)         -> ProposalRejectResult
+
+=== Simulation (M2) ===
+  app.simulate(command)                -> SimulationResult
+
+=== Replay fixture (M2) ===
+  app.replay_fixture(command)          -> ReplayResult
+
+=== Sensors (M2) ===
+  app.distill_sensors(command)         -> SensorDistillResult
+  app.promote_sensor(command)          -> SensorPromoteResult
+  app.reject_sensor(command)           -> SensorRejectResult
+
+=== Conformance mining (M2) ===
+  app.mine_conformance(command)        -> MineConformanceResult
+
+=== Read queries ===
+  app.status()                         -> StatusResult
+  app.explain(subject)                 -> Explanation
+  app.search_code(query)               -> list[CodeSearchHit]
+  app.get_context(goal, ...)         -> ContextPack
+  app.get_history(limit, status)     -> HistoryResult
+  app.evidence()                      -> EvidenceResult
+  app.coverage()                      -> CoverageResult
+  app.gaps(status)                    -> GapsResult
+  app.findings()                      -> FindingsResult
+  app.ask(question)                   -> (intent, AnswerResult)
+  app.gate(...)                       -> (GateResult, Snapshot)
 """
 
 from __future__ import annotations
@@ -209,9 +246,9 @@ class ArchSkillKitApplication:
 
     def gaps(self, status: str | None = None):
         """Knowledge gaps."""
-        from archskillkit.application.queries.gaps_query import get_gaps
+        from archskillkit.application.queries.gaps_query import get_knowledge_gaps
 
-        return get_gaps(self.world, status=status)
+        return get_knowledge_gaps(self.world, status=status)
 
     def findings(self):
         """Architecture findings."""
@@ -259,3 +296,53 @@ class ArchSkillKitApplication:
             waivers=WaiverLedger(),
         )
         return result, snapshot
+
+    # -- simulation (M2) -----------------------------------------------
+
+    def simulate(self, command):
+        """Apply a counterfactual change to a throwaway fork and evaluate the policy gate."""
+        from archskillkit.application.commands.simulation import SimulationApplicationService
+
+        service = SimulationApplicationService(self.world, code_index=self.index)
+        return service.simulate(command)
+
+    # -- replay fixture (M2) -------------------------------------------
+
+    def replay_fixture(self, command, *, env=None):
+        """Replay a captured scanner-payload fixture end to end."""
+        from archskillkit.application.commands.replay import ReplayApplicationService
+
+        service = ReplayApplicationService()
+        return service.replay_fixture(command, env=env)
+
+    # -- sensors (M2) -------------------------------------------------
+
+    def distill_sensors(self, command):
+        """Detect repeated LLM inferences and propose SensorCandidates."""
+        from archskillkit.application.commands.sensors import SensorApplicationService
+
+        service = SensorApplicationService(self.world)
+        return service.distill_sensors(command)
+
+    def promote_sensor(self, command):
+        """Promote a SensorCandidate to a deterministic sensor rule."""
+        from archskillkit.application.commands.sensors import SensorApplicationService
+
+        service = SensorApplicationService(self.world)
+        return service.promote_sensor(command)
+
+    def reject_sensor(self, command):
+        """Reject a SensorCandidate."""
+        from archskillkit.application.commands.sensors import SensorApplicationService
+
+        service = SensorApplicationService(self.world)
+        return service.reject_sensor(command)
+
+    # -- conformance mining (M2) ---------------------------------------
+
+    def mine_conformance(self, command):
+        """Mine repeated architectural patterns and propose conformance rule candidates."""
+        from archskillkit.application.commands.conformance import ConformanceApplicationService
+
+        service = ConformanceApplicationService(self.world)
+        return service.mine_conformance(command)
