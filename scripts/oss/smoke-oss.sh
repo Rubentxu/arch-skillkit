@@ -255,10 +255,10 @@ main() {
 
   # Cleanup audit
   if [ -x "$CLEANUP_AUDIT" ]; then
-    if ! "$CLEANUP_AUDIT"; then
+    WORK="$WORK" "$CLEANUP_AUDIT" || {
       log "cleanup audit FAILED"
       verdict="PARTIAL"
-    fi
+    }
   fi
 
   ended_ts="$(date -u +%s)"

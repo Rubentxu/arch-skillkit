@@ -37,8 +37,13 @@ else
   CHECKS_FAILED=1
 fi
 
-# Check 2: /tmp directories
-TMP_RESULT=$(find /tmp -maxdepth 1 -name 'ark-smoke-*' -type d 2>/dev/null || echo "ERROR")
+# Check 2: /tmp directories (optionally exclude current WORK dir)
+EXCLUDE_WORKDIR="${WORK:-}"
+if [ -n "$EXCLUDE_WORKDIR" ] && [ -d "$EXCLUDE_WORKDIR" ]; then
+  TMP_RESULT=$(find /tmp -maxdepth 1 -name 'ark-smoke-*' -type d ! -path "$EXCLUDE_WORKDIR" 2>/dev/null || echo "ERROR")
+else
+  TMP_RESULT=$(find /tmp -maxdepth 1 -name 'ark-smoke-*' -type d 2>/dev/null || echo "ERROR")
+fi
 if [ "$TMP_RESULT" = "ERROR" ]; then
   TMP_STATUS="error"
   TMP_OUTPUT="find command failed"
