@@ -35,9 +35,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from archskillkit.agent_governance import get_proposal_metadata
-from archskillkit.delivery.cli.proposals import (
-    handle_diff,
-    handle_review,
+from archskillkit.application.commands.governance import GovernanceApplicationService
+from archskillkit.application.models.governance import (
+    CommandError,
+    ProposalDiffCommand,
+    ProposalReviewCommand,
 )
 from archskillkit.world import ArchitectureWorld
 
@@ -143,29 +145,22 @@ def _candidate_diff_and_verdict(
     world: ArchitectureWorld, candidate_name: str
 ) -> tuple[dict, bool, str]:
     """Return ``(diff_dict, review_pass, gate_verdict)`` for the
-    named candidate. Reuses the same handlers ``arch_propose_diff``
-    and ``arch_propose_review`` expose — no duplicated logic.
+    named candidate. Direct call to GovernanceApplicationService;
+    no cross-CLI round-trip or stdout capture.
     """
-    import argparse as _ap
+    service = GovernanceApplicationService(world)
 
-    diff_args = _ap.Namespace(name=candidate_name)
-    # handle_diff writes JSON to stdout; capture it.
-    import io
-    from contextlib import redirect_stdout
-
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        rc = handle_diff(diff_args, world)
-    if rc != 0:
+    diff_cmd = ProposalDiffCommand(name=candidate_name)
+    diff_result = service.diff_proposal(diff_cmd)
+    if isinstance(diff_result, CommandError):
         raise CandidateReplayError(
             "DIFF_FAILED",
-            f"handle_diff returned {rc} for {candidate_name!r}",
+            f"diff_proposal returned {diff_result.error}: {diff_result.message}",
             candidate=candidate_name,
         )
-    diff_envelope = json.loads(buf.getvalue())
-    diff_dict = diff_envelope.get("structural_diff", {})
+    diff_dict = diff_result.structural_diff
 
-    review_args = _ap.Namespace(
+    review_cmd = ProposalReviewCommand(
         name=candidate_name,
         min_coverage=0.8,
         max_unknowns=0,
@@ -173,15 +168,14 @@ def _candidate_diff_and_verdict(
         max_run_age_days=30,
         require_pass=False,
     )
-    buf2 = io.StringIO()
-    with redirect_stdout(buf2):
-        rc2 = handle_review(review_args, world)
-    review_envelope: dict[str, Any] = {}
-    if rc2 == 0:
-        review_envelope = json.loads(buf2.getvalue())
-    gate = review_envelope.get("gate") or {}
-    verdict = gate.get("verdict") or "unknown"
-    passed = bool(review_envelope.get("pass", False))
+    review_result = service.review_proposal(review_cmd, index=None)
+    if isinstance(review_result, CommandError):
+        passed = False
+        verdict = "unknown"
+    else:
+        gate = review_result.gate or {}
+        verdict = gate.get("verdict") or "unknown"
+        passed = verdict == "pass"
     return diff_dict, passed, verdict
 
 
@@ -220,12 +214,15 @@ def _resolve_run_id(
     """Mirror ``_require_candidate`` from proposals.py without the
     stdout prints. Returns ``(run_id, error_envelope)`` — exactly
     one is non-None."""
-    from archskillkit.delivery.cli.proposals import (
-        _require_candidate,
-    )
-
-    run_id, err = _require_candidate(world, name)
-    return run_id, err
+    run_id = f"proposal-{name}"
+    if not world.has_run(run_id):
+        return None, {
+            "error": "CANDIDATE_NOT_FOUND",
+            "message": f"no candidate '{name}' (run: archskillkit proposals create --name {name})",
+            "name": name,
+            "run_id": run_id,
+        }
+    return run_id, None
 
 
 def _diff_keys_differs(expected: dict, actual: dict) -> dict[str, Any]:
