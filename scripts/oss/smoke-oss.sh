@@ -55,7 +55,7 @@ resolve_ast_grep() {
   fi
   # Try mise installs (github-ast-grep-ast-grep plugin)
   local candidates
-  candidates="$(ls "$HOME"/.local/share/mise/installs/github-ast-grep-ast-grep/*/ast-grep 2>/dev/null | sort -V | tail -1)" || true
+  candidates="$(find "$HOME"/.local/share/mise/installs/github-ast-grep-ast-grep -maxdepth 2 -name 'ast-grep' -type f 2>/dev/null | sort -V | tail -1)" || true
   if [ -n "$candidates" ] && [ -x "$candidates" ]; then
     AST_GREP_BIN="$candidates"
     return 0
@@ -74,7 +74,7 @@ resolve_likec4() {
   # Try mise npm-likec4
   if [ -z "$LIKEC4_BIN" ]; then
     local likec4_candidates
-    likec4_candidates="$(ls "$HOME"/.local/share/mise/installs/npm-likec4/*/node_modules/.bin/likec4 2>/dev/null | sort -V | tail -1)" || true
+    likec4_candidates="$(find "$HOME"/.local/share/mise/installs/npm-likec4 -maxdepth 3 -name 'likec4' -type f 2>/dev/null | sort -V | tail -1)" || true
     if [ -n "$likec4_candidates" ] && [ -x "$likec4_candidates" ]; then
       LIKEC4_BIN="$likec4_candidates"
     fi
@@ -175,8 +175,7 @@ pin_refresh() {
 WORK="${WORK:-$(mktemp -d /tmp/ark-smoke-XXXX)}"
 REPO="$WORK/repo"
 
-# cleanup() is invoked via trap EXIT INT TERM — SC2329 false positive
-# shellcheck disable=SC2329
+# cleanup() is invoked via trap EXIT INT TERM
 cleanup() {
   local rc=$?
   log "cleanup trap: removing WORK=$WORK"
@@ -184,21 +183,6 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
-
-cleanup_with_grace() {
-  local pid=$1
-  log "cleanup_with_grace: SIGTERM sent, waiting 30s for pid $pid"
-  local count=0
-  while kill -0 "$pid" 2>/dev/null && [ "$count" -lt 30 ]; do
-    sleep 1
-    count=$((count + 1))
-  done
-  if kill -0 "$pid" 2>/dev/null; then
-    log "cleanup_with_grace: pid $pid still alive after 30s, SIGKILL"
-    kill -9 "$pid" 2>/dev/null || true
-  fi
-  log "cleanup_with_grace: done"
-}
 
 # ---- verdict derivation (deterministic) ----------------------------
 # Derives verdict from hard invariants:
@@ -599,13 +583,13 @@ YAMLEOF
 
 ## Checklist
 
-- $command_exit_text
-- $prose_present_text
-- $sha_bound_text
+- [x] $command_exit_text
+- [x] $prose_present_text
+- [x] $sha_bound_text
 
 ## Artifacts
 
-$(printf '%s\n' "$artifacts_list" | tr ',' '\n' | sed 's/^/- `/;s/$/`/')
+$(printf '%s\n' "$artifacts_list" | tr ',' '\n' | awk '{printf "- `%s`\n", $0}')
 
 INDEXEOF
     log "wrote $SLOT_DIR/RUN_INDEX.md FINAL (STEP 4)"
