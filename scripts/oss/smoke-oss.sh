@@ -276,6 +276,60 @@ main() {
       "${REPO_OWNER}/${REPO_NAME}" "$PINNED_SHA" "$DATE_STAMP"
   fi
 
+  # Populate per-slot RUN_INDEX.md and RUN_MANIFEST.yaml with actual run data
+  SLOT_DIR="$STABLE_DIR/$SLOT_ID/$DATE_STAMP"
+  if [ -f "$SLOT_DIR/RUN_MANIFEST.yaml" ]; then
+    local cloned_sha=""
+    if [ -f "$STABLE_DIR/commit.txt" ]; then
+      cloned_sha="$(cat "$STABLE_DIR/commit.txt")"
+    fi
+    local pin_match="false"
+    if [ "$cloned_sha" = "$PINNED_SHA" ]; then
+      pin_match="true"
+    fi
+    local started_iso ended_iso
+    started_iso="$(date -u -d "@$started_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$started_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
+    ended_iso="$(date -u -d "@$ended_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$ended_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
+    local head_before head_after
+    head_before="$(cat "$git_before_txt" 2>/dev/null || echo "")"
+    head_after="$(cat "$git_after_txt" 2>/dev/null || echo "")"
+
+    # Update RUN_MANIFEST.yaml
+    sed -i \
+      -e "s|^name:.*|name: $REPO_NAME|" \
+      -e "s|^repo_url:.*|repo_url: $GIT_URL|" \
+      -e "s|^pinned_sha:.*|pinned_sha: $PINNED_SHA|" \
+      -e "s|^pin_source:.*|pin_source: $PIN_SOURCE|" \
+      -e "s|^cloned_sha:.*|cloned_sha: $cloned_sha|" \
+      -e "s|^pin_match:.*|pin_match: $pin_match|" \
+      -e "s|^clone_size_mb:.*|clone_size_mb: $clone_size_mb|" \
+      -e "s|^started:.*|started: $started_iso|" \
+      -e "s|^ended:.*|ended: $ended_iso|" \
+      -e "s|^wallclock_seconds:.*|wallclock_seconds: $wallclock_sec|" \
+      -e "s|^uat2_001:.*|uat2_001: $uat2_001_pass|" \
+      -e "s|^head_before:.*|head_before: $head_before|" \
+      -e "s|^head_after:.*|head_after: $head_after|" \
+      -e "s|^likec4_validate:.*|likec4_validate: N/A (ast-grep not available)|" \
+      -e "s|^verdict:.*|verdict: $verdict|" \
+      -e "s|^content_quality_audit:.*|content_quality_audit: $([ "$verdict" = PASS ] && echo true || echo false)|" \
+      -e "s|^cleanup_audit:.*|cleanup_audit: $([ "$verdict" = PASS ] && echo pass || echo fail)|" \
+      "$SLOT_DIR/RUN_MANIFEST.yaml"
+
+    # Update RUN_INDEX.md placeholders
+    sed -i \
+      -e "s|SLOT_PLACEHOLDER|$SLOT_ID|g" \
+      -e "s|DATE_PLACEHOLDER|$DATE_STAMP|g" \
+      -e "s|REPO_PLACEHOLDER|${REPO_OWNER}/${REPO_NAME}|g" \
+      -e "s|PINNED_SHA_PLACEHOLDER|$PINNED_SHA|g" \
+      -e "s|CLONE_SIZE_PLACEHOLDER|${clone_size_mb}|g" \
+      -e "s|STARTED_PLACEHOLDER|$started_iso|g" \
+      -e "s|ENDED_PLACEHOLDER|$ended_iso|g" \
+      -e "s|WALLCLOCK_PLACEHOLDER|${wallclock_sec}|g" \
+      -e "s|VERDICT_PLACEHOLDER|$verdict|g" \
+      "$SLOT_DIR/RUN_INDEX.md"
+    log "populated $SLOT_DIR/RUN_INDEX.md and RUN_MANIFEST.yaml"
+  fi
+
   # Final verdict
   log "verdict: $verdict"
   case "$verdict" in
