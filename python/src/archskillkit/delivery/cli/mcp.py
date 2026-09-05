@@ -8,7 +8,7 @@ Admin tools implement the candidate -> review -> promote workflow
 and are gated behind ARCH_SKILLKIT_ADMIN=1 / --admin (V2.4 M4,
 docs/v2/59 M4 acceptance: "admin disabled by default"). When the
 gate is off, admin tools are not listed AND any call to them
-returns the stable ADMIN_DISABLED code via McpError so the wire
+returns the stable ADMIN_DISABLED code via MCPError so the wire
 layer marks isError=True.
 
 Every tool emits a schema-bound JSON envelope. Tool names are
@@ -114,13 +114,13 @@ def _envelope(payload: dict | list | str) -> list[_TextContentT]:
 
 
 def _envelope_or_error(envelope: dict[str, Any]) -> dict[str, Any]:
-    """Pass through the proposal envelope; raise McpError on `error`
+    """Pass through the proposal envelope; raise MCPError on `error`
     field so wire layer reports isError=True with a stable code."""
     from mcp.shared.exceptions import McpError
     from mcp.types import ErrorData
 
     if "error" in envelope:
-        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
     return envelope
 
 
@@ -178,26 +178,43 @@ def _handle_admin_skill_registry(
 def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) -> dict[str, Any]:
     """Apply a counterfactual change to a throwaway fork.
 
-    Delegates to ``delivery.cli.simulate.run`` so wire calls reuse
-    the same logic (fork, apply verb, evaluate gate, drop fork,
+    Routes through the Composition Root so wire calls reuse the same
+    logic as the CLI (fork, apply verb, evaluate gate, drop fork,
     assert base digest unchanged). On SimulationError (unknown
-    element, invalid category, base-mutated), raises McpError so
+    element, invalid category, base-mutated), raises MCPError so
     the wire layer marks ``isError=True`` with a stable code in the
     envelope data.
     """
-    from archskillkit.delivery.cli.simulate import SimulationError, run
+    from archskillkit.application.models.simulation import SimulationCommand
+
+    app = getattr(world, "_arch_app", None)
+    if app is None:
+        envelope = {
+            "schema": "arch-skillkit/simulation-result-v1",
+            "error": "NO_APP_CONTEXT",
+            "message": f"no application context for {world.project_id}",
+        }
+        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
 
     verb = arguments.get("verb", "")
-    payload: dict[str, Any] = {"verb": verb}
     if verb == "relation_add":
-        payload["source"] = arguments.get("source", "")
-        payload["target"] = arguments.get("target", "")
-        payload["kind"] = arguments.get("kind", "depends_on")
+        cmd = SimulationCommand(
+            verb=verb,
+            source=arguments.get("source", ""),
+            target=arguments.get("target", ""),
+            kind=arguments.get("kind", "depends_on"),
+        )
     elif verb == "move":
-        payload["element"] = arguments.get("element", "")
-        payload["to"] = arguments.get("to", "")
+        cmd = SimulationCommand(
+            verb=verb,
+            element=arguments.get("element", ""),
+            to=arguments.get("to", ""),
+        )
     elif verb == "delete":
-        payload["element"] = arguments.get("element", "")
+        cmd = SimulationCommand(
+            verb=verb,
+            element=arguments.get("element", ""),
+        )
     else:
         envelope = {
             "schema": "arch-skillkit/simulation-result-v1",
@@ -205,10 +222,15 @@ def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) 
             "message": f"unknown verb {verb!r}; expected one of relation_add, move, delete",
         }
         _raise_mcp_error(envelope)
+    app = _app()
     try:
-        result = run(world, verb, **{k: v for k, v in payload.items() if k != "verb"})
-    except SimulationError as exc:
-        envelope = exc.to_envelope()
+        result = app.simulate(cmd)
+    except Exception as exc:
+        from archskillkit.application.commands.simulation import SimulationError
+        envelope = exc.to_envelope() if isinstance(exc, SimulationError) else {
+            "error": "INTERNAL_ERROR",
+            "message": str(exc),
+        }
         _raise_mcp_error(envelope)
     return result.model_dump()
 
@@ -474,7 +496,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> _ServerT:
     ) -> list[_TextContentT]:
         # Admin gate: any tool name in the admin set MUST be refused
         # when admin is off, even if the client tries to call it
-        # directly without listing first. We raise McpError so the
+        # directly without listing first. We raise MCPError so the
         # SDK marks isError=True on the wire; the envelope (with the
         # stable ADMIN_DISABLED code) is serialised as the message
         # so any consumer can parse it.
@@ -486,24 +508,24 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> _ServerT:
         # name) here would block the read-only tools, which is the
         # opposite of the documented behaviour.
 
-        # arch_replay_fixture does not need the world: it operates
-        # on a captured fixture dir. Handle it before opening the
-        # world so the sandbox repo (built by the replay) stays
-        # isolated from the live project.
+        # arch_replay_fixture: route through the Composition Root
+        # so wire calls reuse exactly the same logic as the CLI.
         if name == "arch_replay_fixture":
-            from archskillkit.delivery.cli.replay_fixture import (
-                ReplayFixtureError,
-            )
-            from archskillkit.delivery.cli.replay_fixture import (
-                run as replay_run,
-            )
+            from archskillkit.application.commands.replay import ReplayApplicationService
+            from archskillkit.application.models.replay import ReplayFixtureCommand
 
             fixture_dir = arguments.get("fixture_dir", "")
             write_golden = bool(arguments.get("write_golden", False))
+            cmd = ReplayFixtureCommand(fixture_dir=fixture_dir, write_golden=write_golden)
+            service = ReplayApplicationService()
             try:
-                result = replay_run(fixture_dir, write_golden=write_golden)
-            except ReplayFixtureError as exc:
-                envelope = exc.to_envelope()
+                result = service.replay_fixture(cmd)
+            except Exception as exc:
+                from archskillkit.application.commands.replay import ReplayFixtureError
+                envelope = exc.to_envelope() if isinstance(exc, ReplayFixtureError) else {
+                    "error": "INTERNAL_ERROR",
+                    "message": str(exc),
+                }
                 _raise_mcp_error(envelope)
             return _envelope(result.model_dump())
 

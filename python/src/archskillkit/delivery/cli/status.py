@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 
+from archskillkit.application.queries.get_status import get_status
 from archskillkit.world import ArchitectureWorld
 
 NAME = "status"
@@ -29,12 +30,12 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    # Route through Composition Root (M3 slice 3).
+    # Route through Composition Root when app is available.
+    # Fall back to get_status for direct CLI invocation without app.
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
-    result = app.status()
+    if app is not None:
+        result = app.status()
+    else:
+        result = get_status(world, code_index=None)
     print(json.dumps(result.model_dump(), indent=2))
     return 0

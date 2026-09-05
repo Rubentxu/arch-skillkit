@@ -30,14 +30,20 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    # Route through Composition Root (M3 slice 3).
+    # Route through Composition Root when app is available.
+    # Fall back to direct ask for direct CLI invocation without app.
     app = getattr(world, "_arch_app", None)
-    if app is None or app.index is None:
+    index = app.index if app else None
+    if index is None:
         print(f"error: no code.sqlite for {world.project_id} "
               f"(run: archskillkit ingest-code --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    intent, result = app.ask(args.question)
+    if app is not None:
+        intent, result = app.ask(args.question)
+    else:
+        from archskillkit.application.queries.ask import ask
+        intent, result = ask(world, index, args.question)
     print(json.dumps({
         "schema": "arch-skillkit/ask-result-v1",
         "intent": intent.model_dump(),

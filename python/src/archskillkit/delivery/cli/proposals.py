@@ -109,11 +109,12 @@ def _require_candidate(world: ArchitectureWorld, name: str) -> tuple[str | None,
 def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """List all proposal-* runs in the world."""
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
-    result = app.list_proposals()
+    if app is not None:
+        result = app.list_proposals()
+    else:
+        # Fallback for direct CLI invocation without app bootstrap
+        service = GovernanceApplicationService(world)
+        result = service.list_proposals()
     print(json.dumps(result.model_dump(), indent=2))
     return 0
 
@@ -121,15 +122,15 @@ def handle_list(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Fork the base world into a candidate run."""
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
     prompt_name = getattr(args, "prompt_spec", None) or None
     skill_names = list(getattr(args, "skill", []) or [])
     cmd = ProposalCreateCommand(name=args.name, prompt_spec=prompt_name, skills=skill_names)
 
-    result = app.create_proposal(cmd)
+    if app is not None:
+        result = app.create_proposal(cmd)
+    else:
+        service = GovernanceApplicationService(world)
+        result = service.create_proposal(cmd)
     if hasattr(result, "error"):
         err = result
         print(json.dumps(err.model_dump()), file=sys.stderr)
@@ -141,12 +142,12 @@ def handle_create(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 def handle_diff(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Return the structural diff between base and the candidate."""
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
     cmd = ProposalDiffCommand(name=args.name)
-    result = app.diff_proposal(cmd)
+    if app is not None:
+        result = app.diff_proposal(cmd)
+    else:
+        service = GovernanceApplicationService(world)
+        result = service.diff_proposal(cmd)
     if hasattr(result, "error"):
         err = result
         print(json.dumps(err.model_dump()), file=sys.stderr)
@@ -193,12 +194,12 @@ def handle_review(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Promote a candidate to base; records approval first."""
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
     cmd = ProposalPromoteCommand(name=args.name, approved_by=args.approved_by)
-    result = app.promote_proposal(cmd)
+    if app is not None:
+        result = app.promote_proposal(cmd)
+    else:
+        service = GovernanceApplicationService(world)
+        result = service.promote_proposal(cmd)
     if hasattr(result, "error"):
         err = result
         print(json.dumps(err.model_dump()), file=sys.stderr)
@@ -210,12 +211,12 @@ def handle_promote(args: argparse.Namespace, world: ArchitectureWorld) -> int:
 def handle_reject(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     """Mark a candidate as rejected; does not mutate base."""
     app = getattr(world, "_arch_app", None)
-    if app is None:
-        print(f"error: no application context for {world.project_id}",
-              file=sys.stderr)
-        return 1
     cmd = ProposalRejectCommand(name=args.name, actor=args.actor)
-    result = app.reject_proposal(cmd)
+    if app is not None:
+        result = app.reject_proposal(cmd)
+    else:
+        service = GovernanceApplicationService(world)
+        result = service.reject_proposal(cmd)
     if hasattr(result, "error"):
         err = result
         print(json.dumps(err.model_dump()), file=sys.stderr)
