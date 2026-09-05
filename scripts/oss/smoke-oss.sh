@@ -76,9 +76,9 @@ log() { printf '[smoke-oss:%s] %s\n' "$SLOT_ID" "$*"; }
 
 preflight_doctor() {
   local tool_missing=0
-  command -v gh >/dev/null 2>&1 || { log "WARN: gh not found"; tool_missing=1; }
-  command -v podman >/dev/null 2>&1 || { log "WARN: podman not found"; tool_missing=1; }
-  command -v ast-grep >/dev/null 2>&1 || { log "WARN: ast-grep not found"; tool_missing=1; }
+  command -v gh >/dev/null 2>&1 || { log "ERROR: gh not found"; tool_missing=1; }
+  command -v podman >/dev/null 2>&1 || { log "ERROR: podman not found"; tool_missing=1; }
+  command -v ast-grep >/dev/null 2>&1 || { log "WARN: ast-grep not found (optional for structural-only smoke)"; }
   if [ $tool_missing -eq 1 ]; then
     log "pre-flight FAILED: missing required tools"
     return 1
