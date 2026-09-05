@@ -146,26 +146,27 @@ regen_cross_slot() {
     fi
   done
 
-  # Read existing evidence_manifest_sha256 values from prior manifest.json (copy-through)
-  local -A evidence_sha_map=()
-  if [[ -f "$manifest_file" ]]; then
-    for run_id in "${canonical_runs[@]}"; do
-      local ev_sha
-      ev_sha=$(jq -r ".runs[] | select(.run_id == \"$run_id\") | .artifacts.manifest_txt_sha256 // empty" "$manifest_file" 2>/dev/null || true)
-      if [[ -n "$ev_sha" ]]; then
-        evidence_sha_map["$run_id"]="$ev_sha"
-      fi
-    done
-  fi
-
-  # Get entry count from first canonical run for UAT Step 6
+  # Get entry count from first canonical run for UAT Step 6 (D-4: dynamic slot+date resolution)
   local entry_count=0
+  local evidence_manifest_sha256=""
   if [[ ${#canonical_runs[@]} -gt 0 ]]; then
     local first_run="${canonical_runs[0]}"
     local first_run_dir="$stable_root/$first_run"
-    local ev_manifest="$first_run_dir/evidence/manifest.txt"
+    local slot_dir date_dir ev_manifest
+    slot_dir=$(find "$first_run_dir" -mindepth 1 -maxdepth 1 -type d -name 'slot*' | head -n 1)
+    if [[ -z "$slot_dir" ]]; then
+      printf '[smoke-aggregate] ERROR: no slot dir under %s\n' "$first_run_dir" >&2
+      return 1
+    fi
+    date_dir=$(find "$slot_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    if [[ -z "$date_dir" ]]; then
+      printf '[smoke-aggregate] ERROR: no date dir under %s\n' "$slot_dir" >&2
+      return 1
+    fi
+    ev_manifest="$slot_dir/$(basename "$date_dir")/evidence/manifest.txt"
     if [[ -f "$ev_manifest" ]]; then
       entry_count=$(grep -c '^[^[:space:]]' "$ev_manifest" 2>/dev/null || echo 0)
+      evidence_manifest_sha256=$(sha256sum "$ev_manifest" | awk '{print $1}')
     fi
   fi
 
@@ -182,6 +183,7 @@ regen_cross_slot() {
       --arg generated "$generated_at" \
       --arg root "$stable_root" \
       --argjson hashes "$(printf '%s\n' "${pre_hashes[@]}" | jq -Rs 'split("\n") | map(select(length > 0)) | map(split(":")) | from_entries')" \
+      --arg evidence_sha "$evidence_manifest_sha256" \
       '
       .generated = $generated
       | .stable_root = $root
@@ -190,6 +192,7 @@ regen_cross_slot() {
             .artifacts
             | .run_index_md_sha256 = ($hashes[.run_id + ":RUN_INDEX.md"] // .artifacts.run_index_md_sha256)
             | .run_manifest_yaml_sha256 = ($hashes[.run_id + ":RUN_MANIFEST.yaml"] // .artifacts.run_manifest_yaml_sha256)
+            | .manifest_txt_sha256 = (if $evidence_sha != "" then $evidence_sha else .artifacts.manifest_txt_sha256 end)
           )
         )
       ' \
@@ -343,6 +346,30 @@ UATEOF
   } > "$uat_tmp"
   mv -f "$uat_tmp" "$uat_file"
   printf '[smoke-aggregate] wrote %s\n' "$uat_file"
+
+  # ── Per-slot RUN_INDEX.md marker normalization (D-1/D-2/D-3) ───────────────
+  for run_id in "${canonical_runs[@]}"; do
+    local run_dir="$stable_root/$run_id"
+    local slot_dir date_dir run_index_file
+    slot_dir=$(find "$run_dir" -mindepth 1 -maxdepth 1 -type d -name 'slot*' | head -n 1)
+    if [[ -z "$slot_dir" ]]; then
+      printf '[smoke-aggregate] WARN: no slot dir for per-slot RUN_INDEX normalization: %s\n' "$run_id" >&2
+      continue
+    fi
+    date_dir=$(find "$slot_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    if [[ -z "$date_dir" ]]; then
+      printf '[smoke-aggregate] WARN: no date dir for per-slot RUN_INDEX normalization: %s\n' "$run_id" >&2
+      continue
+    fi
+    run_index_file="$slot_dir/$(basename "$date_dir")/RUN_INDEX.md"
+    if [[ -z "$run_index_file" ]] || [[ ! -f "$run_index_file" ]]; then
+      printf '[smoke-aggregate] WARN: no RUN_INDEX.md under %s\n' "$run_dir" >&2
+      continue
+    fi
+    local tmp="${run_index_file}.tmp$$"
+    awk '/^- / && !/^\^- \[/ { sub(/^- /, "^- [x] ") } { print }' "$run_index_file" > "$tmp"
+    mv -f "$tmp" "$run_index_file"
+  done
 
   # ── Integrity check: re-hash canonical RUN_INDEX.md + RUN_MANIFEST.yaml ──
   for run_id in "${canonical_runs[@]}"; do
