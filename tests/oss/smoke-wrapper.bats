@@ -168,3 +168,15 @@ teardown() {
   # The script handles size exit
   grep -q 'CAPACITY_CLONE_MB' "$SCRIPT_DIR/smoke-oss.sh"
 }
+
+# ── Test 10: smoke-aggregate.sh exists and is executable ─────────────
+@test "aggregate: smoke-aggregate.sh exists and is executable" {
+  [[ -x "$LIB_DIR/smoke-aggregate.sh" ]]
+}
+
+# ── Test 11: shellcheck info budget ≤3 on touched scripts ───────────
+@test "lint: shellcheck info ≤3 on smoke-oss.sh and smoke-aggregate.sh" {
+  local info_count
+  info_count=$(shellcheck --severity=info "$SCRIPT_DIR/smoke-oss.sh" "$LIB_DIR/smoke-aggregate.sh" 2>&1 | grep -c 'info' || echo 0)
+  [[ "$info_count" -le 3 ]]
+}
