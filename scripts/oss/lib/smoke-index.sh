@@ -20,6 +20,7 @@ EVIDENCE_DIR="$SLOT_DIR/evidence"
 mkdir -p "$EVIDENCE_DIR"
 
 # Stub RUN_INDEX.md with structure (content added by smoke-oss.sh after slot run)
+# Frontmatter block added by smoke-oss.sh after sed population (ACT-3)
 cat > "$SLOT_DIR/RUN_INDEX.md" <<'INDEXEOF'
 # Slot Run Index
 
@@ -49,13 +50,22 @@ INDEXEOF
 sed -i "s|SLOT_PLACEHOLDER|$SLOT_ID|g" "$SLOT_DIR/RUN_INDEX.md"
 sed -i "s|DATE_PLACEHOLDER|$DATE_STAMP|g" "$SLOT_DIR/RUN_INDEX.md"
 
-# Stub RUN_MANIFEST.yaml (content added by smoke-oss.sh)
+  # Stub RUN_MANIFEST.yaml (content added by smoke-oss.sh)
+  # Frontmatter keys (ACT-3): YAML comment block at top
+  # ACT-5: head_before/head_after renamed to git_status_before/git_status_after
+  # ACT-5: added head_commit_before/head_commit_after fields
 cat > "$SLOT_DIR/RUN_MANIFEST.yaml" <<'YAMLEOF'
 # RUN_MANIFEST.yaml — slot run manifest
 # Populated by smoke-oss.sh after slot execution
+# --- YAML frontmatter (ACT-3: REQ-OSS-SMOKE-SHABinding) ---
+# pinned_sha: PINNED_SHA_PLACEHOLDER
+# pin_source: PIN_SOURCE_PLACEHOLDER
+# campaign_id: CAMPAIGN_ID_PLACEHOLDER
+# slot_id: SLOT_PLACEHOLDER
+# run_date: RUN_DATE_PLACEHOLDER
 slot: SLOT_PLACEHOLDER
 name: NAME_PLACEHOLDER
-date_stamp: DATE_PLACEHOLDER
+date_stamp: DATE_STAMP_PLACEHOLDER
 repo_url: REPO_PLACEHOLDER
 pinned_sha: PINNED_SHA_PLACEHOLDER
 pin_source: PIN_SOURCE_PLACEHOLDER
@@ -66,8 +76,10 @@ started: ""
 ended: ""
 wallclock_seconds: 0
 uat2_001: false
-head_before: ""
-head_after: ""
+git_status_before: ""
+git_status_after: ""
+head_commit_before: ""
+head_commit_after: ""
 likec4_validate: ""
 scan_ast_grep: ""
 verdict: ""
@@ -77,10 +89,16 @@ artifacts: []
 cleanup_audit: false
 YAMLEOF
 
-sed -i "s|SLOT_PLACEHOLDER|$SLOT_ID|g" "$SLOT_DIR/RUN_MANIFEST.yaml"
-sed -i "s|DATE_PLACEHOLDER|$DATE_STAMP|g" "$SLOT_DIR/RUN_MANIFEST.yaml"
+  sed -i \
+  -e "s|SLOT_PLACEHOLDER|$SLOT_ID|g" \
+  -e "s|RUN_DATE_PLACEHOLDER|RUN_DATE_PLACEHOLDER|g" \
+  -e "s|DATE_STAMP_PLACEHOLDER|$DATE_STAMP|g" \
+  -e "s|CAMPAIGN_ID_PLACEHOLDER|CAMPAIGN_ID_PLACEHOLDER|g" \
+  -e "s|PINNED_SHA_PLACEHOLDER|PINNED_SHA_PLACEHOLDER|g" \
+  -e "s|PIN_SOURCE_PLACEHOLDER|PIN_SOURCE_PLACEHOLDER|g" \
+  "$SLOT_DIR/RUN_MANIFEST.yaml"
 
-# Stub evidence/manifest.txt
-> "$EVIDENCE_DIR/manifest.txt"
+# Stub evidence/manifest.txt (populated after doc finalization — ACT-1/2)
+true > "$EVIDENCE_DIR/manifest.txt"
 
 printf '[smoke-index] created slot structure at %s\n' "$SLOT_DIR"
