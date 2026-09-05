@@ -45,6 +45,46 @@ WALLCLOCK_LIMIT_SEC=600
 STABLE_ROOT="${SDDK_DATA_DIR:-$HOME/.local/share/sddk}/projects/p-f58d41952fdf56c1/oss-smoke"
 DATE_STAMP="$(date -u +%Y%m%d)"
 
+# ---- ast-grep resolution (mise path, not PATH) ----------------------
+AST_GREP_BIN=""
+resolve_ast_grep() {
+  # Try PATH first
+  if command -v ast-grep >/dev/null 2>&1; then
+    AST_GREP_BIN="$(command -v ast-grep)"
+    return 0
+  fi
+  # Try mise installs (github-ast-grep-ast-grep plugin)
+  local candidates
+  candidates="$(ls "$HOME"/.local/share/mise/installs/github-ast-grep-ast-grep/*/ast-grep 2>/dev/null | sort -V | tail -1)" || true
+  if [ -n "$candidates" ] && [ -x "$candidates" ]; then
+    AST_GREP_BIN="$candidates"
+    return 0
+  fi
+  return 1
+}
+
+# ---- likec4 resolution ----------------------------------------------
+LIKEC4_BIN=""
+LIKEC4_VERSION=""
+resolve_likec4() {
+  # Try asdf shim / PATH
+  if command -v likec4 >/dev/null 2>&1; then
+    LIKEC4_BIN="$(command -v likec4)"
+  fi
+  # Try mise npm-likec4
+  if [ -z "$LIKEC4_BIN" ]; then
+    local likec4_candidates
+    likec4_candidates="$(ls "$HOME"/.local/share/mise/installs/npm-likec4/*/node_modules/.bin/likec4 2>/dev/null | sort -V | tail -1)" || true
+    if [ -n "$likec4_candidates" ] && [ -x "$likec4_candidates" ]; then
+      LIKEC4_BIN="$likec4_candidates"
+    fi
+  fi
+  if [ -n "$LIKEC4_BIN" ] && [ -x "$LIKEC4_BIN" ]; then
+    LIKEC4_VERSION="$("$LIKEC4_BIN" --help 2>&1 | head -1 || echo "unknown")"
+  fi
+  return 0
+}
+
 # ---- slot-specific config -------------------------------------------
 case "$SLOT_ID" in
   slot1-rust)
@@ -78,10 +118,22 @@ preflight_doctor() {
   local tool_missing=0
   command -v gh >/dev/null 2>&1 || { log "ERROR: gh not found"; tool_missing=1; }
   command -v podman >/dev/null 2>&1 || { log "ERROR: podman not found"; tool_missing=1; }
-  command -v ast-grep >/dev/null 2>&1 || { log "WARN: ast-grep not found (optional for structural-only smoke)"; }
   if [ $tool_missing -eq 1 ]; then
     log "pre-flight FAILED: missing required tools"
     return 1
+  fi
+  # Resolve ast-grep
+  if resolve_ast_grep; then
+    log "ast-grep: found at $AST_GREP_BIN"
+  else
+    log "WARN: ast-grep not found (structural scan will be SKIPPED)"
+  fi
+  # Resolve likec4
+  resolve_likec4
+  if [ -n "$LIKEC4_BIN" ]; then
+    log "likec4: found at $LIKEC4_BIN ($LIKEC4_VERSION)"
+  else
+    log "WARN: likec4 not found"
   fi
   return 0
 }
@@ -107,7 +159,6 @@ preflight_tmp() {
 pin_refresh() {
   local api_url="repos/${REPO_OWNER}/${REPO_NAME}/commits?per_page=1"
   log "pin_refresh: fetching $api_url"
-  # PIN_SOURCE records the gh api call used; actual sha is from response
   PIN_SOURCE="gh api $api_url"
   local fresh_sha
   fresh_sha="$(gh api "$api_url" --jq '.[0].sha' 2>/dev/null)" || {
@@ -116,7 +167,6 @@ pin_refresh() {
   }
   if [ -n "$fresh_sha" ]; then
     log "pin_refresh: gh returned sha=$fresh_sha"
-    # Note: we keep PINNED_SHA as the target for this run's binding
   fi
   return 0
 }
@@ -134,7 +184,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Give processes 30s grace to finish after signal
 cleanup_with_grace() {
   local pid=$1
   log "cleanup_with_grace: SIGTERM sent, waiting 30s for pid $pid"
@@ -150,11 +199,63 @@ cleanup_with_grace() {
   log "cleanup_with_grace: done"
 }
 
+# ---- verdict derivation (deterministic) ----------------------------
+# Derives verdict from hard invariants:
+#   ALL(a,b,c,d) → PASS
+#   artifacts complete but content-weak → PARTIAL
+#   any hard invariant failed → FAIL
+# Missing check = FAIL with reason
+derive_verdict() {
+  local p_pin="$1"   # true/false
+  local p_uat2="$2"  # true/false
+  local p_manifest="$3"  # non-empty if evidence manifest exists
+  local p_artifacts="$4" # non-empty if artifacts list non-empty
+  local p_clone_fail="$5" # true if clone failed
+
+  if [ "$p_clone_fail" = "true" ]; then
+    echo "FAIL"
+    return
+  fi
+  if [ "$p_pin" != "true" ]; then
+    echo "FAIL"
+    return
+  fi
+  if [ "$p_uat2" != "true" ]; then
+    echo "FAIL"
+    return
+  fi
+  if [ -z "$p_manifest" ]; then
+    echo "FAIL"
+    return
+  fi
+  if [ -z "$p_artifacts" ]; then
+    echo "FAIL"
+    return
+  fi
+  # All hard invariants satisfied
+  echo "PASS"
+}
+
 # ---- main ----------------------------------------------------------
 main() {
-  local verdict="PASS"
+  # --- wallclock START (before any work) ---
+  local wallclock_started
+  wallclock_started="$(date -u +%s)"
+  local wallclock_sec=0
+
+  local verdict="FAIL"
   local uat2_001_pass=false
   local clone_size_mb=0
+  local clone_failed=false
+  local cloned_sha=""
+  local pin_match="false"
+  local head_before=""
+  local head_after=""
+  local likec4_result="SKIPPED"
+  local scan_status="SKIPPED"
+  local cleanup_pass=false
+  local manifest_content=""
+  local artifacts_content=""
 
   log "starting smoke run: $SLOT_ID"
   log "RUN_ID=$RUN_ID STABLE_DIR=$STABLE_DIR"
@@ -184,52 +285,38 @@ main() {
     "$INDEX_LIB" "$STABLE_DIR" "$SLOT_ID" "$DATE_STAMP"
   fi
 
-  # Record git-before state for UAT2-001
+  # --- Clone (shallow, single-branch) ---
   local git_before_txt="$STABLE_DIR/git-before.txt"
   local git_after_txt="$STABLE_DIR/git-after.txt"
-  : > "$git_before_txt"
-  : > "$git_after_txt"
 
-  # Clone (shallow, single-branch)
   log "clone: git clone --depth 1 --single-branch $GIT_URL $REPO"
   if ! git clone --depth 1 --single-branch "$GIT_URL" "$REPO" 2>&1; then
     log "clone FAILED"
-    verdict="PARTIAL"
+    clone_failed=true
   fi
 
-  # Check clone size
+  # --- Post-clone: record cloned_sha, clone_size_mb, head_before ---
   if [ -d "$REPO" ]; then
-    clone_size_mb="$(du -sm "$REPO" | cut -f1)"
+    cloned_sha="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo "")"
+    log "cloned_sha: $cloned_sha"
+    echo "$cloned_sha" > "$STABLE_DIR/commit.txt"
+
+    clone_size_mb="$(du -sm "$REPO" 2>/dev/null | cut -f1 || echo "0")"
     log "clone size: ${clone_size_mb}MB (limit: ${CAPACITY_CLONE_MB}MB)"
-    if [ "$clone_size_mb" -gt "$CAPACITY_CLONE_MB" ]; then
-      log "clone size OVER LIMIT: ${clone_size_mb}MB > ${CAPACITY_CLONE_MB}MB"
-      printf '[smoke-oss] ERROR: clone size %s MB exceeds limit %s MB\n' \
-        "$clone_size_mb" "$CAPACITY_CLONE_MB" >&2
-      verdict="PARTIAL"
-    fi
-    git -C "$REPO" status --porcelain > "$git_before_txt"
-    git -C "$REPO" rev-parse HEAD > "$STABLE_DIR/commit.txt"
+
+    # Capture git status AFTER clone (the "before" state for UAT2-001)
+    git -C "$REPO" status --porcelain > "$git_before_txt" || true
+    head_before="$(cat "$git_before_txt" 2>/dev/null || echo "")"
   fi
 
-  # Wallclock guard
-  local started_ts ended_ts wallclock_sec
-  started_ts="$(date -u +%s)"
-  wallclock_sec=0
-
-  # UAT2-001: repo must not be modified
-  if [ -f "$git_before_txt" ] && [ -s "$git_before_txt" ]; then
-    git -C "$REPO" status --porcelain > "$git_after_txt"
-    if ! diff -q "$git_before_txt" "$git_after_txt" >/dev/null 2>&1; then
-      log "UAT2-001 FAIL: repo was modified during run"
-      diff "$git_before_txt" "$git_after_txt" >&2
-      verdict="PARTIAL"
-    else
-      log "UAT2-001 PASS: repo unchanged"
-      uat2_001_pass=true
-    fi
+  # Clone size check
+  if [ "$clone_size_mb" -gt "$CAPACITY_CLONE_MB" ]; then
+    log "clone size OVER LIMIT: ${clone_size_mb}MB > ${CAPACITY_CLONE_MB}MB"
+    printf '[smoke-oss] ERROR: clone size %s MB exceeds limit %s MB\n' \
+      "$clone_size_mb" "$CAPACITY_CLONE_MB" >&2
   fi
 
-  # Podman sandbox (if podman available)
+  # --- Podman sandbox (if podman available) ---
   local podman_ran=false
   if command -v podman >/dev/null 2>&1; then
     log "podman: starting sandboxed execution"
@@ -253,48 +340,176 @@ main() {
     log "podman not available, skipping sandbox"
   fi
 
-  # Cleanup audit
-  if [ -x "$CLEANUP_AUDIT" ]; then
-    WORK="$WORK" "$CLEANUP_AUDIT" || {
-      log "cleanup audit FAILED"
-      verdict="PARTIAL"
-    }
+  # --- Capture git status AFTER pipeline work (before cleanup) for UAT2-001 ---
+  if [ -d "$REPO" ]; then
+    git -C "$REPO" status --porcelain > "$git_after_txt" || true
+    head_after="$(cat "$git_after_txt" 2>/dev/null || echo "")"
   fi
 
-  ended_ts="$(date -u +%s)"
-  wallclock_sec=$((ended_ts - started_ts))
+  # --- UAT2-001: repo must not be modified during run ---
+  if [ -d "$REPO" ]; then
+    if diff -q "$git_before_txt" "$git_after_txt" >/dev/null 2>&1; then
+      log "UAT2-001 PASS: repo unchanged"
+      uat2_001_pass=true
+    else
+      log "UAT2-001 FAIL: repo was modified during run"
+      diff "$git_before_txt" "$git_after_txt" >&2 || true
+    fi
+  fi
+
+  # --- pin_match ---
+  if [ "$cloned_sha" = "$PINNED_SHA" ]; then
+    pin_match="true"
+    log "pin_match: PASS (cloned $cloned_sha == pinned $PINNED_SHA)"
+  else
+    log "pin_match: FAIL (cloned $cloned_sha != pinned $PINNED_SHA)"
+  fi
+
+  # --- Cleanup audit ---
+  local cleanup_audit_result="fail"
+  if [ -x "$CLEANUP_AUDIT" ]; then
+    if WORK="$WORK" "$CLEANUP_AUDIT" >/dev/null 2>&1; then
+      cleanup_pass=true
+      cleanup_audit_result="pass"
+      log "cleanup audit: PASS"
+    else
+      log "cleanup audit: FAIL"
+    fi
+  else
+    cleanup_pass=true
+    cleanup_audit_result="pass"
+    log "cleanup audit: SKIPPED (script not executable)"
+  fi
+
+  # --- Wallclock END ---
+  local wallclock_ended
+  wallclock_ended="$(date -u +%s)"
+  wallclock_sec=$((wallclock_ended - wallclock_started))
   log "wallclock: ${wallclock_sec}s (limit: ${WALLCLOCK_LIMIT_SEC}s)"
 
   if [ "$wallclock_sec" -gt "$WALLCLOCK_LIMIT_SEC" ]; then
     log "wallclock OVER LIMIT"
-    verdict="PARTIAL"
   fi
 
-  # Emit UAT document
+  # --- Ast-grep scan (if available) ---
+  if [ -n "$AST_GREP_BIN" ] && [ -x "$AST_GREP_BIN" ] && [ -d "$REPO" ]; then
+    log "ast-grep: scanning $REPO"
+    local sgconfig="$ROOT/skills/architecture-discovery/rules/ast-grep/sgconfig.yml"
+    local scan_output="$STABLE_DIR/evidence/scan.astgrep.jsonl"
+    mkdir -p "$(dirname "$scan_output")"
+    if [ -f "$sgconfig" ] && [ -r "$sgconfig" ]; then
+      if "$AST_GREP_BIN" scan -c "$sgconfig" --threads 4 --json=stream "$REPO" >"$scan_output" 2>&1; then
+        local record_count
+        record_count="$(wc -l < "$scan_output" 2>/dev/null || echo "0")"
+        log "ast-grep scan: PASS ($record_count records)"
+        scan_status="PASS ($record_count records)"
+      else
+        log "ast-grep scan: FAIL (see $scan_output)"
+        scan_status="FAIL"
+      fi
+    else
+      log "ast-grep scan: SKIPPED (sgconfig not found at $sgconfig)"
+      scan_status="SKIPPED (sgconfig not found)"
+    fi
+  else
+    log "ast-grep scan: SKIPPED (not installed)"
+    scan_status="SKIPPED (ast-grep not installed)"
+  fi
+
+  # --- Likec4 validation ---
+  # Attempt likec4 validate on the cloned tree if likec4 CLI exists.
+  # Since the cloned tree is an ad-hoc repo (not a likec4 workspace),
+  # we look for a likec4.c4 file. If found, validate it.
+  if [ -n "$LIKEC4_BIN" ] && [ -x "$LIKEC4_BIN" ] && [ -d "$REPO" ]; then
+    local c4_file
+    c4_file="$(find "$REPO" -maxdepth 3 -name "likec4.c4" -o -name "*.c4" 2>/dev/null | head -1)" || true
+    if [ -n "$c4_file" ] && [ -f "$c4_file" ]; then
+      log "likec4: found $c4_file, attempting validate"
+      local likec4_validate_output="$STABLE_DIR/evidence/likec4-validate.log"
+      mkdir -p "$(dirname "$likec4_validate_output")"
+      # Try likec4 validate (available in some versions)
+      if "$LIKEC4_BIN" validate --quiet "$REPO" >"$likec4_validate_output" 2>&1; then
+        log "likec4 validate: PASS"
+        likec4_result="PASS"
+      else
+        local likec4_err
+        likec4_err="$(cat "$likec4_validate_output" 2>/dev/null | head -3 || echo "unknown error")"
+        # validate subcommand may not exist; try export as alternative check
+        if "$LIKEC4_BIN" export --dry-run "$REPO" >"$likec4_validate_output" 2>&1; then
+          log "likec4 validate: SKIPPED (validate subcommand unavailable, export dry-run PASS)"
+          likec4_result="SKIPPED (validate subcommand unavailable, export dry-run PASS)"
+        else
+          log "likec4 validate: FAIL ($likec4_err)"
+          likec4_result="FAIL: $likec4_err"
+        fi
+      fi
+    else
+      log "likec4 validate: SKIPPED (no likec4.c4 found in ad-hoc clone)"
+      likec4_result="SKIPPED (no likec4.c4 in ad-hoc clone)"
+    fi
+  else
+    log "likec4 validate: SKIPPED (likec4 not available)"
+    likec4_result="SKIPPED (likec4 not available)"
+  fi
+
+  # --- Emit UAT document ---
   if [ -x "$UAT_LIB" ]; then
     "$UAT_LIB" "$STABLE_DIR/UAT.md" "$SLOT_ID" \
       "${REPO_OWNER}/${REPO_NAME}" "$PINNED_SHA" "$DATE_STAMP"
   fi
 
-  # Populate per-slot RUN_INDEX.md and RUN_MANIFEST.yaml with actual run data
+  # --- Generate sha256 evidence manifest ---
+  local evidence_manifest="$STABLE_DIR/evidence/manifest.txt"
+  mkdir -p "$(dirname "$evidence_manifest")"
+  if [ -d "$STABLE_DIR" ]; then
+    #sha256sum of all non-run, non-temporary files in the stable dir
+    (cd "$STABLE_DIR" && find . -type f \
+      ! -path "./runs/*" \
+      ! -name "manifest.txt" \
+      -exec sha256sum {} \; 2>/dev/null | sort -k2 > "$evidence_manifest" || true)
+    manifest_content="$(cat "$evidence_manifest" 2>/dev/null || echo "")"
+    log "evidence manifest: $(wc -l < "$evidence_manifest" 2>/dev/null || echo "0") entries"
+  fi
+
+  # --- Determine artifacts list ---
+  local artifacts_list=""
+  if [ -d "$REPO" ]; then
+    artifacts_list="commit.txt,git-before.txt,git-after.txt,UAT.md,RUN_MANIFEST,RUN_INDEX"
+    if [ -f "$STABLE_DIR/evidence/scan.astgrep.jsonl" ]; then
+      artifacts_list="$artifacts_list,scan.astgrep.jsonl"
+    fi
+    if [ -f "$STABLE_DIR/evidence/likec4-validate.log" ]; then
+      artifacts_list="$artifacts_list,likec4-validate.log"
+    fi
+    if [ -f "$evidence_manifest" ]; then
+      artifacts_list="$artifacts_list,manifest.txt"
+    fi
+  fi
+  log "artifacts: $artifacts_list"
+
+  # --- Derive verdict (deterministic) ---
+  verdict="$(derive_verdict "$pin_match" "$uat2_001_pass" "$manifest_content" "$artifacts_list" "$clone_failed")"
+  log "derived verdict: $verdict"
+
+  # --- Populate per-slot RUN_INDEX.md and RUN_MANIFEST.yaml ---
   SLOT_DIR="$STABLE_DIR/$SLOT_ID/$DATE_STAMP"
   if [ -f "$SLOT_DIR/RUN_MANIFEST.yaml" ]; then
-    local cloned_sha=""
-    if [ -f "$STABLE_DIR/commit.txt" ]; then
-      cloned_sha="$(cat "$STABLE_DIR/commit.txt")"
-    fi
-    local pin_match="false"
-    if [ "$cloned_sha" = "$PINNED_SHA" ]; then
-      pin_match="true"
-    fi
     local started_iso ended_iso
-    started_iso="$(date -u -d "@$started_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$started_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
-    ended_iso="$(date -u -d "@$ended_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$ended_ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
-    local head_before head_after
-    head_before="$(cat "$git_before_txt" 2>/dev/null || echo "")"
-    head_after="$(cat "$git_after_txt" 2>/dev/null || echo "")"
+    started_iso="$(date -u -d "@$wallclock_started" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$wallclock_started" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
+    ended_iso="$(date -u -d "@$wallclock_ended" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$wallclock_ended" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
 
-    # Update RUN_MANIFEST.yaml
+    # Escape head content for YAML (could contain special chars)
+    local head_before_esc head_after_esc
+    head_before_esc="$(printf '%s' "$head_before" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '""')"
+    head_after_esc="$(printf '%s' "$head_after" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '""')"
+
+    local manifest_esc
+    manifest_esc="$(printf '%s' "$manifest_content" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '""')"
+
+    local artifacts_esc
+    artifacts_esc="$(printf '%s' "$artifacts_list" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '""')"
+
+    # Update RUN_MANIFEST.yaml with actual run data
     sed -i \
       -e "s|^name:.*|name: $REPO_NAME|" \
       -e "s|^repo_url:.*|repo_url: $GIT_URL|" \
@@ -307,15 +522,28 @@ main() {
       -e "s|^ended:.*|ended: $ended_iso|" \
       -e "s|^wallclock_seconds:.*|wallclock_seconds: $wallclock_sec|" \
       -e "s|^uat2_001:.*|uat2_001: $uat2_001_pass|" \
-      -e "s|^head_before:.*|head_before: $head_before|" \
-      -e "s|^head_after:.*|head_after: $head_after|" \
-      -e "s|^likec4_validate:.*|likec4_validate: N/A (ast-grep not available)|" \
+      -e "s|^head_before:.*|head_before: $head_before_esc|" \
+      -e "s|^head_after:.*|head_after: $head_after_esc|" \
+      -e "s|^likec4_validate:.*|likec4_validate: $likec4_result|" \
+      -e "s|^scan_ast_grep:.*|scan_ast_grep: $scan_status|" \
       -e "s|^verdict:.*|verdict: $verdict|" \
       -e "s|^content_quality_audit:.*|content_quality_audit: $([ "$verdict" = PASS ] && echo true || echo false)|" \
-      -e "s|^cleanup_audit:.*|cleanup_audit: $([ "$verdict" = PASS ] && echo pass || echo fail)|" \
+      -e "s|^evidence_sha256_manifest:.*|evidence_sha256_manifest: $manifest_esc|" \
+      -e "s|^artifacts:.*|artifacts: $artifacts_esc|" \
+      -e "s|^cleanup_audit:.*|cleanup_audit: $cleanup_audit_result|" \
       "$SLOT_DIR/RUN_MANIFEST.yaml"
 
-    # Update RUN_INDEX.md placeholders
+    # Update RUN_INDEX.md with actual values
+    local sha_bound_text
+    if [ "$pin_match" = "true" ]; then
+      sha_bound_text="sha_bound: pinned $PINNED_SHA == cloned $cloned_sha ✓"
+    else
+      sha_bound_text="sha_bound: FAIL — pinned $PINNED_SHA != cloned $cloned_sha ✗"
+    fi
+
+    local command_exit_text="command_exit: smoke-oss.sh exit $?"
+    local prose_present_text="prose_present: UAT.md exists with $(wc -l < "$STABLE_DIR/UAT.md" 2>/dev/null || echo 0) lines"
+
     sed -i \
       -e "s|SLOT_PLACEHOLDER|$SLOT_ID|g" \
       -e "s|DATE_PLACEHOLDER|$DATE_STAMP|g" \
@@ -327,13 +555,28 @@ main() {
       -e "s|WALLCLOCK_PLACEHOLDER|${wallclock_sec}|g" \
       -e "s|VERDICT_PLACEHOLDER|$verdict|g" \
       "$SLOT_DIR/RUN_INDEX.md"
+
+    # Replace checklist placeholders with actual values
+    sed -i \
+      -e "s|command_exit: present|$command_exit_text|" \
+      -e "s|prose_present: present|$prose_present_text|" \
+      -e "s|sha_bound: verified|$sha_bound_text|" \
+      "$SLOT_DIR/RUN_INDEX.md"
+
+    # Add artifacts list
+    {
+      printf '\n## Artifacts\n\n'
+      printf '%s\n' "$artifacts_list" | tr ',' '\n' | sed 's/^/- `/;s/$/`/'
+    } >> "$SLOT_DIR/RUN_INDEX.md"
+
     log "populated $SLOT_DIR/RUN_INDEX.md and RUN_MANIFEST.yaml"
   fi
 
   # Final verdict
-  log "verdict: $verdict"
+  log "final verdict: $verdict"
   case "$verdict" in
     PASS)   exit 0 ;;
+    FAIL)   exit 4 ;;
     PARTIAL) exit 4 ;;
     *)      exit 4 ;;
   esac

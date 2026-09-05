@@ -43,8 +43,6 @@ cat > "$SLOT_DIR/RUN_INDEX.md" <<'INDEXEOF'
 - [ ] prose_present: present
 - [ ] sha_bound: verified
 
-## Artifacts
-
 INDEXEOF
 
 # Replace placeholders with actual values
@@ -71,6 +69,7 @@ uat2_001: false
 head_before: ""
 head_after: ""
 likec4_validate: ""
+scan_ast_grep: ""
 verdict: ""
 content_quality_audit: false
 evidence_sha256_manifest: ""
