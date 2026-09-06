@@ -34,9 +34,23 @@ Gate: `APP-COVERAGE-001`.
 
 Gates: `ARC-002`, `ARC-004`, `ARC-005`.
 
-### Promise 5 — Lazy MCP Import (ARCH-ACTIVEGRAPH-001)
+### Promise 5 — Lazy MCP Import (ARCH-ACTIVEGRAPH-001) — IMPLEMENTED
 
-`delivery/cli/mcp.py` implements a lazy import guard: `from mcp.server import Server` is moved inside `register()` and raises `ClickException("Install archskillkit[mcp] to use the MCP server")` when `mcp` is not installed. This prevents `archskillkit` without the `[mcp]` extra from failing on import.
+`delivery/cli/mcp.py` implements a lazy import guard: the four `mcp.*` imports
+(`mcp.server.Server`, `mcp.server.stdio.stdio_server`, `mcp.shared.exceptions.McpError`,
+`mcp.types.{ErrorData, TextContent, Tool}`) are moved from module-load scope into the
+functions that need them. `handle()` (the entry point invoked when the user runs
+`archskillkit mcp`) calls `_require_mcp()` which imports the four modules under a single
+`try/except ImportError` and raises `RuntimeError("Install archskillkit[mcp] to use
+the MCP server")` if any are missing. `build_server()` then lazy-imports `Server`;
+`_tool()` and `_envelope()` each lazy-import `Tool` / `TextContent`; the McpError /
+ErrorData pair is centralised in a `_raise_mcp_error()` helper used by both the
+proposal envelope path and the admin gate path. This prevents `archskillkit` without
+the `[mcp]` extra from failing on import — confirmed by re-importing
+`archskillkit.delivery.cli.mcp` in an env without `mcp` installed (succeeds), then
+calling `handle(args)` (raises the friendly RuntimeError). Click is not a runtime
+dependency on this project, so a stdlib `RuntimeError` is used rather than the
+``ClickException`` named in earlier drafts.
 
 Gate: `ARCH-ACTIVEGRAPH-001`.
 

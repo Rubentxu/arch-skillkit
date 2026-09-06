@@ -13,14 +13,26 @@ import os
 
 import pytest
 
-from archskillkit.attestation.signed_snapshot import (
-    SIGNATURE_FORMAT_ID,
-    Signature,
-    attach_to_manifest,
-    generate_keypair,
-    sign,
-    verify,
-    verify_manifest,
+try:
+    from cryptography.exceptions import InvalidSignature  # noqa: F401
+    _HAS_CRYPTOGRAPHY = True
+except ImportError:
+    _HAS_CRYPTOGRAPHY = False
+
+if _HAS_CRYPTOGRAPHY:
+    from archskillkit.attestation.signed_snapshot import (
+        SIGNATURE_FORMAT_ID,
+        Signature,
+        attach_to_manifest,
+        generate_keypair,
+        sign,
+        verify,
+        verify_manifest,
+    )
+
+pytestmark = pytest.mark.skipif(
+    not _HAS_CRYPTOGRAPHY,
+    reason="attestation extra not installed (cryptography missing); install via pip install 'archskillkit[attestation]'",
 )
 
 

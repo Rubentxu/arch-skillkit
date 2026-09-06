@@ -22,12 +22,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
-
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, TextContent, Tool
+from typing import TYPE_CHECKING, Any
 
 from archskillkit.agent_governance import (
     load_skill_revisions,
@@ -53,8 +48,40 @@ from archskillkit.delivery.admin import (
 from archskillkit.runtime_state.run_ledger import RunLedger
 from archskillkit.world import ArchitectureWorld
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from mcp.server import Server as _ServerT
+    from mcp.types import TextContent as _TextContentT
+    from mcp.types import Tool as _ToolT
+
 NAME = "mcp"
 NEEDS_WORLD = False
+
+
+def _require_mcp() -> None:
+    """Lazy guard: ensure the optional ``mcp`` dependency is importable.
+
+    Per ADR-0057 §Promise 5 the MCP server lazily imports from the
+    ``mcp`` package so ``archskillkit`` without the ``[mcp]`` extra
+    still loads cleanly. This function is the single entry point that
+    raises a runtime error with the install hint when ``mcp`` is
+    unavailable. ``importlib.util.find_spec`` is used because the
+    optional sub-modules may or may not be present; we surface a
+    single ``RuntimeError`` so callers see one consistent message.
+    """
+    import importlib.util
+
+    required = (
+        "mcp.server",
+        "mcp.server.stdio",
+        "mcp.shared.exceptions",
+        "mcp.types",
+    )
+    missing = [name for name in required if importlib.util.find_spec(name) is None]
+    if missing:
+        raise RuntimeError(
+            "Install archskillkit[mcp] to use the MCP server "
+            f"(missing sub-modules: {', '.join(missing)})"
+        )
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -70,11 +97,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
 
 
-def _tool(name: str, description: str, schema: dict[str, Any]) -> Tool:
+def _tool(name: str, description: str, schema: dict[str, Any]) -> _ToolT:
+    from mcp.types import Tool
+
     return Tool(name=name, description=description, inputSchema=schema)
 
 
-def _envelope(payload: dict | list | str) -> list[TextContent]:
+def _envelope(payload: dict | list | str) -> list[_TextContentT]:
+    from mcp.types import TextContent
+
     text = payload if isinstance(payload, str) else json.dumps(payload, indent=2)
     return [TextContent(type="text", text=text)]
 
@@ -85,6 +116,9 @@ def _envelope(payload: dict | list | str) -> list[TextContent]:
 def _envelope_or_error(envelope: dict[str, Any]) -> dict[str, Any]:
     """Pass through the proposal envelope; raise McpError on `error`
     field so wire layer reports isError=True with a stable code."""
+    from mcp.shared.exceptions import McpError
+    from mcp.types import ErrorData
+
     if "error" in envelope:
         raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
     return envelope
@@ -170,23 +204,33 @@ def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) 
             "error": "INVALID_VERB",
             "message": f"unknown verb {verb!r}; expected one of relation_add, move, delete",
         }
-        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+        _raise_mcp_error(envelope)
     try:
         result = run(world, verb, **{k: v for k, v in payload.items() if k != "verb"})
     except SimulationError as exc:
         envelope = exc.to_envelope()
-        raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+        _raise_mcp_error(envelope)
     return result.model_dump()
+
+
+def _raise_mcp_error(envelope: dict[str, Any]) -> None:
+    """Lazy-raise an MCP error envelope as McpError(ErrorData(...))."""
+    from mcp.shared.exceptions import McpError
+    from mcp.types import ErrorData
+
+    raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
 
 
 # ---------- server ----------
 
 
-def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
+def build_server(repo_path: str, *, admin: bool | None = None) -> _ServerT:
     """Build an MCP server instance.
 
     admin: None -> resolve via env / CLI flag at call time.
            True/False -> force the gate."""
+    from mcp.server import Server
+
     if admin is None:
         admin = admin_enabled()
 
@@ -333,7 +377,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
     }
 
     @server.list_tools()
-    async def list_tools() -> list[Tool]:
+    async def list_tools() -> list[_ToolT]:
         tools = [
             _tool(
                 "arch_get_status",
@@ -425,7 +469,9 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
         return app
 
     @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+    async def call_tool(
+        name: str, arguments: dict[str, Any]
+    ) -> list[_TextContentT]:
         # Admin gate: any tool name in the admin set MUST be refused
         # when admin is off, even if the client tries to call it
         # directly without listing first. We raise McpError so the
@@ -434,7 +480,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
         # so any consumer can parse it.
         if name in ADMIN_TOOLS and not admin:
             envelope = AdminDisabledError(f"tool {name!r} requires admin opt-in").to_envelope()
-            raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+            _raise_mcp_error(envelope)
         # Read-only tools do not require admin: the gate above is
         # the only enforcement point. Calling require_admin(admin,
         # name) here would block the read-only tools, which is the
@@ -458,7 +504,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
                 result = replay_run(fixture_dir, write_golden=write_golden)
             except ReplayFixtureError as exc:
                 envelope = exc.to_envelope()
-                raise McpError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+                _raise_mcp_error(envelope)
             return _envelope(result.model_dump())
 
         app = _app()
@@ -564,11 +610,14 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> Server:
 
 
 def handle(args: argparse.Namespace, world=None) -> int:
+    _require_mcp()
     repo_path = str(Path(args.repo).resolve())
     admin = bool(getattr(args, "admin", False)) or admin_enabled()
     server = build_server(repo_path, admin=admin)
 
     async def run() -> None:
+        from mcp.server.stdio import stdio_server
+
         async with stdio_server() as (read_stream, write_stream):
             await server.run(read_stream, write_stream, server.create_initialization_options())
 

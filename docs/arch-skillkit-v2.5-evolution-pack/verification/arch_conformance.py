@@ -211,6 +211,136 @@ def emit_arc_010(root: Path) -> list[Finding]:
     return findings
 
 
+# --- APP-COVERAGE-001 dual numerator (ADR-0060) ----------------------------
+
+# Routing patterns counted by the *liberal* numerator:
+#   - `from archskillkit.application.X import ...` (direct import-from)
+#   - `from archskillkit.application import ...`        (direct import-from)
+#   - `getattr(world, "_arch_app", None)` followed by `app.<method>(...)`
+#   - `ArchSkillKitApplication.for_repo(...)` direct construction
+_APP_COVERAGE_LIBERAL_IMPORT_PREFIX = "archskillkit.application"
+_APP_COVERAGE_DENOMINATOR: int = 19
+_APP_COVERAGE_THRESHOLD: float = 0.9
+
+
+def _is_liberal_via_app(tree: ast.Module) -> bool:
+    """Liberal formula: any of the four routing patterns qualifies as 'via app'."""
+    # Pattern 1: direct import from archskillkit.application.{x}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith(_APP_COVERAGE_LIBERAL_IMPORT_PREFIX):
+                return True
+    # Pattern 2: gettattr(world, "_arch_app", None) followed by app.<method>(...)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        if not isinstance(test, ast.Compare):
+            continue
+        if not any(
+            isinstance(c, ast.Constant) and c.value is None for c in test.comparators
+        ):
+            continue
+        # Body contains: app.method(...) call
+        for child in node.body:
+            for sub in ast.walk(child):
+                if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+                    head = sub.func
+                    while isinstance(head, ast.Attribute):
+                        head = head.value
+                    if isinstance(head, ast.Name) and head.id == "app":
+                        return True
+    # Pattern 3 + 4: ArchSkillKitApplication.for_repo(...)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "for_repo":
+            return True
+        if isinstance(node.func, ast.Name) and "for_repo" in node.func.id:
+            return True
+    return False
+
+
+def _is_strict_via_app(tree: ast.Module) -> bool:
+    """Strict formula: only Pattern 1 (direct import-from application) qualifies.
+
+    Used for audit parity — both numerators emitted alongside each other.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith(_APP_COVERAGE_LIBERAL_IMPORT_PREFIX):
+                return True
+    return False
+
+
+def emit_app_coverage_001(root: Path) -> dict:
+    """Compute the APP-COVERAGE-001 gate.
+
+    Scans `python/src/archskillkit/delivery/cli/*.py` (excluding __init__.py)
+    and emits the dual numerator (strict + liberal) per ADR-0060. The
+    denominator is locked at 19 service-call sites and the threshold is
+    0.9. ARC-002 and ARC-004 block this gate independently regardless of
+    the dual numerator.
+
+    Returns a dict consumable by the evidence emission: ``check_id``,
+    ``strict_numerator``, ``liberal_numerator``, ``denominator``,
+    ``coverage`` (liberal/denominator), ``threshold``, ``formula``,
+    ``block_independently``, ``findings``.
+    """
+    cli_root = root / "delivery" / "cli"
+    if not cli_root.exists():
+        cli_root = root / "python" / "src" / "archskillkit" / "delivery" / "cli"
+    if not cli_root.exists():
+        return {
+            "check_id": "app_coverage_001",
+            "rule_id": "APP-COVERAGE-001",
+            "strict_numerator": 0,
+            "liberal_numerator": 0,
+            "denominator": 0,
+            "coverage": 0.0,
+            "threshold": _APP_COVERAGE_THRESHOLD,
+            "formula": "liberal",
+            "block_independently": ["ARC-002", "ARC-004"],
+            "findings": [],
+        }
+    findings = []
+    strict_count = 0
+    liberal_count = 0
+    denominator = 0
+    for path in sorted(cli_root.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        denominator += 1
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (UnicodeDecodeError, SyntaxError):
+            findings.append({"path": path.name, "line": 0, "kind": "parse_error",
+                             "detail": "could not parse"})
+            continue
+        strict_hit = _is_strict_via_app(tree)
+        liberal_hit = _is_liberal_via_app(tree)
+        if strict_hit:
+            strict_count += 1
+        if liberal_hit:
+            liberal_count += 1
+        if not liberal_hit:
+            findings.append({"path": path.name, "line": 0, "kind": "direct",
+                             "detail": "no application-layer routing detected"})
+    coverage = (liberal_count / denominator) if denominator > 0 else 0.0
+    return {
+        "check_id": "app_coverage_001",
+        "rule_id": "APP-COVERAGE-001",
+        "strict_numerator": strict_count,
+        "liberal_numerator": liberal_count,
+        "denominator": denominator,
+        "coverage": round(coverage, 4),
+        "threshold": _APP_COVERAGE_THRESHOLD,
+        "formula": "liberal",
+        "block_independently": ["ARC-002", "ARC-004"],
+        "findings": findings,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
@@ -224,6 +354,7 @@ def main() -> int:
     contracts = json.loads(Path(args.contracts).read_text(encoding="utf-8"))
     findings = scan(root, contracts)
     arc_010_findings = emit_arc_010(root)
+    app_coverage_001 = emit_app_coverage_001(root)
     all_findings = findings + arc_010_findings
     report = canonical_payload(all_findings)
 
@@ -257,7 +388,25 @@ def main() -> int:
 
     text = json.dumps(report, indent=2, sort_keys=True) + "\n"
     output_digest = hashlib.sha256(text.encode()).hexdigest()
-    exit_code = 1 if new or any(f.rule_id.startswith("VERIFIER-") for f in all_findings) else 0
+
+    # APP-COVERAGE-001 verdict: gate is FAIL if liberal coverage < threshold,
+    # OR if any ARC-002/ARC-004 violations exist (block_independently).
+    arc_blocking = any(
+        f.rule_id in app_coverage_001["block_independently"]
+        for f in findings
+    )
+    app_coverage_pass = (
+        app_coverage_001["coverage"] >= app_coverage_001["threshold"]
+        and not arc_blocking
+    )
+    app_coverage_001["verdict"] = "pass" if app_coverage_pass else "fail"
+
+    # Existing baseline debt is tolerated; any new exact violation fails.
+    exit_code = 1 if new or any(
+        f.rule_id.startswith("VERIFIER-") for f in all_findings
+    ) else 0
+    if not app_coverage_pass:
+        exit_code = 1
 
     evidence = {
         "argv": sys.argv,
@@ -277,6 +426,7 @@ def main() -> int:
                 "findings": [asdict(f) for f in sorted(findings)],
                 "count": len(findings),
             },
+            app_coverage_001,
         ],
     }
 
