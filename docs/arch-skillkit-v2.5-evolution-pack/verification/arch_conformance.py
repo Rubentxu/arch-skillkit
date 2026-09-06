@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, asdict
@@ -155,6 +156,61 @@ def finding_set(payload: dict) -> set[tuple]:
     }
 
 
+# ADR-0049 sandbox exception: these paths are exempt from ARC-010 injection guard.
+_SANDBOX_EXCEPTION_PATHS = {
+    "python/src/archskillkit/bootstrap/__init__.py",
+}
+
+
+def _is_sandbox_exception(rel: str) -> bool:
+    return rel in _SANDBOX_EXCEPTION_PATHS
+
+
+def emit_arc_010(root: Path) -> list[Finding]:
+    """Detect direct ArchitectureWorld.for_repo or CodeIndex( constructions.
+
+    Scans all python/src/archskillkit/ files and reports any direct
+    construction of ArchitectureWorld.for_repo(...) or CodeIndex(...) outside
+    the ADR-0049 sandbox exception (bootstrap/__init__.py).
+    """
+    findings: list[Finding] = []
+    for path in sorted(root.rglob("python/src/archskillkit/*.py")):
+        if any(part in {".venv", "__pycache__"} for part in path.parts):
+            continue
+        rel = norm(path, root)
+        if _is_sandbox_exception(rel):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+        except (UnicodeDecodeError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Check for ArchitectureWorld.for_repo(...)
+            if isinstance(func, ast.Attribute):
+                if func.attr == "for_repo":
+                    base = func.value
+                    if isinstance(base, ast.Name) and base.id == "ArchitectureWorld":
+                        findings.append(Finding(
+                            "ARC-010", rel, node.lineno,
+                            "forbidden_constructor",
+                            "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox"
+                        ))
+                    elif isinstance(base, ast.Attribute) and base.attr == "world":
+                        # ArchitectureWorld via module alias or attribute chain
+                        pass
+            # Check for CodeIndex( direct call
+            if isinstance(func, ast.Name) and func.id == "CodeIndex":
+                findings.append(Finding(
+                    "ARC-010", rel, node.lineno,
+                    "forbidden_constructor",
+                    "CodeIndex( construction outside ADR-0049 sandbox"
+                ))
+    return findings
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
@@ -167,7 +223,9 @@ def main() -> int:
     root = Path(args.root).resolve()
     contracts = json.loads(Path(args.contracts).read_text(encoding="utf-8"))
     findings = scan(root, contracts)
-    report = canonical_payload(findings)
+    arc_010_findings = emit_arc_010(root)
+    all_findings = findings + arc_010_findings
+    report = canonical_payload(all_findings)
 
     if args.write_baseline:
         baseline = {
@@ -198,15 +256,40 @@ def main() -> int:
         ]
 
     text = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    output_digest = hashlib.sha256(text.encode()).hexdigest()
+    exit_code = 1 if new or any(f.rule_id.startswith("VERIFIER-") for f in all_findings) else 0
+
+    evidence = {
+        "argv": sys.argv,
+        "exit_code": exit_code,
+        "output_digest": output_digest,
+        "result": report,
+        "checks": [
+            {
+                "check_id": "arc_010",
+                "rule_id": "ARC-010",
+                "findings": [asdict(f) for f in sorted(arc_010_findings)],
+                "count": len(arc_010_findings),
+            },
+            {
+                "check_id": "contract_rules",
+                "rule_id": "mixed",
+                "findings": [asdict(f) for f in sorted(findings)],
+                "count": len(findings),
+            },
+        ],
+    }
+
+    evidence_text = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
     if args.output:
         out = Path(args.output)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
+        out.write_text(evidence_text, encoding="utf-8")
     else:
-        sys.stdout.write(text)
+        sys.stdout.write(evidence_text)
 
     # Existing baseline debt is tolerated; any new exact violation fails.
-    return 1 if new or any(f.rule_id.startswith("VERIFIER-") for f in findings) else 0
+    return exit_code
 
 
 if __name__ == "__main__":

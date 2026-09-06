@@ -1,0 +1,58 @@
+# Capability manifest: arc-010-injection-guard
+# Enforcement arm of ADR-0059 (ARC-010 extraction invariant).
+# Registered via: sddk capability apply --capability cap-arc-010-injection-guard
+#   --manifest capabilities/arc-010-injection-guard.yaml --root . --scope .
+#
+# Required fields per launch-packet (Phase D T-V2.5-017):
+#   id, name, description, subject=arc-010, predicate_kind=arch_forbidden_prefix,
+#   forbidden_prefixes (5 entries from architecture-contracts.json ARC-010),
+#   enforcement=block, evidence_artifact_path
+#
+# Full schema per design.md §5.8:
+schema: arch-skillkit/capability-v1
+id: cap-arc-010-injection-guard
+name: arc-010-injection-guard
+owner: rubentxu
+description: |
+  Enforcement arm of ADR-0059 (ARC-010 extraction invariant).
+  Blocks any new ARC-010 finding in python/src/archskillkit/application/commands/*.py
+  before merge. ARC-010 forbids imports of delivery, world, codeindex,
+  activegraph, and persistence packages (including under TYPE_CHECKING).
+
+# Launch-packet required fields:
+subject: arc-010
+predicate_kind: arch_forbidden_prefix
+forbidden_prefixes:
+  - archskillkit.delivery
+  - archskillkit.world
+  - archskillkit.codeindex
+  - archskillkit.activegraph
+  - archskillkit.persistence
+enforcement: block
+evidence_artifact_path: docs/arch-skillkit-v2.5-evolution-pack/verification/arch_conformance.py:emit_arc_010
+
+# Full command + evidence per design.md §5.8:
+command:
+  argv:
+    - python3
+    - docs/arch-skillkit-v2.5-evolution-pack/verification/arch_conformance.py
+    - --root
+    - python/src/archskillkit
+    - --contracts
+    - docs/arch-skillkit-v2.5-evolution-pack/verification/architecture-contracts.json
+    - --baseline
+    - docs/arch-skillkit-v2.5-evolution-pack/verification/architecture-baseline.json
+    - --output
+    - build/architecture-report.json
+  expect_exit_code: 0
+  when_failed: block_merge
+
+evidence:
+  produces:
+    - build/architecture-report.json
+  consumes:
+    - docs/arch-skillkit-v2.5-evolution-pack/verification/architecture-contracts.json#ARC-010
+
+gates:
+  - ARCH-BASELINE-001
+  - ARCH-APP-CONCRETE-001

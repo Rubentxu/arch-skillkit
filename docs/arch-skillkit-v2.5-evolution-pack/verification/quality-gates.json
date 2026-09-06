@@ -54,7 +54,14 @@
       "metric": "application_api_coverage",
       "milestone": "M2",
       "operator": ">=",
-      "threshold": 0.9
+      "threshold": 0.9,
+      "formula": "liberal",
+      "coverable_surface": 19,
+      "numerator_strategy": "dual",
+      "block_independently": [
+        "ARC-002",
+        "ARC-004"
+      ]
     },
     {
       "class": "BLOCKING",
@@ -127,6 +134,18 @@
       "milestone": "M7",
       "operator": "==",
       "threshold": 0
+    },
+    {
+      "class": "BLOCKING",
+      "id": "ARC-010-INJECTION-GUARD",
+      "metric": "arc_010_invariant_violations",
+      "milestone": "M2",
+      "operator": "==",
+      "threshold": 0,
+      "enforcement": "block",
+      "subject": "arc-010",
+      "evidence_path": "verification/arch_conformance.py:emit_arc_010",
+      "remediation": "ADR-0059"
     }
   ],
   "schema": "arch-skillkit/quality-gates-v1"

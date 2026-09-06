@@ -78,6 +78,8 @@ verify-release version="0.3.0":
 verify-release-full version="0.3.0":
     ./scripts/verify/run-verify.sh "{{version}}"
 
+# Mirrors mise.toml[tasks."verify:architecture"] (ADR-0061: verify-architecture-in-ci).
+# The mise aggregator is the canonical entry point; justfile is a parallel convenience.
 [group('verify')]
 [doc('Arquitectura: verificar que el código cumple los contratos arquitectónicos (V2.5 M0)')]
 verify:architecture:

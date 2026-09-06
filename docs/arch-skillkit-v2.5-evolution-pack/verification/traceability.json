@@ -1,84 +1,42 @@
 {
   "links": [
-    {
-      "adr": "ADR-0047",
-      "gates": [
-        "ARCH-DELIVERY-001"
-      ],
-      "requirement": "INV-12",
-      "uat": [
-        "UAT25-013",
-        "UAT25-014"
-      ]
-    },
-    {
-      "adr": "ADR-0046",
-      "gates": [
-        "APP-COVERAGE-001",
-        "ARCH-WIRING-001"
-      ],
-      "requirement": "INV-13",
-      "uat": [
-        "UAT25-020",
-        "UAT25-022"
-      ]
-    },
-    {
-      "adr": "ADR-0048",
-      "gates": [
-        "ARCH-ACTIVEGRAPH-001",
-        "ARCH-GRAPH-LEAK-001"
-      ],
-      "requirement": "INV-14",
-      "uat": [
-        "UAT25-030",
-        "UAT25-031",
-        "UAT25-032"
-      ]
-    },
-    {
-      "adr": "ADR-0051",
-      "gates": [
-        "ARCH-BASELINE-001"
-      ],
-      "requirement": "INV-15",
-      "uat": [
-        "UAT25-001",
-        "UAT25-002"
-      ]
-    },
-    {
-      "adr": "ADR-0050",
-      "gates": [
-        "DELTA-DET-001"
-      ],
-      "requirement": "INV-16",
-      "uat": [
-        "UAT25-044"
-      ]
-    },
-    {
-      "adr": "ADR-0049",
-      "gates": [
-        "PROVIDER-PROVENANCE-001"
-      ],
-      "requirement": "G5",
-      "uat": [
-        "UAT25-050",
-        "UAT25-051"
-      ]
-    },
-    {
-      "adr": "ADR-0054",
-      "gates": [
-        "LEARN-NO-AUTO-ACCEPT-001"
-      ],
-      "requirement": "G4",
-      "uat": [
-        "UAT25-070",
-        "UAT25-071"
-      ]
-    }
+    {"adr": "ADR-0047", "gates": ["ARCH-DELIVERY-001"], "requirement": "INV-12", "uat": ["UAT25-013", "UAT25-014"]},
+    {"adr": "ADR-0046", "gates": ["APP-COVERAGE-001", "ARCH-WIRING-001"], "requirement": "INV-13", "uat": ["UAT25-020", "UAT25-022"]},
+    {"adr": "ADR-0048", "gates": ["ARCH-ACTIVEGRAPH-001", "ARCH-GRAPH-LEAK-001"], "requirement": "INV-14", "uat": ["UAT25-030", "UAT25-031", "UAT25-032"]},
+    {"adr": "ADR-0051", "gates": ["ARCH-BASELINE-001"], "requirement": "INV-15", "uat": ["UAT25-001", "UAT25-002"]},
+    {"adr": "ADR-0050", "gates": ["DELTA-DET-001"], "requirement": "INV-16", "uat": ["UAT25-044"]},
+    {"adr": "ADR-0049", "gates": ["PROVIDER-PROVENANCE-001"], "requirement": "G5", "uat": ["UAT25-050", "UAT25-051"]},
+    {"adr": "ADR-0054", "gates": ["LEARN-NO-AUTO-ACCEPT-001"], "requirement": "G4", "uat": ["UAT25-070", "UAT25-071"]}
+  ],
+  "adrs": [
+    {"id": "ADR-0057", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0057-alignment-adr-v2.5-contract.md", "sha256": "dd4b3feb1af082d0c5179a0b4036da1fe702049bfe4b408da22c9f712a43e778", "status": "draft", "decision": "proposed", "extends": ["ADR-0046", "ADR-0047"]},
+    {"id": "ADR-0058", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0058-composition-root-pattern.md", "sha256": "1eec4e74890d1ffa153fd374c8aaa837531836d6e63694662720de8af9a5626b", "status": "draft", "decision": "proposed", "extends": ["ADR-0046"]},
+    {"id": "ADR-0059", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0059-arc-010-extraction-invariant.md", "sha256": "f3626bb71308a86f941d85f35966e8b6192e30c8a8393b34a336329af06aa446", "status": "draft", "decision": "proposed"},
+    {"id": "ADR-0060", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0060-app-coverage-gate-formula.md", "sha256": "db3d93b19796fe950686b269b5af15f58bf1642d0ff5a9424cc0d0b0c5f0c88c", "status": "draft", "decision": "proposed"},
+    {"id": "ADR-0061", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0061-verify-architecture-in-ci.md", "sha256": "3f1195cdd4b314b87eeefcccc19b25a17eef897dca89c5963ab12150e0168f23", "status": "draft", "decision": "proposed"},
+    {"id": "ADR-0062", "path": "docs/arch-skillkit-v2.5-evolution-pack/docs/v2/adr/ADR-0062-pack-drift-reconciliation-rule.md", "sha256": "8148c7f01ad1a4206d6402e9aec4a6d80f8165a5107a3a9a004a47a0bf2c542c", "status": "draft", "decision": "proposed"}
+  ],
+  "specs": {
+    "ADR-0057": ["SPEC-V2.5-001", "SPEC-V2.5-002", "SPEC-V2.5-003", "SPEC-V2.5-004", "SPEC-V2.5-005"],
+    "ADR-0058": ["SPEC-V2.5-006", "SPEC-V2.5-007", "SPEC-V2.5-008", "SPEC-V2.5-009", "SPEC-V2.5-010"],
+    "ADR-0059": ["SPEC-V2.5-011", "SPEC-V2.5-012", "SPEC-V2.5-013", "SPEC-V2.5-014", "SPEC-V2.5-015"],
+    "ADR-0060": ["SPEC-V2.5-016", "SPEC-V2.5-017", "SPEC-V2.5-018", "SPEC-V2.5-019", "SPEC-V2.5-020"],
+    "ADR-0061": ["SPEC-V2.5-021", "SPEC-V2.5-022", "SPEC-V2.5-023", "SPEC-V2.5-024", "SPEC-V2.5-025"],
+    "ADR-0062": ["SPEC-V2.5-026", "SPEC-V2.5-027", "SPEC-V2.5-028", "SPEC-V2.5-029", "SPEC-V2.5-030"]
+  },
+  "incd": [
+    {"id": "INC-V2.5-PACK-DRIFT", "path": "docs/arch-skillkit-v2.5-evolution-pack/verification/INC-V2.5-PACK-DRIFT.md", "status": "open"}
+  ],
+  "vault_nodes": [
+    {"id": "ADDED-1", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "ADDED-2", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "ADDED-3", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "ADR-0047", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "ADR-0048", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "INC-M1-001", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "INC-M1-002", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "INC-M2-001", "mirror_target": "cycle-artifact:unknown"},
+    {"id": "M1-governance-application-api", "mirror_target": "cycle-artifact:unknown"}
   ],
   "schema": "arch-skillkit/traceability-v1"
 }

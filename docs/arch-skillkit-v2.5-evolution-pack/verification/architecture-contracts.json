@@ -28,6 +28,18 @@
       ]
     },
     {
+      "description": "Application commands must not depend on delivery (liberal surface: commands/ only).",
+      "forbidden": [
+        "archskillkit.delivery",
+        "archskillkit.adapters.inbound"
+      ],
+      "id": "ARC-002.1",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "python/src/archskillkit/application/commands"
+      ]
+    },
+    {
       "description": "Application must not import ActiveGraph.",
       "forbidden": [
         "activegraph"
@@ -47,6 +59,17 @@
       "kind": "forbidden_import_prefix",
       "scope": [
         "application"
+      ]
+    },
+    {
+      "description": "Application commands must not import concrete ArchitectureWorld (liberal surface: commands/ only).",
+      "forbidden": [
+        "archskillkit.world"
+      ],
+      "id": "ARC-004.1",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "python/src/archskillkit/application/commands"
       ]
     },
     {
@@ -111,6 +134,21 @@
         "adapters/inbound/http",
         "delivery/cli/mcp.py",
         "delivery/cli/control_plane.py"
+      ]
+    },
+    {
+      "description": "Application commands must not use extraction-layer constructs: no direct ArchitectureWorld.for_repo or CodeIndex( construction outside ADR-0049 sandbox; no imports from archskillkit.delivery, world, codeindex, activegraph, or persistence under TYPE_CHECKING.",
+      "forbidden": [
+        "archskillkit.delivery",
+        "archskillkit.world",
+        "archskillkit.codeindex",
+        "archskillkit.activegraph",
+        "archskillkit.persistence"
+      ],
+      "id": "ARC-010",
+      "kind": "forbidden_import_prefix",
+      "scope": [
+        "python/src/archskillkit/application/commands"
       ]
     }
   ],

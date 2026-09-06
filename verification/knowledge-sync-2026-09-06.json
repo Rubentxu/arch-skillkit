@@ -1,0 +1,112 @@
+{
+  "date": "2026-09-06",
+  "cycle_id": "p-f58d41952fdf56c1/v2-5-alignment-adr",
+  "project_id": "p-f58d41952fdf56c1",
+  "workspace_id": "w-5dfda8cc4d70d9d51957feb3",
+  "vault_path": "/home/rubentxu/.sddk-knowledge/p-f58d41952fdf56c1",
+  "pre_sync": {
+    "validate_errors": 25,
+    "nodes": 84
+  },
+  "post_sync": {
+    "validate_errors": 24,
+    "nodes": 95
+  },
+  "mirror_nodes_created": [
+    {
+      "id": "ADR-0057-alignment-adr-v2.5-contract",
+      "kind": "adrs",
+      "sha256": "dd4b3feb1af082d0c5179a0b4036da1fe702049bfe4b408da22c9f712a43e778"
+    },
+    {
+      "id": "ADR-0058-composition-root-pattern",
+      "kind": "adrs",
+      "sha256": "1eec4e74890d1ffa153fd374c8aaa837531836d6e63694662720de8af9a5626b"
+    },
+    {
+      "id": "ADR-0059-arc-010-extraction-invariant",
+      "kind": "adrs",
+      "sha256": "f3626bb71308a86f941d85f35966e8b6192e30c8a8393b34a336329af06aa446"
+    },
+    {
+      "id": "ADR-0060-app-coverage-gate-formula",
+      "kind": "adrs",
+      "sha256": "db3d93b19796fe950686b269b5af15f58bf1642d0ff5a9424cc0d0b0c5f0c88c"
+    },
+    {
+      "id": "ADR-0061-verify-architecture-in-ci",
+      "kind": "adrs",
+      "sha256": "3f1195cdd4b314b87eeefcccc19b25a17eef897dca89c5963ab12150e0168f23"
+    },
+    {
+      "id": "ADR-0062-pack-drift-reconciliation-rule",
+      "kind": "adrs",
+      "sha256": "8148c7f01ad1a4206d6402e9aec4a6d80f8165a5107a3a9a004a47a0bf2c542c"
+    },
+    {
+      "id": "cap-arc-010-injection-guard",
+      "kind": "capabilities",
+      "sha256": "505f0afaec56bf55d03d1383484b9190178511ab59e17a155cd86358429a7c62"
+    },
+    {
+      "id": "APP-COVERAGE-001",
+      "kind": "gates",
+      "sha256": null
+    },
+    {
+      "id": "ADDED-1-replay-candidate-no-cross-cli-imports",
+      "kind": "requirements",
+      "sha256": "660f72620cd00214"
+    },
+    {
+      "id": "ADDED-2-replay-candidate-no-stdout-capture",
+      "kind": "requirements",
+      "sha256": "aa10fa8575702b6e"
+    },
+    {
+      "id": "ADDED-3-replay-candidate-return-shape-parity",
+      "kind": "requirements",
+      "sha256": "f62b6ba7066f873d"
+    }
+  ],
+  "back_reference_updates": [
+    {
+      "id": "ADR-0047-application-service-single-call-refactor",
+      "kind": "adrs"
+    },
+    {
+      "id": "ADR-0048-stdout-is-not-in-process-ipc",
+      "kind": "adrs"
+    },
+    {
+      "id": "INC-M1-001-m1-cross-cli-coupling-hotspot",
+      "kind": "incs"
+    },
+    {
+      "id": "INC-M1-002-m1-stdout-as-ipc-hotspot",
+      "kind": "incs"
+    },
+    {
+      "id": "INC-M2-001-mcp-cross-cli-imports",
+      "kind": "incs"
+    },
+    {
+      "id": "m1-governance-application-api",
+      "kind": "cycles"
+    }
+  ],
+  "error_reduction": {
+    "pre": 25,
+    "post": 24,
+    "delta": -1,
+    "note": "ADDED-1/2/3 errors resolved; 2 new ADR wikilink parse errors (wikilinks word in body); 6 _log historical errors persist"
+  },
+  "verify_phase_next_steps": [
+    "Run reconcile script with --write to fix MANIFEST.json SHAs",
+    "Re-render README with M2 OPEN text",
+    "Fill 14 traceability links",
+    "Verify vault errors <= 16",
+    "Execute sddk cycle supersede for M2 orphan",
+    "Close INC-V2.5-PACK-DRIFT"
+  ]
+}
