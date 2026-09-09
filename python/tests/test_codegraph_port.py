@@ -207,6 +207,12 @@ class TestAppCoverageAfterM5:
 
     def test_arc_010_returns_no_findings(self):
         import subprocess
+        # The verifier script lives at ``docs/v2/verification/`` in the
+        # repo root and is invoked with paths relative to it. Run from
+        # the repo root so the test passes regardless of where pytest is
+        # launched from (CI runs ``mise run ci`` from the root; local
+        # shells may run pytest from ``python/``).
+        repo_root = Path(__file__).resolve().parents[2]
         result = subprocess.run(
             [
                 "python3", "docs/v2/verification/arch_conformance.py",
@@ -214,7 +220,7 @@ class TestAppCoverageAfterM5:
                 "--contracts", "docs/v2/verification/architecture-contracts.json",
                 "--output", "/tmp/archsk-m5-test.json",
             ],
-            capture_output=True, text=True,
+            capture_output=True, text=True, cwd=str(repo_root),
         )
         assert result.returncode == 0, f"verifier exited {result.returncode}: {result.stderr}"
 
