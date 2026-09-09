@@ -11,11 +11,16 @@ ArchSkillKit is an **agent-first, tool-first and repository-clean** toolkit for 
 ## TL;DR
 
 ```bash
-uv tool install archskillkit==0.5.0   # install the app
+uv pip install https://github.com/Rubentxu/arch-skillkit/releases/download/v0.5.1/archskillkit-0.5.1-py3-none-any.whl   # install the app
 archskillkit setup                    # install the pinned runtime (ast-grep, Semgrep, Node/LikeC4)
 archskillkit doctor                   # verify → "ready"
 archskillkit init --repo .            # start analyzing a repository
 ```
+
+> **Note:** the package is not published to PyPI yet; the wheel is
+> downloaded directly from the GitHub Release. PyPI publish is
+> tracked in `docs/v2/followup-pypi-publish.md` and will become the
+> default install command when that follow-up ships.
 
 Full walk-through: [user manual](docs/manual/user-manual.md) ·
 one-page reference: [cheat sheet](docs/manual/cheat-sheet.md)
@@ -85,10 +90,34 @@ installs anything inside the project being analyzed.
 ### The application
 
 ```bash
-uv tool install archskillkit==0.2.0     # or: pipx install archskillkit==0.2.0
+uv pip install https://github.com/Rubentxu/arch-skillkit/releases/download/v0.5.1/archskillkit-0.5.1-py3-none-any.whl
+# (PyPI publish is pending — see docs/v2/followup-pypi-publish.md)
 archskillkit setup                      # external tools, hash-verified, atomic
 archskillkit doctor                     # read-only installation diagnosis
 ```
+
+### Self-management (update / uninstall / version)
+
+The `archskillkit` CLI ships with three host-level subcommands to manage the
+installed wheel without depending on PyPI publish or on `gh skill uninstall`
+(which does not exist in the current `gh` preview).
+
+```bash
+archskillkit version                     # print the installed version
+archskillkit version --check             # compare with the latest GitHub Release (exit 1 if newer exists)
+archskillkit version --check --json      # same, machine-readable
+archskillkit self-upgrade --yes          # upgrade in place to the latest release
+archskillkit self-upgrade --target 0.5.1 # upgrade to a specific version
+archskillkit self-uninstall --yes        # uninstall from the current interpreter
+archskillkit self-uninstall --purge-runtime --yes   # also remove the XDG data directory
+```
+
+`self-upgrade` downloads the wheel for the latest (or `--target`) GitHub
+Release, verifies sha256 against the runtime manifest when present (warns
+`MANIFEST_MISSING` otherwise), and re-installs into the current interpreter
+via `uv pip install --upgrade` (falls back to `python -m pip` when `uv` is
+not on PATH). `--check` caches the GitHub API response for 1 hour in
+`XDG_CACHE_HOME`.
 
 Step-by-step details, offline flows, viewer integration and troubleshooting:
 [user manual](docs/manual/user-manual.md) ·
@@ -171,7 +200,7 @@ truth. See the
 
 ## Status
 
-**V2.5 (Architecture Integrity & Intelligence Kernel) is released at v0.5.0.** V2.5 M0–M4, M6–M7 are complete; M5 is partial — blocked on `CodeGraphQueryPort` absence (see ADR-0049). V2.1 phases A–G and V2.2 are prior milestones. Initiative names (V2.1/V2.2/V2.5) are separate from package SemVer: the Python package and the latest Git tag are both `0.5.0`. The distribution/installation mechanism is specified and implemented in [docs/v2/24](docs/v2/24-distribution-and-installation.md). See the [current V2 status](docs/v2/STATUS.md) and [V2 roadmap](docs/v2/16-roadmap-v2.md).
+**V2.5 (Architecture Integrity & Intelligence Kernel) is released at v0.5.1.** V2.5 M0–M4, M6–M7 are complete; M5 is partial — blocked on `CodeGraphQueryPort` absence (see ADR-0049). V2.1 phases A–G and V2.2 are prior milestones. Initiative names (V2.1/V2.2/V2.5) are separate from package SemVer: the Python package and the latest Git tag are both `0.5.1`. The distribution/installation mechanism is specified and implemented in [docs/v2/24](docs/v2/24-distribution-and-installation.md). v0.5.1 adds native self-management subcommands (`self-upgrade`, `self-uninstall`, `version --check`) so the wheel can be updated and removed without PyPI publish or `gh skill uninstall`. See the [current V2 status](docs/v2/STATUS.md) and [V2 roadmap](docs/v2/16-roadmap-v2.md).
 
 ## Documentation
 

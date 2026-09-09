@@ -6,6 +6,37 @@ SemVer (docs/05): MAJOR breaks workspace/evidence/Skill contracts, MINOR
 adds compatible capabilities, PATCH covers compatible rules, prompts and
 fixes.
 
+## [0.5.1] - 2026-09-09
+
+### Added
+
+- **Self-management subcommands** (cycle `archskillkit-self-mgmt-v1`):
+  native host-level commands so the installed wheel can be updated
+  and removed without depending on PyPI publish (deferred) or
+  `gh skill uninstall` (does not exist in `gh` preview).
+  - `archskillkit self-upgrade [--target VERSION] [--yes]` — download
+    the wheel for the latest (or `--target`) GitHub Release, verify
+    sha256 against the runtime manifest when present (warns
+    `MANIFEST_MISSING` otherwise), and re-install into the current
+    interpreter via `uv pip install --upgrade` (falls back to
+    `python -m pip` when `uv` is not on PATH).
+  - `archskillkit self-uninstall [--purge-runtime] [--yes]` — remove
+    the package from the current interpreter; optionally purge the
+    XDG data directory.
+  - `archskillkit version --check [--json]` — compare installed vs
+    latest GitHub Release, exit 1 if newer exists. GitHub API response
+    is cached for 1h in `XDG_CACHE_HOME`.
+  - Stdlib-only `python/src/archskillkit/self_mgmt.py` (438 lines).
+  - 18 new unit tests in `python/tests/test_self_mgmt.py`.
+
+### Notes
+
+- The Python package is not published to PyPI yet. Install via
+  `uv pip install <wheel-url>` or `pip install <wheel-url>`.
+  Follow-up tracked in `docs/v2/followup-pypi-publish.md`.
+- v0.5.0 is superseded by v0.5.1. All v0.5.0 assets remain available
+  on the GitHub Releases page for reproducibility.
+
 ## [0.5.0] - 2026-09-04
 
 ### Added

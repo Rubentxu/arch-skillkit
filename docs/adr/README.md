@@ -73,6 +73,7 @@ Si cambia:
 - ADR-0043 Semantic State separado de Presentation State
 - ADR-0044 Snapshot attestation reutiliza Sigstore
 - ADR-0045 Application API y ports por capability
+- ADR-0064 Native self-management subcommands (self-upgrade, self-uninstall, version --check)
 
 La especificación V2 completa vive en `docs/v2/` (núcleo V2.1 en docs
 00–23, capa de proyecciones V2.2 en docs 24–43, evolutivo V2.4 en docs

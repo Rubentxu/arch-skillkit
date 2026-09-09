@@ -331,3 +331,43 @@ dueño claro. El producto nunca instala nada al vuelo ni fuera del manifest, y
 la prueba de que "el artefacto que se publica funciona" es un trabajo de CI
 sobre el mismo wheel que recibe el usuario, no una función dentro del
 producto.
+
+## Auto-gestión del paquete (Self-management)
+
+Fecha de adición: 2026-09-09. Ciclo: `archskillkit-self-mgmt-v1` (v0.5.1).
+
+Mientras la publicación en PyPI está diferida y `gh skill uninstall` no existe
+en el preview actual de `gh`, el CLI expone tres subcomandos de host para
+gestionar el wheel instalado sin necesidad de PyPI ni del canal `gh skill`.
+
+```bash
+archskillkit version                     # versión instalada
+archskillkit version --check             # comparar con el último release (exit 1 si hay update)
+archskillkit version --check --json      # idem, JSON
+archskillkit self-upgrade [--target V] [--yes]    # descargar + verificar sha256 + reinstalar
+archskillkit self-uninstall [--purge-runtime] [--yes]
+```
+
+### Implementación
+
+- Módulo nuevo: `python/src/archskillkit/self_mgmt.py` (438 líneas, sólo
+  stdlib). Detecta el instalador del entorno (`uv` si está en PATH,
+  `python -m pip` en caso contrario) y usa `importlib.metadata` para detectar
+  presencia del paquete — funciona en `uv venv` que no incluyen `pip`.
+- Cache del response de la API de GitHub en `${XDG_CACHE_HOME:-~/.cache}/archskillkit/version-check.json`
+  con TTL de 1h.
+- Verificación del sha256 del wheel contra el runtime manifest del release
+  (warning `MANIFEST_MISSING` si el manifest no incluye el wheel, p. ej. en
+  releases con sólo sdist).
+- 18 tests unitarios nuevos en `python/tests/test_self_mgmt.py` cubren el
+  parsing de `ReleaseInfo`, comparación de versiones, fallback a cache ante
+  error de red, y los caminos de éxito/fallo de upgrade y uninstall.
+
+### Cobertura de los cuatro flujos de instalación
+
+| Flujo | Estado en v0.5.1 |
+| --- | --- |
+| Distribución | ✅ GH Release con wheel + sdist + manifest |
+| Instalación | ✅ `uv pip install <wheel-url>` (PyPI diferido, ver `followup-pypi-publish.md`) |
+| Actualización | ✅ `archskillkit self-upgrade --yes` |
+| Desinstalación | ✅ `archskillkit self-uninstall --yes` |
