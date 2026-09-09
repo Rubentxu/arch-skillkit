@@ -85,9 +85,24 @@ def artifact(
     install: list[str] | None = None, attested_by_us: bool = False,
     attestation_repo: str | None = None,
 ) -> dict:
-    policy = ({"required": True, "repository": attestation_repo}
-              if attested_by_us and attestation_repo
-              else {"required": False})
+    # T-4 (archskillkit-distribution-v1): the installer's default
+    # posture is "must be attested". Artifacts we do NOT sign upstream
+    # (ast-grep, node, anything fetched from a third-party release)
+    # are emitted as `required=False` with a `warning` field that
+    # tells the runtime and the operator that the integrity guarantee
+    # is "hash-only, no provenance". Artifacts we DO sign carry
+    # `required=True` with the attestation repository they were
+    # signed against.
+    if attested_by_us and attestation_repo:
+        policy = {"required": True, "repository": attestation_repo}
+    else:
+        policy = {
+            "required": False,
+            "warning": (
+                "upstream artifact; integrity verified by sha256 only, "
+                "no provenance attestation by Rubentxu/arch-skillkit"
+            ),
+        }
     entry = {
         "id": artifact_id, "kind": kind, "version": version, "url": url,
         "sha256": digest, "size_bytes": size, "executable": executable,

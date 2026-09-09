@@ -29,6 +29,10 @@ class AttestationPolicy(BaseModel):
     bundle: str | None = None
     subject_sha256: str | None = None
     repository: str | None = None  # owner/repo for GitHub attestation lookup
+    # T-4 (archskillkit-distribution-v1): present when `required=False`
+    # for upstream artifacts (ast-grep, node) so the runtime/operator
+    # know that the integrity guarantee is hash-only, no provenance.
+    warning: str | None = None
 
 
 class Artifact(BaseModel):

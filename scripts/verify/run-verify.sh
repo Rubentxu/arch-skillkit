@@ -18,7 +18,25 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VERSION="${1:-0.3.0}"
+# T-2 (archskillkit-distribution-v1): derive DEFAULT_VERSION from
+# dist/*.whl or python/pyproject.toml; explicit arg still wins for triage.
+_resolve_default_version() {
+  local whl
+  whl=$(ls "$ROOT"/dist/archskillkit-*-py3-none-any.whl 2>/dev/null \
+        | head -1)
+  if [ -n "$whl" ]; then
+    basename "$whl" | sed -E 's/^archskillkit-([0-9][^-]*)-py3-none-any\.whl$/\1/'
+    return 0
+  fi
+  # fallback: python/pyproject.toml
+  sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)"/\1/p' \
+    "$ROOT/python/pyproject.toml" | head -1
+}
+DEFAULT_VERSION="$(_resolve_default_version)"
+VERSION="${1:-$DEFAULT_VERSION}"
+if [ "${1:-}" != "" ] && [ "$VERSION" != "$DEFAULT_VERSION" ]; then
+  echo "WARN: requested version $VERSION != current release $DEFAULT_VERSION" >&2
+fi
 IMAGE="${VERIFY_IMAGE:-debian:bookworm-slim}"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 ART="$ROOT/artifacts/verify/$RUN_ID"

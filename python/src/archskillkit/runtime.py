@@ -679,6 +679,7 @@ def run_setup(
 
         final = paths.runtime_dir(manifest.release.version, key)
         staging = paths.runtimes / f".staging-{uuid.uuid4().hex}"
+        previous = paths.runtimes / f".previous-{manifest.release.version}-{key}"
         activated = False
         try:
             paths.runtimes.mkdir(parents=True, exist_ok=True)
@@ -688,14 +689,21 @@ def run_setup(
                 cached = paths.cache_path(artifact.sha256)
                 evidence[artifact.id] = _materialize_artifact(
                     artifact, staging, cached)
+            # T-3 (archskillkit-distribution-v1): fix shebangs in the
+            # staging directory BEFORE the atomic rename so a crash here
+            # never leaves a partially-mutated runtime at `final`.
+            _fix_venv_shebangs(staging, staging)
             if final.is_dir():
-                shutil.rmtree(final)
+                # Move the previous install aside as the rollback anchor
+                # (last-known-good) only after staging is fully consistent.
+                if previous.exists():
+                    shutil.rmtree(previous)
+                shutil.move(str(final), str(previous))
             elif final.exists():
                 final.unlink()
             final.parent.mkdir(parents=True, exist_ok=True)
             os.replace(staging, final)
             activated = True
-            _fix_venv_shebangs(final, staging)
             (final / "installed.json").write_text(json.dumps({
                 "version": manifest.release.version,
                 "platform": key,

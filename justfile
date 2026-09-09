@@ -69,14 +69,14 @@ uat-test:
       -- bats tests/uat
 
 [group('verify')]
-[doc('Verificación Fase 2 en contenedor limpio (online): instala el release, setup, doctor, análisis, corrupción')]
-verify-release version="0.3.0":
-    ./scripts/verify/run-verify.sh "{{version}}"
+[doc('Verificación Fase 2 en contenedor limpio (online): instala el release, setup, doctor, análisis, corrupción. T-2: defaults derived from dist/*.whl or python/pyproject.toml (run-verify.sh).')]
+verify-release:
+    ./scripts/verify/run-verify.sh
 
 [group('verify')]
-[doc('Verificación Fase 2 completa incluyendo camino OFFLINE (dos contenedores)')]
-verify-release-full version="0.3.0":
-    ./scripts/verify/run-verify.sh "{{version}}"
+[doc('Verificación Fase 2 completa incluyendo camino OFFLINE (dos contenedores). T-2: defaults derived from dist/*.whl or python/pyproject.toml.')]
+verify-release-full:
+    ./scripts/verify/run-verify.sh
 
 # Mirrors mise.toml[tasks."verify:architecture"] (ADR-0061: verify-architecture-in-ci).
 # The mise aggregator is the canonical entry point; justfile is a parallel convenience.
