@@ -125,10 +125,10 @@ bats "${ARCHSKILLKIT_BATS_TARGET:-tests/}"
 description = "Verify architecture conformance: ARC-010, ARC-002, ARC-004, APP-COVERAGE-001"
 env = { PYTHONPATH = "${MISE_PROJECT_ROOT:-.}/python/src" }
 run = '''
-python3 docs/arch-skillkit-v2.5-evolution-pack/verification/arch_conformance.py \
+python3 docs/v2/verification/arch_conformance.py \
   --root python/src/archskillkit \
-  --contracts docs/arch-skillkit-v2.5-evolution-pack/verification/architecture-contracts.json \
-  --baseline docs/arch-skillkit-v2.5-evolution-pack/verification/architecture-baseline.json \
+  --contracts docs/v2/verification/architecture-contracts.json \
+  --baseline docs/v2/verification/architecture-baseline.json \
   --output build/architecture-report.json
 '''
 
