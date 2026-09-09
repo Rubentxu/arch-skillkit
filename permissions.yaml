@@ -1,0 +1,40 @@
+---
+# Permissions registry for sddk release.
+# Schema: agents.<name>.phases is a list of allowed phase names.
+# Each agent also declares its capability set under `capabilities`.
+version: 1
+agents:
+  orchestrator-session:
+    phases:
+      - release
+      - verify
+      - build
+    capabilities:
+      - release.apply
+      - git.inspect
+      - git.create_branch
+      - git.commit
+      - git.tag
+      - git.push
+      - release.merge-receipt
+      - release.release-receipt
+      - release.release-uat-approved
+      - release.no-pending-effects
+      - ledger.transition
+      - ledger.event
+  sddk-release:
+    phases:
+      - release
+    capabilities:
+      - release.apply
+      - git.inspect
+      - git.create_branch
+      - git.commit
+      - git.tag
+      - git.push
+      - release.merge-receipt
+      - release.release-receipt
+      - release.release-uat-approved
+      - release.no-pending-effects
+      - ledger.transition
+      - ledger.event
