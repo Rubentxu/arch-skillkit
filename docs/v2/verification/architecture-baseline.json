@@ -1,4 +1,40 @@
 {
-  "findings": [],
+  "findings": [
+    {
+      "detail": "import:archskillkit.delivery.cli.replay_fixture",
+      "kind": "forbidden_import_prefix",
+      "line": 47,
+      "path": "application/commands/replay.py",
+      "rule_id": "ARC-002"
+    },
+    {
+      "detail": "import:archskillkit.delivery.cli.simulate",
+      "kind": "forbidden_import_prefix",
+      "line": 49,
+      "path": "application/commands/simulation.py",
+      "rule_id": "ARC-002"
+    },
+    {
+      "detail": "import:archskillkit.world",
+      "kind": "forbidden_import_prefix",
+      "line": 16,
+      "path": "application/commands/conformance.py",
+      "rule_id": "ARC-004"
+    },
+    {
+      "detail": "import:archskillkit.world",
+      "kind": "forbidden_import_prefix",
+      "line": 22,
+      "path": "application/commands/sensors.py",
+      "rule_id": "ARC-004"
+    },
+    {
+      "detail": "import:archskillkit.world",
+      "kind": "forbidden_import_prefix",
+      "line": 16,
+      "path": "application/commands/simulation.py",
+      "rule_id": "ARC-004"
+    }
+  ],
   "schema": "arch-skillkit/architecture-baseline-v1"
 }
