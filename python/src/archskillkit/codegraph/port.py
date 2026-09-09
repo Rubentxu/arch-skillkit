@@ -59,6 +59,15 @@ class CodeGraphQueryPort(Protocol):
 
     def recent_delta_names(self) -> frozenset[str]: ...
 
+    def edges_of_run(self, scan_run_id: str) -> list[dict[str, Any]]:
+        """All edges of a scan run with symbol/file context — the input
+        the promotion services (M2-C1) turn into observations.
+
+        Added in M5b (v0.13.1) to close the gap where ``promotion.discover``
+        called ``index.edges_of_run(...)`` against the Port type but the
+        Adapter never delegated it.
+        """
+
     def provenance(self, symbol_id: int | None = None) -> list[tuple[str, str, str | None]]:
         """Return distinct (scanner, scan_run_id, ingested_at) tuples.
 

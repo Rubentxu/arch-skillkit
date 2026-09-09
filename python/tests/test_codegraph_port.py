@@ -207,6 +207,12 @@ class TestAppCoverageAfterM5:
 
     def test_arc_010_returns_no_findings(self):
         import subprocess
+        # The verifier script lives at ``docs/v2/verification/`` in the
+        # repo root and is invoked with paths relative to it. Run from
+        # the repo root so the test passes regardless of where pytest is
+        # launched from (CI runs ``mise run ci`` from the root; local
+        # shells may run pytest from ``python/``).
+        repo_root = Path(__file__).resolve().parents[2]
         result = subprocess.run(
             [
                 "python3", "docs/v2/verification/arch_conformance.py",
@@ -214,7 +220,7 @@ class TestAppCoverageAfterM5:
                 "--contracts", "docs/v2/verification/architecture-contracts.json",
                 "--output", "/tmp/archsk-m5-test.json",
             ],
-            capture_output=True, text=True,
+            capture_output=True, text=True, cwd=str(repo_root),
         )
         assert result.returncode == 0, f"verifier exited {result.returncode}: {result.stderr}"
 
@@ -385,6 +391,8 @@ class TestCodeGraphQueryPortConformance:
                 return []
             def recent_delta_names(self):
                 return frozenset()
+            def edges_of_run(self, scan_run_id):
+                return []
             def provenance(self, symbol_id=None):
                 return []
             def close(self):
@@ -496,6 +504,120 @@ class TestCodeGraphQueryPortConformance:
             adapter = CodeGraphSqliteAdapter.open(path)
             with pytest.raises(AmbiguousSymbolError):
                 adapter.resolve(1)
+            adapter.close()
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+
+class TestEdgesOfRunM5b:
+    """M5b regression: edges_of_run on the Adapter (PROVIDER-EDGES-001).
+
+    v0.13.0 (PR #7) added the CodeGraphQueryPort Protocol but omitted
+    ``edges_of_run`` even though ``promotion.discover`` calls it against
+    the Port type. The result was an ``AttributeError`` at runtime when
+    CLI end-to-end tests exercised promotion. This class proves the
+    Adapter now exposes the method and forwards to the underlying
+    ``CodeIndex.edges_of_run``.
+    """
+
+    def _astgrep_payload(self) -> str:
+        import json
+        return json.dumps({
+            "ruleId": "foo.bar",
+            "file": "/tmp/main.py",
+            "text": "def foo(): pass",
+            "range": {"start": {"line": 0}, "end": {"line": 0}},
+            "lines": "def foo(): pass",
+        }) + "\n"
+
+    def _semgrep_payload(self) -> str:
+        import json
+        return json.dumps({
+            "results": [{
+                "check_id": "foo.bar",
+                "path": "/tmp/main.py",
+                "start": {"line": 1},
+                "end": {"line": 1},
+                "extra": {
+                    "metavars": {},
+                    "metadata": {"archskillkit": {"fact": "uses", "target_kind": "datastore"}},
+                },
+            }]
+        })
+
+    def test_edges_of_run_in_port_protocol(self):
+        """The Protocol declares edges_of_run (closed gap M5b)."""
+        from archskillkit.codegraph.port import CodeGraphQueryPort
+        assert hasattr(CodeGraphQueryPort, "edges_of_run")
+        import inspect
+        sig = inspect.signature(CodeGraphQueryPort.edges_of_run)
+        assert "scan_run_id" in sig.parameters
+
+    def test_adapter_exposes_edges_of_run(self):
+        """Scenario: CodeGraphSqliteAdapter delegates edges_of_run."""
+        from archskillkit.codegraph import CodeGraphSqliteAdapter
+        from archskillkit.codegraph.port import CodeGraphQueryPort
+        assert hasattr(CodeGraphSqliteAdapter, "edges_of_run")
+        with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
+            path = tf.name
+        try:
+            adapter = CodeGraphSqliteAdapter.open(path)
+            try:
+                # Runtime structural conformance
+                isinstance(adapter, CodeGraphQueryPort)
+            finally:
+                adapter.close()
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_edges_of_run_returns_empty_for_unknown_run(self):
+        """Scenario: edges_of_run on a run_id with no edges returns []."""
+        from archskillkit.codegraph import CodeGraphSqliteAdapter
+        with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
+            path = tf.name
+        try:
+            adapter = CodeGraphSqliteAdapter.open(path)
+            adapter.ingest_astgrep(self._astgrep_payload(), "run-ast", "/tmp")
+            result = adapter.edges_of_run("does-not-exist")
+            assert isinstance(result, list)
+            assert result == []
+            adapter.close()
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_edges_of_run_delegates_to_inner(self):
+        """Scenario: a semgrep ingest produces exactly 1 edge in the run.
+
+        This is the regression that broke CLI tests in v0.13.0:
+        ``promotion.discover`` -> ``index.edges_of_run(scan_run_id)``
+        raised AttributeError because the Adapter didn't expose it.
+        """
+        from archskillkit.codegraph import CodeGraphSqliteAdapter
+        with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
+            path = tf.name
+        try:
+            adapter = CodeGraphSqliteAdapter.open(path)
+            adapter.ingest_astgrep(self._astgrep_payload(), "run-ast", "/tmp")
+            adapter.ingest_semgrep(self._semgrep_payload(), "run-sgp", "/tmp")
+
+            edges = adapter.edges_of_run("run-sgp")
+            assert isinstance(edges, list)
+            assert len(edges) == 1
+            edge = edges[0]
+            assert edge["kind"] == "USES"
+            assert edge["rule"] == "foo.bar"
+            assert edge["target_kind"] == "datastore"
+            # CodeIndex normalizes file paths relative to scan_root
+            assert edge["source_path"] == "main.py"
+            assert "target_name" in edge
+            assert "source_name" in edge
+
+            # ast-grep run produced 0 edges (it only indexes symbols)
+            assert adapter.edges_of_run("run-ast") == []
+
+            # Result matches what the underlying CodeIndex returns
+            assert edges == adapter.inner.edges_of_run("run-sgp")
+
             adapter.close()
         finally:
             Path(path).unlink(missing_ok=True)

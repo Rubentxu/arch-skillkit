@@ -107,6 +107,9 @@ class CodeGraphSqliteAdapter:
     def recent_delta_names(self) -> frozenset[str]:
         return self._inner.recent_delta_names()
 
+    def edges_of_run(self, scan_run_id: str) -> list[dict[str, Any]]:
+        return self._inner.edges_of_run(scan_run_id)
+
     def provenance(self, symbol_id: int | None = None) -> list[tuple[str, str, str | None]]:
         """Return distinct (scanner, scan_run_id, ingested_at) tuples.
 
