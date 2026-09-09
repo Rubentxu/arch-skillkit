@@ -32,6 +32,11 @@ on:
         description: "Tag to smoke-test (e.g. v0.5.0). Must exist on origin with a published wheel + manifest."
         required: true
         type: string
+      include_macos:
+        description: "Include macOS in the matrix (off by default; manifest v0.5.0 only declares linux/x86_64 runtime artifacts). Set true once darwin/aarch64 artifacts are added to the manifest."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,11 +58,22 @@ jobs:
           - os: macos
             runner: macos-latest
             python: "3.12"
+            only_on_dispatch: true
     env:
       # workflow_run uses workflow_run.head_branch (the tag, e.g. v0.5.0).
       # workflow_dispatch uses inputs.tag.
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+      # Exclude macos from automatic post-release runs until the manifest
+      # ships darwin/aarch64 artifacts (v0.5.0 only declares linux/x86_64;
+      # see `docs/v2/25-supported-platforms.md`).
+      INCLUDE_MACOS: ${{ github.event_name == 'workflow_dispatch' && (inputs.include_macos || false) || false }}
     steps:
+      - name: Skip macOS in automatic runs (manifest gap)
+        if: matrix.os == 'macos' && env.INCLUDE_MACOS != 'true'
+        run: |
+          echo "::notice title=skipped::macOS smoke test skipped — manifest v0.5.0 does not declare darwin/aarch64 runtime artifacts. Re-run with include_macos=true once the manifest ships them."
+          exit 0
+
       - name: Check out repository
         uses: actions/checkout@v4
 
