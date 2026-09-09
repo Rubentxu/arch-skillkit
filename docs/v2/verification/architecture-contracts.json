@@ -9,8 +9,6 @@
       "id": "ARC-001",
       "kind": "forbidden_import_prefix",
       "scope": [
-        "adapters/inbound/mcp",
-        "adapters/inbound/http",
         "delivery/cli/mcp.py",
         "delivery/cli/control_plane.py"
       ]
@@ -93,9 +91,7 @@
       "id": "ARC-008",
       "kind": "forbidden_import_prefix",
       "scope": [
-        "application",
-        "adapters/inbound/mcp",
-        "adapters/inbound/http"
+        "application"
       ]
     },
     {
@@ -107,8 +103,6 @@
         "redirect_stderr"
       ],
       "scope": [
-        "adapters/inbound/mcp",
-        "adapters/inbound/http",
         "delivery/cli/mcp.py",
         "delivery/cli/control_plane.py"
       ]
