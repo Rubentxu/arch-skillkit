@@ -1,6 +1,7 @@
 """CLI facade tests: `python -m archskillkit` — the agent-facing seam."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -333,12 +334,18 @@ class TestForkCli:
 
 
 def _sandbox_env(monkeypatch, tmp_path):
+    # Preserve PYTHONPATH so `python -m archskillkit` resolves the in-tree
+    # `src/` layout regardless of where the test process was launched from
+    # (CI runs from `python/`, but local shells may not).
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",
         "HOME": str(tmp_path / "home"),
         "XDG_DATA_HOME": str(tmp_path / "data"),
         "XDG_STATE_HOME": str(tmp_path / "state"),
     }
+    pp = os.environ.get("PYTHONPATH")
+    if pp:
+        env["PYTHONPATH"] = pp
     (tmp_path / "home").mkdir(exist_ok=True)
     return env
 
