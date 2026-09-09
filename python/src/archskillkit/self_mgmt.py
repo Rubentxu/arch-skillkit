@@ -263,6 +263,36 @@ def _detect_installer() -> list[str]:
         return [sys.executable, "-m", "pip"]
 
 
+def _installer_uses_uv() -> bool:
+    """True when the detected installer is the ``uv`` CLI.
+
+    Used to decide whether to forward ``--python sys.executable`` so the
+    subprocess targets the *current* interpreter, regardless of cwd.
+    Without this flag, ``uv pip`` only discovers the target venv via
+    ``$VIRTUAL_ENV`` or by walking up from cwd looking for ``pyvenv.cfg``,
+    which silently fails when the user runs ``archskillkit self-uninstall``
+    from a different directory (regression fixed in v0.5.2, see ADR-0067).
+    """
+    uv_path = shutil.which("uv")
+    if not uv_path:
+        return False
+    installer = _detect_installer()
+    return bool(installer) and installer[0] == uv_path
+
+
+def _build_installer_cmd(*args: str) -> list[str]:
+    """Build a pip-compatible command for the current installer.
+
+    For ``uv``, always append ``--python sys.executable`` so the target
+    interpreter is unambiguous. For stock ``python -m pip``, the embedded
+    ``sys.executable`` already implies the target.
+    """
+    cmd = _detect_installer() + list(args)
+    if _installer_uses_uv():
+        cmd += ["--python", sys.executable]
+    return cmd
+
+
 def self_upgrade(
     *,
     target: str | None = None,
@@ -333,13 +363,10 @@ def self_upgrade(
         wheel_tmp.unlink(missing_ok=True)
         return EXIT_ERROR, f"ERROR: {exc.code}: {exc.message}"
 
-    # Invoke the matching installer to upgrade in place.
-    installer = _detect_installer()
-    if installer[:1] == [shutil.which("uv") or ""] and shutil.which("uv"):
-        # uv: `uv pip install --upgrade <wheel>`
-        cmd = installer + ["install", "--upgrade", str(wheel_tmp)]
-    else:
-        cmd = installer + ["install", "--upgrade", str(wheel_tmp)]
+    # Invoke the matching installer to upgrade in place. We use
+    # `_build_installer_cmd` so uv (when present) is pinned to the current
+    # interpreter via --python, making the call cwd-independent.
+    cmd = _build_installer_cmd("install", "--upgrade", str(wheel_tmp))
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     finally:
@@ -382,12 +409,14 @@ def self_uninstall(
         return EXIT_OK, "archskillkit is not installed"
 
     uninstalled_version = installed_version or _installed_version
-    installer = _detect_installer()
-    if installer[:1] == [shutil.which("uv") or ""] and shutil.which("uv"):
-        # uv: `uv pip uninstall archskillkit`
-        cmd = installer + ["uninstall", "archskillkit"]
+    # Use `_build_installer_cmd` so uv (when present) is pinned to the
+    # current interpreter via --python, making the call cwd-independent.
+    if _installer_uses_uv():
+        cmd = _build_installer_cmd("uninstall", "archskillkit")
     else:
-        cmd = installer + ["uninstall", "-y", "archskillkit"]
+        # Stock `python -m pip uninstall` already targets the active venv
+        # through sys.executable; no extra flag needed.
+        cmd = _build_installer_cmd("uninstall", "-y", "archskillkit")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         return (

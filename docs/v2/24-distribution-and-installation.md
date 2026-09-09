@@ -365,12 +365,26 @@ archskillkit self-uninstall [--purge-runtime] [--yes]
 
 ### Cobertura de los cuatro flujos de instalación
 
-| Flujo | Estado en v0.5.1 |
-| --- | --- |
-| Distribución | ✅ GH Release con wheel + sdist + manifest |
-| Instalación | ✅ `uv pip install <wheel-url>` (PyPI diferido, ver `followup-pypi-publish.md`) |
-| Actualización | ✅ `archskillkit self-upgrade --yes` |
-| Desinstalación | ✅ `archskillkit self-uninstall --yes` |
+| Flujo | Estado en v0.5.1 | Estado en v0.5.2 |
+| --- | --- | --- |
+| Distribución | ✅ GH Release con wheel + sdist + manifest | ✅ mismo (mismas 7 assets) |
+| Instalación | ✅ `uv pip install <wheel-url>` (PyPI diferido, ver `followup-pypi-publish.md`) | ✅ mismo |
+| Actualización | ⚠️ `archskillkit self-upgrade --yes` solo desde cwd que contiene `pyvenv.cfg` | ✅ fix en [ADR-0067](../adr/ADR-0067-self-mgmt-uv-python-pin.md): `--python sys.executable` se reenvía a `uv pip` |
+| Desinstalación | ⚠️ `archskillkit self-uninstall --yes` no-op silencioso desde `/tmp` u otros cwd fuera del árbol del venv | ✅ mismo fix |
+
+### Hotfix v0.5.2 (2026-09-09)
+
+El sweep end-to-end de los canales de distribución (commit siguiente a
+v0.5.1) descubrió que `archskillkit self-uninstall --yes` y
+`archskillkit self-upgrade` no fallaban explícitamente cuando se
+ejecutaban desde un directorio fuera del árbol del venv: reportaban
+éxito sin tocar el paquete. Causa raíz: `uv pip` resuelve el venv
+objetivo vía `$VIRTUAL_ENV` o caminando hacia arriba desde cwd buscando
+`pyvenv.cfg`; ninguno está disponible cuando el usuario lanza el CLI
+desde `/tmp`. Solución: pasar `--python sys.executable` en cada
+invocación a `uv pip` (ver [ADR-0067](../adr/ADR-0067-self-mgmt-uv-python-pin.md)).
+Stock `python -m pip` no estaba afectado (hereda el intérprete vía
+`sys.executable`).
 
 ### Plataformas soportadas (runtime manifest)
 

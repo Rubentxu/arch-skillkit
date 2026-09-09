@@ -6,6 +6,38 @@ SemVer (docs/05): MAJOR breaks workspace/evidence/Skill contracts, MINOR
 adds compatible capabilities, PATCH covers compatible rules, prompts and
 fixes.
 
+## [0.5.2] - 2026-09-09
+
+### Fixed
+
+- **`self-upgrade` / `self-uninstall` silently no-op'd when invoked from
+  outside the venv directory tree** (hotfix for v0.5.1, ADR-0067). When
+  `uv` was the installer, `uv pip install/uninstall` resolved the target
+  venv via `$VIRTUAL_ENV` or by walking up from cwd looking for
+  `pyvenv.cfg`. Neither is set when the user runs e.g.
+  `~/venv/bin/archskillkit self-uninstall --yes` from `/tmp`, so uv
+  returned "No virtual environment found" and the CLI reported a
+  successful uninstall even though nothing happened. The fix forwards
+  `--python sys.executable` to every `uv pip` invocation so the target
+  interpreter is unambiguous regardless of cwd. Stock `python -m pip`
+  was never affected (it inherits the active interpreter via
+  `sys.executable`).
+
+### Tests
+
+- 4 new regression tests in `python/tests/test_self_mgmt.py`:
+  `test_build_installer_cmd_pins_python_when_uv`,
+  `test_build_installer_cmd_no_python_for_pip`,
+  `test_self_uninstall_forwards_python_when_uv`,
+  `test_self_upgrade_forwards_python_when_uv`.
+
+### Notes
+
+- v0.5.1 users can recover with
+  `archskillkit self-upgrade --target v0.5.2 --yes` from inside their
+  venv directory (so uv finds the venv), then `archskillkit
+  self-uninstall --yes` will work from any cwd.
+
 ## [0.5.1] - 2026-09-09
 
 ### Added

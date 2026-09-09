@@ -235,6 +235,91 @@ def test_self_uninstall_purge_runtime(monkeypatch, tmp_path):
     assert not runtime_dir.exists()
 
 
+# --- regression: --python forwarding for uv (ADR-0067) ---------------------
+
+
+def test_build_installer_cmd_pins_python_when_uv(monkeypatch):
+    """When the installer is uv, the command must pin --python sys.executable.
+
+    Without --python, ``uv pip`` discovers the target venv via $VIRTUAL_ENV or
+    by walking up from cwd looking for pyvenv.cfg. When the user runs
+    ``archskillkit self-uninstall`` from an unrelated cwd (e.g. /tmp), uv
+    silently fails to find the venv and the operation is a no-op (the bug
+    fixed in v0.5.2). This test guards against the regression.
+    """
+    fake_uv = "/usr/bin/uv"
+    monkeypatch.setattr(self_mgmt.shutil, "which", lambda name: fake_uv if name == "uv" else None)
+    monkeypatch.setattr(self_mgmt, "_detect_installer", lambda: [fake_uv, "pip"])
+
+    cmd = self_mgmt._build_installer_cmd("uninstall", "archskillkit")
+    assert cmd[:2] == [fake_uv, "pip"]
+    assert "--python" in cmd
+    assert cmd[cmd.index("--python") + 1] == sys.executable
+    # No `-y` for uv (uv never prompts for confirmation)
+    assert "-y" not in cmd
+
+
+def test_build_installer_cmd_no_python_for_pip(monkeypatch):
+    """When the installer is stock python -m pip, no extra flag is needed."""
+    monkeypatch.setattr(self_mgmt.shutil, "which", lambda name: None)  # no uv
+    monkeypatch.setattr(self_mgmt, "_detect_installer",
+                        lambda: [sys.executable, "-m", "pip"])
+    cmd = self_mgmt._build_installer_cmd("uninstall", "-y", "archskillkit")
+    assert "--python" not in cmd
+    assert "-y" in cmd
+
+
+def test_self_uninstall_forwards_python_when_uv(monkeypatch):
+    """End-to-end: self_uninstall with uv installer must send --python."""
+    fake_uv = "/usr/bin/uv"
+    monkeypatch.setattr(self_mgmt.shutil, "which", lambda name: fake_uv if name == "uv" else None)
+    monkeypatch.setattr(self_mgmt, "_detect_installer", lambda: [fake_uv, "pip"])
+    monkeypatch.setattr(self_mgmt, "_installed_via_pip", lambda: (True, "0.5.1"))
+
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code, _msg = self_mgmt.self_uninstall(yes=True)
+    assert exit_code == 0
+    assert captured["cmd"][:2] == [fake_uv, "pip"]
+    assert "--python" in captured["cmd"]
+    assert captured["cmd"][captured["cmd"].index("--python") + 1] == sys.executable
+
+
+def test_self_upgrade_forwards_python_when_uv(monkeypatch, tmp_path):
+    """End-to-end: self_upgrade with uv installer must send --python."""
+    fake_uv = "/usr/bin/uv"
+    monkeypatch.setattr(self_mgmt.shutil, "which", lambda name: fake_uv if name == "uv" else None)
+    monkeypatch.setattr(self_mgmt, "_detect_installer", lambda: [fake_uv, "pip"])
+    monkeypatch.setattr(self_mgmt, "_installed_version", "0.5.0")
+    fake = _fake_release("v0.5.1", "0.5.1")
+    monkeypatch.setattr(self_mgmt, "fetch_release",
+                        lambda tag, repo=None: self_mgmt._release_from_raw(fake))
+    fake_wheel = tmp_path / "archskillkit-0.5.1-py3-none-any.whl"
+    fake_wheel.write_bytes(b"fake wheel bytes")
+    monkeypatch.setattr(self_mgmt, "download", lambda url, dest: dest.write_bytes(b"x"))
+    monkeypatch.setattr(self_mgmt, "_maybe_fetch_manifest_sha", lambda *a, **kw: None)
+
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code, _msg = self_mgmt.self_upgrade(target="v0.5.1", yes=True)
+    assert exit_code == 0
+    assert captured["cmd"][:2] == [fake_uv, "pip"]
+    assert "--python" in captured["cmd"]
+    assert captured["cmd"][captured["cmd"].index("--python") + 1] == sys.executable
+
+
 # --- CLI registration -----------------------------------------------------
 
 
