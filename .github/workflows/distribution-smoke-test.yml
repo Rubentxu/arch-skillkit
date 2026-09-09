@@ -72,7 +72,6 @@ jobs:
       - name: Create clean venv
         run: |
           uv venv /tmp/clean-venv
-          echo "VIRTUAL_ENV=/tmp/clean-venv" >> "$GITHUB_ENV"
 
       - name: Download wheel and runtime manifest from GitHub Release
         env:
@@ -108,16 +107,21 @@ jobs:
           print(f"manifest OK: version={data['release']['version']} commit={data['release']['commit'][:12]} artifacts={n_artifacts}")
           PY
 
-      - name: Install wheel from local path
+      - name: Install wheel into clean venv
         run: |
           version="${TAG#v}"
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
           set -euxo pipefail
-          uv pip install --no-cache-dir "/tmp/release-assets/archskillkit-${version}-py3-none-any.whl"
+          uv pip install --no-cache-dir \
+            "/tmp/release-assets/archskillkit-${version}-py3-none-any.whl"
           python -c "import archskillkit; assert archskillkit.__version__ == '$version', archskillkit.__version__"
           python -m archskillkit --version
 
       - name: archskillkit setup
         run: |
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
           python -m archskillkit setup 2>&1 | tail -10
           # setup must create the XDG data dir; otherwise the install failed silently.
           if [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/archskillkit" ]; then
@@ -127,6 +131,8 @@ jobs:
       - name: archskillkit doctor
         run: |
           version="${TAG#v}"
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
           python -m archskillkit doctor > /tmp/doctor.json
           cat /tmp/doctor.json
           VERSION="$version" python - <<'PY'
@@ -143,6 +149,8 @@ jobs:
 
       - name: archskillkit CLI smoke (subcommands discoverable)
         run: |
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
           python -m archskillkit --help > /tmp/help.txt
           grep -q "setup" /tmp/help.txt
           grep -q "doctor" /tmp/help.txt
