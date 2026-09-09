@@ -30,12 +30,14 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    # Route through Composition Root when app is available.
-    # Fall back to get_status for direct CLI invocation without app.
-    app = getattr(world, "_arch_app", None)
-    if app is not None:
-        result = app.status()
-    else:
-        result = get_status(world, code_index=None)
+    # Open world before reading graph (RuntimeError "world is not open" otherwise).
+    with world:
+        # Route through Composition Root when app is available.
+        # Fall back to get_status for direct CLI invocation without app.
+        app = getattr(world, "_arch_app", None)
+        if app is not None:
+            result = app.status()
+        else:
+            result = get_status(world, code_index=None)
     print(json.dumps(result.model_dump(), indent=2))
     return 0
