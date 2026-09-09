@@ -34,6 +34,125 @@
       "line": 16,
       "path": "application/commands/simulation.py",
       "rule_id": "ARC-004"
+    },
+    {
+      "detail": "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 98,
+      "path": "bootstrap/__init__.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 100,
+      "path": "bootstrap/__init__.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 169,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 333,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 359,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 371,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 383,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 422,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 479,
+      "path": "cli.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 635,
+      "path": "codeindex.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 656,
+      "path": "codeindex.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 3496,
+      "path": "delivery/cli/control_plane.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 3586,
+      "path": "delivery/cli/control_plane.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 179,
+      "path": "delivery/cli/proposals.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "ArchitectureWorld.for_repo construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 298,
+      "path": "delivery/cli/replay_fixture.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 301,
+      "path": "delivery/cli/replay_fixture.py",
+      "rule_id": "ARC-010"
+    },
+    {
+      "detail": "CodeIndex( construction outside ADR-0049 sandbox",
+      "kind": "forbidden_constructor",
+      "line": 255,
+      "path": "delivery/cli/simulate.py",
+      "rule_id": "ARC-010"
     }
   ],
   "schema": "arch-skillkit/architecture-baseline-v1"
