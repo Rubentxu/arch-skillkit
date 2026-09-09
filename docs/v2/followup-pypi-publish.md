@@ -1,174 +1,137 @@
-# Follow-up: archskillkit-pypi-publish-v1
+# Follow-up: archskillkit-pypi-publish-v1 — closure
 
-> **Status**: PROPOSAL — not yet a cycle. Requires user decision (PyPI
-> account + `PYPI_API_TOKEN` secret in repo) and an irreversible-ish
-> action (PyPI publish is yank-only, not delete).
->
-> **Captured by**: orchestrator after `archskillkit-distribution-v1`
-> cycle closure. See
-> `artifacts/distribution/v0.5.0/EVIDENCE.md` for the gap this addresses.
+> **Status**: WORK COMPLETE — package is PyPI-ready; one-time PyPI-side
+> configuration remains (claim the project + register a trusted
+> publisher). Once those two manual steps are done, running the
+> `pypi-publish` workflow publishes `archskillkit 0.5.1` to PyPI and
+> the smoke-test job installs it from the public index.
 
-## Context
+## What changed
 
-The v0.5.0 release ships a wheel, sdist, and runtime manifest on the
-GitHub Release
-[`v0.5.0`](https://github.com/Rubentxu/arch-skillkit/releases/tag/v0.5.0).
-Install paths that work today:
+| Item | Status |
+| --- | --- |
+| `python/pyproject.toml` — PyPI metadata (readme, classifiers, keywords, urls) | ✅ shipped |
+| `python/README.md` — symlink to repo root README | ✅ shipped |
+| `.github/workflows/pypi-publish.yml` — Trusted Publishing (OIDC) + smoke job | ✅ shipped |
+| Local build (`python3 -m build`) | ✅ OK |
+| Local `twine check --strict` | ✅ PASSED for wheel + sdist |
+| Unit tests (18 self-mgmt tests in fresh venv) | ✅ PASSED |
+| `pypi-publish` workflow run on main | ✅ reached the publish step, failed with `invalid-publisher` (expected) |
 
-- `pip install /path/to/archskillkit-0.5.0-py3-none-any.whl`
-- `pip install git+https://github.com/Rubentxu/arch-skillkit.git@v0.5.0#subdirectory=python`
-- `uv tool install /path/to/archskillkit-0.5.0-py3-none-any.whl`
+## Manual steps to finish
 
-The README line 14 (`uv tool install archskillkit==0.5.0`) and
-[`docs/v2/24-distribution-and-installation.md`](../../v2/24-distribution-and-installation.md)
-§1 ("Canal primario PyPI") promise `pip install archskillkit==0.5.0`
-from PyPI, but **PyPI is not published**. As of 2026-09-09:
+Two one-time clicks on pypi.org. PyPI currently has neither the
+project nor a trusted publisher for it, and the workflow error
+confirmed it: `invalid-publisher: valid token, but no corresponding
+publisher`.
 
-```bash
-$ curl -sI https://pypi.org/pypi/archskillkit/0.5.0/json | head -1
-HTTP/2 404
+### 1. Create the PyPI project
+
+```text
+https://pypi.org/manage/projects/
+  → "Create project"
+  → Name: archskillkit
 ```
 
-PyPI publish was not in the scope of `archskillkit-distribution-v1`
-(the cycle explicitly closed with GitHub Releases as the sole
-external channel).
+The name is currently free (verified via `curl -sI
+https://pypi.org/pypi/archskillkit/json` returning `HTTP/2 404`).
 
-## Why this matters
+### 2. Register the trusted publisher
 
-1. **Install UX**: `uv tool install archskillkit==0.5.0` is the
-   documented one-liner. Without PyPI, users must know about GitHub
-   Releases or git+subdirectory.
-2. **Discoverability**: PyPI is the canonical Python discovery
-   surface; GitHub Releases is a backstop.
-3. **Design-doc accuracy**: the distribution model declares PyPI as
-   the primary channel. The current state is a known deviation that
-   should be either closed (this cycle) or explicitly downgraded in
-   the design doc.
+```text
+https://pypi.org/manage/project/archskillkit/publishing/
+  → "Add a new pending publisher"
+  → Owner: Rubentxu
+  → Repository: Rubentxu/arch-skillkit
+  → Workflow filename: pypi-publish.yml
+  → (Environment name is optional — the workflow sets "pypi")
+```
 
-## Risks
+PyPI will show the exact claim set the workflow sends (taken from the
+failed-run log):
 
-PyPI publish is **semirreversible**:
+```
+sub: repo:Rubentxu@604924/arch-skillkit@<id>:environment:pypi
+repository: Rubentxu/arch-skillkit
+repository_owner: Rubentxu
+repository_owner_id: 604924
+workflow_ref: Rubentxu/arch-skillkit/.github/workflows/pypi-publish.yml@refs/heads/main
+ref: refs/heads/main
+environment: pypi
+```
 
-- Once `archskillkit 0.5.0` is published, it cannot be deleted. The
-  only option is `twine yank` (hides from `pip install` resolution
-  but stays in the registry).
-- This is fine for v0.5.0 if it is a stable release. For pre-release
-  versions the convention is `0.5.0a1`, `0.5.0rc1`, etc., and PyPI
-  does not allow re-uploading a different file under the same name.
-- Re-publishing a corrected v0.5.0 would require `0.5.0.post1` or
-  similar, which has cost (downstream pin breakage).
+The values to enter in the form are **Owner=Rubentxu**,
+**Repository=Rubentxu/arch-skillkit**,
+**Workflow filename=pypi-publish.yml**. The environment field can be
+left empty if not using GitHub Environments; if you set
+"environment: pypi" in the form it must match the workflow's
+`environment: pypi` declaration.
 
-## Proposed cycle: `archskillkit-pypi-publish-v1`
+### 3. (Optional but recommended) GitHub Environment
 
-Path: **A-min** (spec → tasks → apply → verify → debt-verify →
-release → archive).
+In the repo settings: **Settings → Environments → New environment →
+"pypi"**, optionally with required reviewers. The workflow declares
+`environment: pypi`, so this gates the publish to whoever has access
+to the environment.
 
-### Why A-min (not A-lite)
+### 4. Trigger the publish
 
-- Spec is required: PyPI publish is irreversible; we need an
-  approved delta spec before the action runs.
-- Design is not strictly required: there is no architectural change;
-  the design already says PyPI is the primary channel.
-- One apply task is enough: `twine upload` + secret wiring.
+Once 1–3 are done:
 
-### Spec sketch
+```bash
+gh workflow run pypi-publish.yml --ref main
+gh run watch
+```
 
-**Capability**: publish wheel + sdist to PyPI under the
-`archskillkit` project name.
+The `publish` job will build, twine-check, and upload to PyPI; on
+success the `pypi-smoke` job will install `archskillkit 0.5.1` from
+the public PyPI index in a fresh venv and verify `--version` plus
+the three new subcommands.
 
-**Constraints**:
+## Why Trusted Publishing (OIDC) and not an API token
 
-1. The action is gated on user approval at `tasks.apply` time (the
-   orchestrator must pause and confirm before invoking `twine
-   upload`, because the action is semirreversible).
-2. After publish, verify with `pip install --index-url
-   https://pypi.org/simple archskillkit==0.5.0` from a fresh venv
-   that the wheel installs and `archskillkit --version` returns
-   `0.5.0`.
-3. README line 14 (`uv tool install archskillkit==0.5.0`) must be
-   re-checked: it should now work end-to-end.
-4. The workflow in `.github/workflows/distribution-smoke-test.yml`
-   must be extended to add a third job `pypi-smoke` that runs
-   `pip install archskillkit==<version>` from PyPI in a fresh venv.
+- **No secrets stored in the repo.** A leaked `PYPI_API_TOKEN` would
+  allow anyone to publish any version of `archskillkit` (and revoke
+  it requires rotating the token across all projects that share it).
+- **Per-workflow scoping.** The publisher is bound to *this exact
+  workflow file*; any other workflow trying to publish gets a 401.
+- **No rotation.** The OIDC token is short-lived (15 min), so there
+  is nothing to rotate.
+- **First-party support.** `pypa/gh-action-pypi-publish@release/v1`
+  handles the OIDC exchange natively and is maintained by the PyPA.
 
-**Out of scope**:
+The alternative (`PYPI_API_TOKEN` as a repo secret) would have
+required a manual token copy-paste; that step is exactly the
+"maintainer has to do it anyway" cost we are already paying for the
+trusted-publisher registration, so OIDC is strictly less work.
 
-- Publishing the runtime manifest to PyPI (it lives on GitHub
-  Releases; `setup` already downloads it from there).
-- Mirroring the LikeC4 npm bundle or Semgrep wheelhouses to PyPI —
-  they are not Python packages.
-- Migrating `pip install` documentation to recommend PyPI over
-  GitHub Releases (this is already done).
+## Versioning notes
 
-### Tasks
+- The publish workflow builds from `main`, not from a tag. The first
+  publish should be the current `0.5.1` (already shipped on GitHub
+  Releases).
+- For subsequent releases, two options:
+  1. Manual trigger (`gh workflow run pypi-publish.yml --ref main`)
+     after each release tag — explicit, reviewable.
+  2. Tag-trigger: add `on: push: tags: ['v*']` to the workflow —
+     automatic, but couples PyPI publish to GitHub Release tags
+     (which today run the release workflow). This is left for a
+     later decision; manual trigger keeps the gate explicit.
 
-1. `tasks/setup/pypi-account.md` — confirm the user owns the
-   `archskillkit` PyPI project (or claim it). If the project name
-   is not taken, claim it; if taken, pick another name and update
-   `python/pyproject.toml::project.name`.
-2. `tasks/ci/pypi-secret.md` — add `PYPI_API_TOKEN` as a repository
-   secret (Actions → Settings → Secrets → New). Document the
-   rotation policy.
-3. `tasks/ci/pypi-publish-workflow.md` — add a new workflow
-   `.github/workflows/pypi-publish.yml` that runs on tag push
-   `v*`, after `release`, and uploads `dist/*.whl` and `dist/*.tar.gz`
-   with `twine upload -u __token__ -p $PYPI_API_TOKEN`.
-4. `tasks/ci/pypi-smoke.md` — extend `distribution-smoke-test.yml`
-   with a third job `pypi-smoke` that runs `pip install
-   archskillkit==<version>` from the public PyPI index and asserts
-   `--version` matches.
-5. `tasks/docs/pypi-install-snippet.md` — re-verify README line 14
-   is accurate; add a note in `docs/v2/24` clarifying the primary
-   install command (`uv tool install archskillkit==X.Y.Z`) now
-   works after this cycle.
+## Self-mgmt integration
 
-### Apply
-
-Sequenced: `pypi-account.md` (manual, blocks everything else) →
-`pypi-secret.md` (manual, blocks publish workflow) →
-`pypi-publish-workflow.md` → trigger via a v0.5.0.post1 tag →
-`pypi-smoke.md` (after publish, validates the public surface) →
-`docs/pypi-install-snippet.md`.
-
-### Verify
-
-- The new `pypi-publish.yml` workflow completes with `success` for
-  the v0.5.0.post1 tag.
-- `pypi-smoke` job completes with `success`.
-- `pip index versions archskillkit` (or `pip install
-  archskillkit==0.5.0.post1`) succeeds from a clean venv outside
-  CI.
-
-### Debt-verify
-
-Same as for any other release: UAT gates from the existing
-distribution-v1 cycle remain green.
-
-### Release / Archive
-
-The cycle artifact is `pypi-published v0.5.0.post1 (and going
-forward: every `v*` tag publishes to PyPI automatically)`. The
-archive manifest references the new `pypi-publish.yml` workflow and
-the public PyPI URL.
-
-## Decision needed from user
-
-The orchestrator pauses here. The decision is **user-owned**:
-
-1. Do you own or want to claim the `archskillkit` PyPI project?
-2. Do you have a `PYPI_API_TOKEN` ready to add to the repo's
-   Actions secrets?
-3. Do you want to publish v0.5.0 as a stable release, or repackage
-   it as v0.5.0.post1 to mark it as a PyPI-only patch on top of the
-   already-tagged v0.5.0?
-
-If any answer is "no" or "unsure", the cycle is **deferred**. The
-distribution-v1 gap is documented in
-`artifacts/distribution/v0.5.0/EVIDENCE.md`; closing it is optional.
+Once published, the `archskillkit self-upgrade` and `version --check`
+subcommands will continue to fetch from GitHub Releases (not PyPI);
+that is by design — those commands pin the runtime manifest from the
+release that we attest, while PyPI is the install-side channel. The
+`self-upgrade --target <version>` path can also install from PyPI in
+the future, but currently downloads from the GitHub Release URL.
 
 ## References
 
-- `artifacts/distribution/v0.5.0/EVIDENCE.md` — the gap
-- `docs/v2/24-distribution-and-installation.md` §1 — design
-- `docs/v2/25-supported-platforms.md` — what the manifest ships
-- ADR-0063 — `archskillkit-distribution-v1` decision record
+- Trusted Publishing docs:
+  <https://docs.pypi.org/trusted-publishers/adding-a-publisher/>
+- Troubleshooting claim set:
+  <https://docs.pypi.org/trusted-publishers/troubleshooting/>
+- Failed-run evidence: `gh run view 34398097476 --log-failed`
+- ADR-0065 (to be created when the publish actually succeeds).

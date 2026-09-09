@@ -11,16 +11,24 @@ ArchSkillKit is an **agent-first, tool-first and repository-clean** toolkit for 
 ## TL;DR
 
 ```bash
-uv pip install https://github.com/Rubentxu/arch-skillkit/releases/download/v0.5.1/archskillkit-0.5.1-py3-none-any.whl   # install the app
+# Install from PyPI (one-time setup required on pypi.org — see note below)
+uv pip install archskillkit==0.5.1
+# OR install directly from the GitHub Release wheel (no PyPI needed)
+# uv pip install https://github.com/Rubentxu/arch-skillkit/releases/download/v0.5.1/archskillkit-0.5.1-py3-none-any.whl
 archskillkit setup                    # install the pinned runtime (ast-grep, Semgrep, Node/LikeC4)
 archskillkit doctor                   # verify → "ready"
 archskillkit init --repo .            # start analyzing a repository
 ```
 
-> **Note:** the package is not published to PyPI yet; the wheel is
-> downloaded directly from the GitHub Release. PyPI publish is
-> tracked in `docs/v2/followup-pypi-publish.md` and will become the
-> default install command when that follow-up ships.
+> **PyPI status:** PyPI publish is prepared — the
+> `.github/workflows/pypi-publish.yml` workflow uses PyPI Trusted
+> Publishing (OIDC) and requires a one-time manual claim of the
+> project + registration of the trusted publisher on
+> [pypi.org/manage/projects/](https://pypi.org/manage/projects/).
+> Until that is done, install from the GitHub Release wheel URL as
+> shown in the commented-out line. See
+> [`docs/v2/followup-pypi-publish.md`](docs/v2/followup-pypi-publish.md)
+> for the exact steps.
 
 Full walk-through: [user manual](docs/manual/user-manual.md) ·
 one-page reference: [cheat sheet](docs/manual/cheat-sheet.md)

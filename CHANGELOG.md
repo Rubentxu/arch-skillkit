@@ -33,7 +33,12 @@ fixes.
 
 - The Python package is not published to PyPI yet. Install via
   `uv pip install <wheel-url>` or `pip install <wheel-url>`.
-  Follow-up tracked in `docs/v2/followup-pypi-publish.md`.
+  PyPI publish is **prepared but requires a one-time manual
+  configuration** on pypi.org (claim the project + register a
+  trusted publisher for `pypi-publish.yml`); the workflow then
+  publishes automatically via PyPI Trusted Publishing (OIDC, no
+  token in the repo). See `docs/v2/followup-pypi-publish.md` for
+  the exact steps.
 - v0.5.0 is superseded by v0.5.1. All v0.5.0 assets remain available
   on the GitHub Releases page for reproducibility.
 
