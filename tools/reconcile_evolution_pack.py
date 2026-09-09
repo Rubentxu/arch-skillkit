@@ -11,13 +11,13 @@ Exit codes:
 
 Usage:
     python3 tools/reconcile_evolution_pack.py \\
-        --pack-dir docs/arch-skillkit-v2.5-evolution-pack \\
+        --pack-dir docs/archive/v2.5-pack/arch-skillkit-v2.5-evolution-pack \\
         --manifest MANIFEST.json \\
         --output-manifest MANIFEST.json.new \\
         --output-readme README.md.new
 
     python3 tools/reconcile_evolution_pack.py \\
-        --pack-dir docs/arch-skillkit-v2.5-evolution-pack \\
+        --pack-dir docs/archive/v2.5-pack/arch-skillkit-v2.5-evolution-pack \\
         --manifest MANIFEST.json
         # dry-run: reads and validates, exits 0 if all hashes match
 """
