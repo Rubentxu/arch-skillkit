@@ -114,6 +114,14 @@
     },
     {
       "class": "BLOCKING",
+      "id": "CTX-GROUNDING-001",
+      "metric": "context_grounding_ratio",
+      "milestone": "M6",
+      "operator": ">=",
+      "threshold": 0.5
+    },
+    {
+      "class": "BLOCKING",
       "id": "SESSION-STALE-001",
       "metric": "stale_session_detection_rate",
       "milestone": "M6",
