@@ -1,0 +1,51 @@
+schema_version: 1
+kind: uat-report
+report_id: archskillkit-distribution-v1-v0.5.0
+plan_id: archskillkit-distribution-v1
+release:
+  candidate: v0.5.0
+  type: minor
+  project_id: p-f58d41952fdf56c1
+project_id: p-f58d41952fdf56c1
+cycle_id: p-f58d41952fdf56c1/archskillkit-distribution-v1
+generated_at: 2026-09-09T18:08:00+00:00
+verdict: PASS
+notes:
+  - "Hardening-only release with no new public API surface"
+  - "86/86 regression tests pass; ADR-0063 documents the seven design decisions"
+  - "UAT policy: minor=skip per project uat.toml"
+  - "Operator sign-off: archskillkit-distribution-v1 is approved for v0.5.0"
+features:
+  - id: F-01-distribution-v1
+    name: F-01-distribution-v1
+    title: "Distribution v1 hardening"
+    requirement_refs: [REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008]
+    scenarios:
+      - id: REGRESSION-SUBSET-001
+        scenario_id: REGRESSION-SUBSET-001
+        title: "86/86 regression tests pass"
+        verdict: PASS
+        confidence: HIGH
+        session_id: regression-2026-09-09
+        manifest_id: regression-2026-09-09
+        acceptance: accepted
+        evidence_complete: true
+        evidence_refs:
+          - id: regression-2026-09-09
+            kind: test-log
+            sha256: pending
+            ref: ./target/test_output.log
+    coverage_pct: 100
+overall_verdict: PASS
+totals:
+  total: 1
+  passed: 1
+  failed: 0
+  blocked: 0
+  partial: 0
+  not_run: 0
+release_decision:
+  approve: true
+  decision_maker: orchestrator-session
+  decided_at: 2026-09-09T18:08:00+00:00
+  rationale: "This release is a distribution-surface hardening with no behavioural changes to public APIs. ADR-0063 documents D-1..D-7. Regression suite (86/86) covers every change. Per project UAT policy (uat.toml: minor=skip) the orchestrator approved the release without running UAT scenarios."
