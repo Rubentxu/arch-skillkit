@@ -22,7 +22,7 @@ from __future__ import annotations
 import datetime as _dt
 from dataclasses import dataclass, field
 
-from archskillkit.codeindex import CodeIndex
+from archskillkit.codegraph import CodeGraphQueryPort
 from archskillkit.packs.arch_core import (
     ClaimData,
     EvidenceData,
@@ -89,7 +89,7 @@ class PromotionReport:
 
 # ---- M2-C1: scan edges → observations + evidence --------------------
 
-def ingest_scan(world: ArchitectureWorldPort, index: CodeIndex,
+def ingest_scan(world: ArchitectureWorldPort, index: CodeGraphQueryPort,
                 scan_run_id: str) -> PromotionReport:
     """Turn every evidence edge of a scan run into an Observation backed
     by Evidence. Idempotent: the (subject, predicate, object) triple and
@@ -183,7 +183,7 @@ def propose_claims(world: ArchitectureWorldPort) -> int:
 
 
 def detect_generation_drift(world: ArchitectureWorldPort,
-                            index: CodeIndex) -> dict:
+                            index: CodeGraphQueryPort) -> dict:
     """Real architecture drift (docs/v2/46 F7): the semantic edge delta
     between the previous and current scan generation is mapped through the
     architecture relation vocabulary; every NEW code dependency that maps
@@ -355,7 +355,7 @@ def review(world: ArchitectureWorldPort) -> dict:
 
 # ---- full pipeline -----------------------------------------------------
 
-def discover(world: ArchitectureWorldPort, index: CodeIndex,
+def discover(world: ArchitectureWorldPort, index: CodeGraphQueryPort,
              scan_run_id: str) -> PromotionReport:
     """The vertical slice of docs/v2/23:
 

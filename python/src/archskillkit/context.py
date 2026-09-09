@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from archskillkit.codeindex import CodeIndex
+from archskillkit.codegraph import CodeGraphQueryPort
 from archskillkit.world import ArchitectureWorld
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ class ContextCompiler:
     for a compiler invocation that needs no source or for an unreadable path.
     """
 
-    def __init__(self, world: ArchitectureWorld, index: CodeIndex,
+    def __init__(self, world: ArchitectureWorld, index: CodeGraphQueryPort,
                  source_root: str | Path | None = None):
         self.world = world
         self.index = index
