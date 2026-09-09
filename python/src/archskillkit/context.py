@@ -111,6 +111,24 @@ class ContextCompiler:
         # 3.+4. expand one bounded hop through architecture relations
         seed_ids = {e["id"] for e in elements}
         relations = self._relations_touching(seed_ids)
+        # When a subject narrows the pack to a small seed set, also include
+        # the immediate graph neighbours so the relation subgraph stays
+        # closed (e.g. component ``getPayment`` exposes interface
+        # ``endpoint@11`` — both belong together). Without this expansion
+        # the relations filter below would drop the edge because the
+        # neighbour is not in ``kept``. Fetched lazily because full-world
+        # compiles don't need it.
+        if subject and relations:
+            neighbour_ids = (
+                ({r["source"] for r in relations} | {r["target"] for r in relations})
+                - seed_ids
+            )
+            if neighbour_ids:
+                present = {e["id"] for e in elements}
+                elements = list(elements) + [
+                    obj for obj in self.world.find_objects("architecture_element")
+                    if obj["id"] in neighbour_ids and obj["id"] not in present
+                ]
         # 3b. recency signals — previous→current scan delta (docs/v2/46
         # camino siguiente): recent graph delta + changed-file proximity
         recent_names = frozenset(
