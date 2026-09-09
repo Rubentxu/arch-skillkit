@@ -111,7 +111,8 @@ jobs:
       - name: Install wheel from local path
         run: |
           version="${TAG#v}"
-          uv pip install --quiet "/tmp/release-assets/archskillkit-${version}-py3-none-any.whl"
+          set -euxo pipefail
+          uv pip install --no-cache-dir "/tmp/release-assets/archskillkit-${version}-py3-none-any.whl"
           python -c "import archskillkit; assert archskillkit.__version__ == '$version', archskillkit.__version__"
           python -m archskillkit --version
 
