@@ -1,0 +1,21 @@
+# NOTE: This file exists solely to satisfy the sddk release-plan version-lockstep
+# preflight, which reads Cargo.toml::[workspace.package].version.
+#
+# arch-skillkit is a Python project (python/pyproject.toml is the authority for
+# the version number, with skills/architecture-discovery/version.json as the
+# declared skill surface). Adding a Cargo.toml would otherwise be misleading.
+#
+# The actual workspace version lives in python/pyproject.toml::version
+# (authoritative, ADR-0063 D-2). This mirror is kept in sync via
+# scripts/release/sync-versions.py --check and never edited by hand.
+#
+# Filed as a known SDDK limitation: `sddk release plan` only consults
+# Cargo.toml even for non-Rust workspaces; see prompts/sddk/phases/release.md
+# for the lockstep recipe.
+
+[workspace]
+members = []
+
+[workspace.package]
+version = "0.5.0"
+edition = "2021"
