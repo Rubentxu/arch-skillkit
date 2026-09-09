@@ -3,7 +3,7 @@
     {
       "detail": "import:archskillkit.delivery.cli.replay_fixture",
       "kind": "forbidden_import_prefix",
-      "line": 47,
+      "line": 42,
       "path": "application/commands/replay.py",
       "rule_id": "ARC-002"
     },
