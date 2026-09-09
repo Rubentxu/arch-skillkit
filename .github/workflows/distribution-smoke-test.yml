@@ -42,45 +42,22 @@ permissions:
   contents: read
 
 jobs:
-  smoke-test:
-    name: Clean-room install + setup + doctor (${{ matrix.os }})
+  linux-smoke:
+    name: Clean-room install + setup + doctor (linux)
     if: >
       (github.event_name == 'workflow_dispatch') ||
       (github.event.workflow_run.conclusion == 'success')
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: linux
-            runner: ubuntu-latest
-            python: "3.12"
-          - os: macos
-            runner: macos-latest
-            python: "3.12"
-            only_on_dispatch: true
+    runs-on: ubuntu-latest
     env:
-      # workflow_run uses workflow_run.head_branch (the tag, e.g. v0.5.0).
-      # workflow_dispatch uses inputs.tag.
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
-      # Exclude macos from automatic post-release runs until the manifest
-      # ships darwin/aarch64 artifacts (v0.5.0 only declares linux/x86_64;
-      # see `docs/v2/25-supported-platforms.md`).
-      INCLUDE_MACOS: ${{ github.event_name == 'workflow_dispatch' && (inputs.include_macos || false) || false }}
     steps:
-      - name: Skip macOS in automatic runs (manifest gap)
-        if: matrix.os == 'macos' && env.INCLUDE_MACOS != 'true'
-        run: |
-          echo "::notice title=skipped::macOS smoke test skipped — manifest v0.5.0 does not declare darwin/aarch64 runtime artifacts. Re-run with include_macos=true once the manifest ships them."
-          exit 0
-
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.12"
 
       - name: Install uv
         run: python -m pip install --quiet uv
@@ -139,7 +116,6 @@ jobs:
           # shellcheck disable=SC1091
           source /tmp/clean-venv/bin/activate
           python -m archskillkit setup 2>&1 | tail -10
-          # setup must create the XDG data dir; otherwise the install failed silently.
           if [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/archskillkit" ]; then
             echo "::warning::setup did not create expected XDG data dir (${XDG_DATA_HOME:-$HOME/.local/share}/archskillkit)"
           fi
@@ -177,7 +153,126 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-report-${{ matrix.os }}
+          name: smoke-test-report-linux
+          path: |
+            /tmp/release-assets/
+            /tmp/doctor.json
+            /tmp/help.txt
+          if-no-files-found: ignore
+
+  macos-smoke:
+    name: Clean-room install + setup + doctor (macos)
+    # Only runs when the user opts in via workflow_dispatch (include_macos=true),
+    # or when the manifest declares darwin/aarch64 artifacts in a future tag.
+    # The check below guards the automatic post-release trigger; v0.5.0 only
+    # ships linux/x86_64 runtime artifacts, so macOS setup fails with
+    # PLATFORM_UNSUPPORTED — tracked separately from this workflow.
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      inputs.include_macos == 'true'
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: python -m pip install --quiet uv
+
+      - name: Create clean venv
+        run: |
+          uv venv /tmp/clean-venv
+
+      - name: Download wheel and runtime manifest from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          gh release download "$TAG" \
+            --pattern "archskillkit-${version}-py3-none-any.whl" \
+            --pattern "archskillkit-runtime-${TAG}.manifest.json" \
+            --dir /tmp/release-assets
+          ls -la /tmp/release-assets
+
+      - name: Verify wheel + manifest sha256 and metadata
+        run: |
+          version="${TAG#v}"
+          VERSION="$version" python - <<'PY'
+          import hashlib, json, os, pathlib
+          version = os.environ["VERSION"]
+          base = pathlib.Path("/tmp/release-assets")
+          wheel = base / f"archskillkit-{version}-py3-none-any.whl"
+          manifest = base / f"archskillkit-runtime-v{version}.manifest.json"
+          assert wheel.is_file(), f"missing wheel: {wheel}"
+          assert manifest.is_file(), f"missing manifest: {manifest}"
+          data = json.loads(manifest.read_text())
+          assert data["schema_version"] == 1, f"unexpected schema_version: {data.get('schema_version')}"
+          assert data["release"]["version"] == version, data["release"]
+          assert data["release"]["git_tag"] == "v" + version, data["release"]
+          platforms = [p["os"] + "/" + p["arch"] for p in data.get("platforms", [])]
+          print(f"manifest platforms: {platforms}")
+          PY
+
+      - name: Install wheel into clean venv
+        run: |
+          version="${TAG#v}"
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
+          set -euxo pipefail
+          uv pip install --no-cache-dir \
+            "/tmp/release-assets/archskillkit-${version}-py3-none-any.whl"
+          python -c "import archskillkit; assert archskillkit.__version__ == '$version', archskillkit.__version__"
+          python -m archskillkit --version
+
+      - name: archskillkit setup
+        run: |
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
+          python -m archskillkit setup 2>&1 | tail -10
+          if [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/archskillkit" ]; then
+            echo "::warning::setup did not create expected XDG data dir (${XDG_DATA_HOME:-$HOME/.local/share}/archskillkit)"
+          fi
+
+      - name: archskillkit doctor
+        run: |
+          version="${TAG#v}"
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
+          python -m archskillkit doctor > /tmp/doctor.json
+          cat /tmp/doctor.json
+          VERSION="$version" python - <<'PY'
+          import json, os, sys
+          d = json.load(open("/tmp/doctor.json"))
+          assert d["status"] == "ready", f"doctor status: {d['status']}"
+          expected_tag = "v" + os.environ["VERSION"]
+          assert d["release"]["git_tag"] == expected_tag, d["release"]
+          checks = d.get("checks", [])
+          n_fail = sum(1 for c in checks if c.get("status") == "fail")
+          assert n_fail == 0, f"{n_fail} doctor checks failed: {[c for c in checks if c.get('status')=='fail']}"
+          print(f"doctor OK: {len(checks)} checks, {n_fail} failures")
+          PY
+
+      - name: archskillkit CLI smoke (subcommands discoverable)
+        run: |
+          # shellcheck disable=SC1091
+          source /tmp/clean-venv/bin/activate
+          python -m archskillkit --help > /tmp/help.txt
+          grep -q "setup" /tmp/help.txt
+          grep -q "doctor" /tmp/help.txt
+          grep -q "discover" /tmp/help.txt
+          echo "CLI subcommands present"
+
+      - name: Upload smoke-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-report-macos
           path: |
             /tmp/release-assets/
             /tmp/doctor.json
