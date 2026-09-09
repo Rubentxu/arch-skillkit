@@ -371,3 +371,22 @@ archskillkit self-uninstall [--purge-runtime] [--yes]
 | Instalación | ✅ `uv pip install <wheel-url>` (PyPI diferido, ver `followup-pypi-publish.md`) |
 | Actualización | ✅ `archskillkit self-upgrade --yes` |
 | Desinstalación | ✅ `archskillkit self-uninstall --yes` |
+
+### Plataformas soportadas (runtime manifest)
+
+| Plataforma | ast-grep | node | likec4 | semgrep |
+| --- | --- | --- | --- | --- |
+| `linux/x86_64`   | upstream | upstream | local build | local build |
+| `linux/aarch64`  | upstream | upstream | local build | local build |
+| `darwin/x86_64`  | upstream | upstream | local build | local build |
+| `darwin/aarch64` | upstream | upstream | local build | local build |
+
+"upstream" = descargado desde el release oficial del proyecto
+correspondiente en `setup` (sha256 verificado, sin provenance).
+"local build" = construido por el workflow `release.yml` de este
+repositorio (sha256 verificado, sin Sigstore attestation todavía —
+ver ADR-0066).
+
+Smoke test end-to-end verificado contra v0.5.1 en linux y macOS
+(run [`34400766685`](https://github.com/Rubentxu/arch-skillkit/actions/runs/34400766685),
+14/14 steps verdes en cada job).

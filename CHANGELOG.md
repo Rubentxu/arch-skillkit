@@ -42,6 +42,25 @@ fixes.
 - v0.5.0 is superseded by v0.5.1. All v0.5.0 assets remain available
   on the GitHub Releases page for reproducibility.
 
+### Post-release patch (2026-09-09, no version bump)
+
+- **Native macOS support** (cycle `archskillkit-distribution-macos-v1`):
+  the runtime manifest at GitHub Release v0.5.1 now declares four
+  platforms (linux/x86_64, linux/aarch64, darwin/x86_64,
+  darwin/aarch64). The release ships pre-built LikeC4 npm bundles
+  and Semgrep wheelhouses for both darwin arches (built on
+  `macos-latest` and `macos-13`). The macOS smoke-test job in
+  `.github/workflows/distribution-smoke-test.yml` is now always-on
+  (parallel to linux-smoke, no `include_macos` opt-in required).
+  Both jobs verified end-to-end against v0.5.1:
+  [run 34400766685](https://github.com/Rubentxu/arch-skillkit/actions/runs/34400766685).
+- ast-grep and node are pulled from upstream on every `setup`
+  (sha256-verified, no provenance).
+- likec4 and semgrep for darwin are built in this repo and shipped
+  sha256-signed. End-to-end Sigstore attestation for those tarballs
+  is **pending** — they are emitted with `attestation.required=false`
+  until the release workflow signs them. See ADR-0066.
+
 ## [0.5.0] - 2026-09-04
 
 ### Added
