@@ -385,6 +385,8 @@ class TestCodeGraphQueryPortConformance:
                 return []
             def recent_delta_names(self):
                 return frozenset()
+            def edges_of_run(self, scan_run_id):
+                return []
             def provenance(self, symbol_id=None):
                 return []
             def close(self):
