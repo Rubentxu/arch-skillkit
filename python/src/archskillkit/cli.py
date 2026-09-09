@@ -148,6 +148,48 @@ def main(argv: list[str] | None = None) -> int:
                           help="path or URL of the runtime manifest to"
                           " diagnose against (default: stored copies)")
 
+    p_self_upgrade = sub.add_parser(
+        "self-upgrade",
+        help="download the wheel for the latest (or --target) GitHub"
+        " Release and re-install it into the current Python interpreter",
+    )
+    p_self_upgrade.add_argument(
+        "--target",
+        help="explicit release tag (e.g. v0.5.1). Default: latest.",
+    )
+    p_self_upgrade.add_argument(
+        "--yes", action="store_true",
+        help="skip the confirmation prompt.",
+    )
+
+    p_self_uninstall = sub.add_parser(
+        "self-uninstall",
+        help="uninstall archskillkit from the current Python interpreter",
+    )
+    p_self_uninstall.add_argument(
+        "--purge-runtime", action="store_true",
+        help="also remove the runtime data directory under XDG_DATA_HOME.",
+    )
+    p_self_uninstall.add_argument(
+        "--yes", action="store_true",
+        help="skip the confirmation prompt.",
+    )
+
+    p_version = sub.add_parser(
+        "version",
+        help="print the installed version (with --check: compare with"
+        " the latest GitHub Release)",
+    )
+    p_version.add_argument(
+        "--check", action="store_true",
+        help="compare with the latest GitHub Release; exit 1 if newer"
+        " is available.",
+    )
+    p_version.add_argument(
+        "--json", action="store_true",
+        help="emit machine-readable JSON (only meaningful with --check).",
+    )
+
     # V2.4 delivery-adapter commands (docs/v2/67 slice 4): each module
     # owns its parser and handler through the application layer.
     for module in COMMANDS:
@@ -164,6 +206,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_setup(args)
     if args.command == "doctor":
         return _cmd_doctor(args)
+    if args.command == "self-upgrade":
+        return _cmd_self_upgrade(args)
+    if args.command == "self-uninstall":
+        return _cmd_self_uninstall(args)
+    if args.command == "version":
+        return _cmd_version(args)
 
     try:
         world = ArchitectureWorld.for_repo(args.repo)
@@ -251,6 +299,37 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             return 2
     diagnosis, exit_code = run_doctor(paths, manifest)
     print(json.dumps(diagnosis, indent=2))
+    return exit_code
+
+
+def _cmd_self_upgrade(args: argparse.Namespace) -> int:
+    from archskillkit import self_mgmt
+
+    exit_code, message = self_mgmt.self_upgrade(
+        target=args.target, yes=args.yes,
+    )
+    print(message)
+    return exit_code
+
+
+def _cmd_self_uninstall(args: argparse.Namespace) -> int:
+    from archskillkit import self_mgmt
+
+    exit_code, message = self_mgmt.self_uninstall(
+        purge_runtime=args.purge_runtime, yes=args.yes,
+    )
+    print(message)
+    return exit_code
+
+
+def _cmd_version(args: argparse.Namespace) -> int:
+    from archskillkit import __version__, self_mgmt
+
+    if not args.check:
+        print(f"archskillkit {__version__}")
+        return 0
+    exit_code, message = self_mgmt.version_check(json_output=args.json)
+    print(message)
     return exit_code
 
 
