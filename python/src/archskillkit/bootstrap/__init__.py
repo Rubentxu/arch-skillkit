@@ -63,7 +63,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
-    from archskillkit.codeindex import CodeIndex
+    from archskillkit.codegraph import CodeGraphSqliteAdapter
     from archskillkit.world import ArchitectureWorld
 
 
@@ -78,7 +78,7 @@ class ArchSkillKitApplication:
     def __init__(self, repo_path: Path) -> None:
         self._repo_path = repo_path
         self._world: ArchitectureWorld | None = None
-        self._index: CodeIndex | None = None
+        self._index: CodeGraphSqliteAdapter | None = None
         self._opened = False
 
     # -- lifecycle ---------------------------------------------------------
@@ -89,15 +89,21 @@ class ArchSkillKitApplication:
         Sets ``world._arch_app = self`` so handlers that receive the world
         can access ``app.index`` and call app methods without managing
         their own lifecycle (M3 slice 3).
+
+        V2.5 M5: the index is wrapped in ``CodeGraphSqliteAdapter`` so
+        the application layer can depend on ``CodeGraphQueryPort`` (the
+        Protocol) rather than the concrete ``CodeIndex`` class.
         """
         if self._opened:
             return self
-        from archskillkit.codeindex import CodeIndex
+        from archskillkit.codegraph import CodeGraphSqliteAdapter
         from archskillkit.world import ArchitectureWorld
 
         self._world = ArchitectureWorld.for_repo(self._repo_path).open()
         index_path = self._world.workspace / "code.sqlite"
-        self._index = CodeIndex(index_path).open() if index_path.exists() else None
+        self._index = (
+            CodeGraphSqliteAdapter.open(index_path) if index_path.exists() else None
+        )
         # Reverse reference so handlers can reach app.index from world._arch_app
         self._world._arch_app = self
         self._opened = True
@@ -133,7 +139,7 @@ class ArchSkillKitApplication:
         return self._world
 
     @property
-    def index(self) -> CodeIndex | None:
+    def index(self) -> "CodeGraphSqliteAdapter | None":
         if not self._opened:
             raise RuntimeError("Application not open. Call .open() first.")
         return self._index

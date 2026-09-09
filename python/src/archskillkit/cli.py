@@ -373,14 +373,28 @@ def _cmd_search_code(world: ArchitectureWorld, query: str) -> int:
     return 0
 
 
-def _require_code_index(world: ArchitectureWorld) -> CodeIndex | None:
+def _require_code_index(world: ArchitectureWorld):
+    """Return a CodeGraphQueryPort for ``world``, preferring the composition
+    root's ``app.index`` when available (V2.5 M5, ADR-0049).
+
+    Falls back to opening a fresh ``CodeIndex`` when the composition root
+    is not in scope (direct CLI invocation). This mirrors the
+    ``getattr(world, "_arch_app", None)`` pattern used by other
+    delivery adapters in M2/M3.
+    """
+    from archskillkit.codegraph import CodeGraphSqliteAdapter
+
+    app = getattr(world, "_arch_app", None)
+    if app is not None and app.index is not None:
+        return app.index
+
     db = world.workspace / "code.sqlite"
     if not db.exists():
         print(f"error: no code.sqlite for {world.project_id} "
               f"(run: archskillkit ingest-code --repo {world.root or '.'})",
               file=sys.stderr)
         return None
-    return CodeIndex(db).open()
+    return CodeGraphSqliteAdapter.open(db)
 
 
 def _cmd_discover(world: ArchitectureWorld, run_id: str) -> int:

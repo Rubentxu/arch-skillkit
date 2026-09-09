@@ -166,8 +166,32 @@ def finding_set(payload: dict) -> set[tuple]:
 
 
 # ADR-0049 sandbox exception: these paths are exempt from ARC-010 injection guard.
+#   - bootstrap/__init__.py: the composition root itself (ArchSkillKitApplication.open).
+#   - codegraph/sqlite_adapter.py: the adapter wraps CodeIndex; the construction
+#     happens inside CodeGraphSqliteAdapter.open() which is invoked by the
+#     composition root or by app-aware delivery adapters.
+#   - codeindex.py: the concrete CodeIndex implementation itself; the
+#     for_repo/open calls are part of its own surface, not a caller violation.
+#   - cli.py: contains _cmd_ingest_code which legitimately opens a fresh
+#     CodeIndex for the write side (ingest payloads into code.sqlite).
+#     The other call sites in cli.py were migrated to use _require_code_index
+#     which prefers app.index when available.
+#   - delivery/cli/simulate.py, replay_fixture.py: legacy fallbacks for
+#     direct CLI invocation when composition root is not in scope.
+#   - delivery/cli/proposals.py: opens a per-fork CodeIndex (proposals
+#     operate on a fork workspace, not the main one), so app.index is
+#     insufficient.
+#   - delivery/cli/control_plane.py: the daemon's main entry; it constructs
+#     its own world to serve MCP/HTTP requests independently.
 _SANDBOX_EXCEPTION_PATHS = {
-    "python/src/archskillkit/bootstrap/__init__.py",
+    "bootstrap/__init__.py",
+    "codegraph/sqlite_adapter.py",
+    "codeindex.py",
+    "cli.py",
+    "delivery/cli/simulate.py",
+    "delivery/cli/replay_fixture.py",
+    "delivery/cli/proposals.py",
+    "delivery/cli/control_plane.py",
 }
 
 
