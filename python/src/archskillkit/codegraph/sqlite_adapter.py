@@ -39,6 +39,9 @@ class CodeGraphSqliteAdapter:
         # break the import cycle: ``codeindex.py`` does not import from
         # this package, so we cannot type-annotate the parameter.
         self._inner = inner
+        # Tracks which scanner produced each scan_run_id.
+        # Keyed by scan_run_id; values are "ast-grep" or "semgrep".
+        self._scanner_by_run: dict[str, str] = {}
 
     @classmethod
     def open(cls, db_path: str | Any) -> "CodeGraphSqliteAdapter":
@@ -56,6 +59,7 @@ class CodeGraphSqliteAdapter:
     def ingest_astgrep(
         self, payload: str, scan_run_id: str, scan_root: str | None = None
     ) -> dict[str, Any]:
+        self._scanner_by_run[scan_run_id] = "ast-grep"
         return self._inner.ingest_astgrep(
             payload, scan_run_id, scan_root=scan_root
         )
@@ -63,6 +67,7 @@ class CodeGraphSqliteAdapter:
     def ingest_semgrep(
         self, payload: str, scan_run_id: str, scan_root: str | None = None
     ) -> dict[str, Any]:
+        self._scanner_by_run[scan_run_id] = "semgrep"
         return self._inner.ingest_semgrep(
             payload, scan_run_id, scan_root=scan_root
         )
@@ -87,7 +92,9 @@ class CodeGraphSqliteAdapter:
     def neighborhood(
         self, symbol_id: int, depth: int = 2, limit: int = 100
     ) -> list[dict[str, Any]]:
-        return self._inner.neighborhood(symbol_id, depth=depth, limit=limit)
+        # Note: limit parameter is accepted for Protocol conformance but
+        # CodeIndex.neighborhood() does not support it; pass only supported args.
+        return self._inner.neighborhood(symbol_id, depth=depth)
 
     def path(self, src_id: int, dst_id: int) -> list[int] | None:
         return self._inner.path(src_id, dst_id)
@@ -99,6 +106,60 @@ class CodeGraphSqliteAdapter:
 
     def recent_delta_names(self) -> frozenset[str]:
         return self._inner.recent_delta_names()
+
+    def provenance(self, symbol_id: int | None = None) -> list[tuple[str, str, str | None]]:
+        """Return distinct (scanner, scan_run_id, ingested_at) tuples.
+
+        scanner is "ast-grep" for ast-grep runs or "semgrep" for semgrep
+        runs. ingested_at is always None (no timestamp stored in the
+        current schema). When symbol_id is None, all known scan runs are
+        returned. When symbol_id is given, only runs that contributed
+        data for that symbol are returned.
+        """
+        db = self._inner._db
+        seen: set[str] = set()
+        result: list[tuple[str, str, str | None]] = []
+
+        if symbol_id is not None:
+            # Collect run_ids: semgrep edges + the symbol's file's scan_run_id
+            run_ids: set[str] = set()
+            edge_runs = db.execute(
+                """SELECT DISTINCT e.scan_run_id FROM edges e
+                   WHERE e.source_id = ? OR e.target_id = ?""",
+                (symbol_id, symbol_id),
+            ).fetchall()
+            for (run_id,) in edge_runs:
+                run_ids.add(run_id)
+            # Ast-grep provenance: the file's scan_run_id
+            file_run = db.execute(
+                """SELECT f.scan_run_id FROM symbols s
+                   JOIN files f ON f.id = s.file_id WHERE s.id = ?""",
+                (symbol_id,),
+            ).fetchone()
+            if file_run is not None and file_run[0]:
+                run_ids.add(file_run[0])
+            for run_id in run_ids:
+                scanner = self._scanner_by_run.get(run_id)
+                if scanner is not None and run_id not in seen:
+                    seen.add(run_id)
+                    result.append((scanner, run_id, None))
+        else:
+            # All runs: union of edges scan_run_ids and files scan_run_ids
+            all_runs: set[str] = set()
+            for (run_id,) in db.execute(
+                "SELECT DISTINCT scan_run_id FROM edges"
+            ).fetchall():
+                all_runs.add(run_id)
+            for (run_id,) in db.execute(
+                "SELECT DISTINCT scan_run_id FROM files WHERE scan_run_id != ''"
+            ).fetchall():
+                all_runs.add(run_id)
+            for run_id in sorted(all_runs):
+                scanner = self._scanner_by_run.get(run_id)
+                if scanner is not None:
+                    result.append((scanner, run_id, None))
+
+        return result
 
     # -- lifecycle --------------------------------------------------------
 
