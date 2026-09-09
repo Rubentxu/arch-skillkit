@@ -35,26 +35,35 @@ class TestCodeGraphQueryPort:
         missing = required - present
         assert not missing, f"Protocol missing methods: {missing}"
 
-    def test_codeindex_satisfies_protocol_structurally(self):
-        """CodeIndex (the concrete impl) must satisfy the Protocol
-        without inheriting from it (structural typing)."""
+    def test_codeindex_does_not_satisfy_protocol_directly(self):
+        """``CodeIndex`` is the legacy concrete SQLite implementation.
+
+        After v0.14.0 the ``CodeGraphQueryPort`` Protocol adds ``provenance``,
+        which ``CodeIndex`` does not implement (the adapter wraps it). The
+        Protocol is the application-facing SPI; legacy ``CodeIndex`` does not
+        satisfy it directly. Verify with ``not issubclass`` so the test
+        surfaces the boundary if either side changes.
+        """
         from archskillkit.codegraph import CodeGraphQueryPort
         from archskillkit.codeindex import CodeIndex
-        assert issubclass(CodeIndex, CodeGraphQueryPort)
+        assert not issubclass(CodeIndex, CodeGraphQueryPort)
 
-    def test_runtime_checkable_accepts_codeindex_instance(self):
+    def test_runtime_checkable_accepts_sqlite_adapter(self):
+        """The ``CodeGraphSqliteAdapter`` is the canonical Port implementation
+        now that ``provenance`` is part of the contract. ``CodeIndex`` itself
+        is legacy and intentionally does NOT satisfy the Protocol directly."""
         from archskillkit.codegraph import CodeGraphQueryPort, satisfies_port
-        from archskillkit.codeindex import CodeIndex
+        from archskillkit.codegraph.sqlite_adapter import CodeGraphSqliteAdapter
 
         with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tf:
             path = tf.name
         try:
-            ci = CodeIndex(path).open()
+            adapter = CodeGraphSqliteAdapter.open(path)
             try:
-                assert satisfies_port(ci)
-                assert isinstance(ci, CodeGraphQueryPort)
+                assert satisfies_port(adapter)
+                assert isinstance(adapter, CodeGraphQueryPort)
             finally:
-                ci.close()
+                adapter.close()
         finally:
             Path(path).unlink(missing_ok=True)
 
