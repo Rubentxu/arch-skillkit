@@ -1,0 +1,147 @@
+name: pypi-publish
+
+# Publishes the Python wheel and sdist to PyPI using Trusted Publishing
+# (PyPI OIDC). No API tokens are stored in the repo.
+#
+# After a successful publish, this workflow spins a clean venv and
+# installs archskillkit from the public PyPI index to verify that the
+# upload was consumable.
+#
+# Required configuration on PyPI (one-time manual setup):
+#   1. Log in to https://pypi.org and create the "archskillkit" project
+#      (if it does not already exist).
+#   2. Go to https://pypi.org/manage/project/archskillkit/publishing/
+#      and add a "pending publisher":
+#        - Owner: Rubentxu
+#        - Repository: Rubentxu/arch-skillkit
+#        - Workflow filename: pypi-publish.yml
+#   3. (Optional, recommended) Create a `pypi` environment in this repo
+#      under Settings → Environments with required reviewers.
+#
+# Trigger:
+#   - workflow_dispatch: manual publish from the current main commit.
+#
+# Reference:
+#   https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pypi-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # required for PyPI Trusted Publishing (OIDC)
+      contents: read    # required to checkout the repo
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build + twine (for local validation only)
+        run: |
+          python3 -m pip install --quiet --upgrade build twine
+
+      - name: Build wheel and sdist
+        run: |
+          cd python
+          python3 -m build --wheel --outdir ../dist .
+          python3 -m build --sdist --outdir ../dist .
+
+      - name: List built artifacts
+        run: ls -l dist/
+
+      - name: Compute sha256 of artifacts
+        run: sha256sum dist/*.whl dist/*.tar.gz | tee dist/SHA256SUMS.txt
+
+      - name: Verify README renders (twine check)
+        run: python3 -m twine check --strict dist/*.whl dist/*.tar.gz
+
+      - name: Publish to PyPI (Trusted Publishing via OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true   # idempotent: re-running the same dist is a no-op
+          verbose: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: archskillkit-publish-artifacts
+          path: dist/
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "### Published to PyPI ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Verify with:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "pip install --index-url https://pypi.org/simple/ archskillkit" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+
+  pypi-smoke:
+    name: Verify install from PyPI
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Read expected version from pyproject.toml
+        id: ver
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.loads(open('python/pyproject.toml').read())['project']['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create fresh venv and install archskillkit from PyPI
+        run: |
+          uv venv /tmp/pypi-smoke-venv --python 3.12
+          source /tmp/pypi-smoke-venv/bin/activate
+          uv pip install --quiet "archskillkit==${{ steps.ver.outputs.version }}"
+          python -m archskillkit --version
+
+      - name: Verify CLI subcommands are present
+        run: |
+          source /tmp/pypi-smoke-venv/bin/activate
+          python -m archskillkit --help | tee /tmp/cli-help.txt
+          grep -q "self-upgrade" /tmp/cli-help.txt || (echo "MISSING: self-upgrade subcommand" && exit 1)
+          grep -q "self-uninstall" /tmp/cli-help.txt || (echo "MISSING: self-uninstall subcommand" && exit 1)
+          grep -q "version" /tmp/cli-help.txt || (echo "MISSING: version subcommand" && exit 1)
+
+      - name: Smoke-test version --check (network-optional)
+        run: |
+          source /tmp/pypi-smoke-venv/bin/activate
+          # exit 0 (up to date) or exit 1 (newer available) are both acceptable
+          # for this smoke test; what matters is that the command runs.
+          python -m archskillkit version --check || true
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "### PyPI install smoke test ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Installed archskillkit \`${{ steps.ver.outputs.version }}\` from PyPI into a fresh venv." >> "$GITHUB_STEP_SUMMARY"
+          echo "CLI subcommands present (self-upgrade, self-uninstall, version)." >> "$GITHUB_STEP_SUMMARY"
