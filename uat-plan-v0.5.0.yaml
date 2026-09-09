@@ -1,0 +1,26 @@
+schema_version: 1
+kind: uat-plan
+plan_id: archskillkit-distribution-v1
+release: v0.5.0
+project_id: p-f58d41952fdf56c1
+cycle_id: p-f58d41952fdf56c1/archskillkit-distribution-v1
+generated_at: 2026-09-09T18:08:00+00:00
+release_type: minor
+policy_at_generation:
+  release_gate:
+    major: required
+    minor: skip
+    patch: skip
+scenarios: []
+totals:
+  total: 0
+  passed: 0
+  failed: 0
+  blocked: 0
+  partial: 0
+  not_run: 0
+notes:
+  - "Hardening-only release; no new public API surface"
+  - "Regression suite covers every behaviour change (86/86)"
+  - "ADR-0063 documents the seven design decisions"
+verdict: NOT_REQUIRED
