@@ -139,7 +139,7 @@ class ArchSkillKitApplication:
         return self._world
 
     @property
-    def index(self) -> "CodeGraphSqliteAdapter | None":
+    def index(self) -> CodeGraphSqliteAdapter | None:
         if not self._opened:
             raise RuntimeError("Application not open. Call .open() first.")
         return self._index

@@ -44,7 +44,7 @@ class CodeGraphSqliteAdapter:
         self._scanner_by_run: dict[str, str] = {}
 
     @classmethod
-    def open(cls, db_path: str | Any) -> "CodeGraphSqliteAdapter":
+    def open(cls, db_path: str | Any) -> CodeGraphSqliteAdapter:
         """Open a CodeIndex at ``db_path`` and wrap it in this adapter.
 
         ``db_path`` can be a path or a ``Path`` object — same as

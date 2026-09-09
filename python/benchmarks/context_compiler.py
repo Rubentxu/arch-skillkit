@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3  # noqa: EXE001 — executable by convention, file mode enforced separately
 """Persisted, reproducible V2.1 Context Compiler performance evidence.
 
 The harness uses only the Python standard library for timing, memory tracking,
@@ -12,18 +12,19 @@ are supplied explicitly.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-from importlib import metadata
 import json
 import os
-from pathlib import Path
 import platform
 import subprocess
 import sys
 import tempfile
 import time
 import tracemalloc
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from datetime import UTC, datetime
+from importlib import metadata
+from pathlib import Path
+from typing import TypeVar
 from uuid import uuid4
 
 import archskillkit
@@ -138,7 +139,7 @@ def _measure_installation(command: list[str] | None, requested: bool) -> dict:
 
     try:
         completed, duration_ns, peak_bytes = _measure(
-            lambda: subprocess.run(command, shell=False, capture_output=True, text=True))
+            lambda: subprocess.run(command, shell=False, check=False, capture_output=True, text=True))
     except OSError as error:
         return {
             "status": "error",
@@ -229,7 +230,7 @@ def run(file_count: int, iterations: int, installation_command: list[str] | None
         "schema_version": 2,
         "run": {
             "id": str(uuid4()),
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "platform": platform.platform(),
             "python": sys.version,
             "package": _package_provenance(),

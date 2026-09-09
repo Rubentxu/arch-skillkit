@@ -7,7 +7,7 @@ distill, promote, reject.
 from __future__ import annotations
 
 import json as _json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from archskillkit.application.models.sensors import (
     DistillSensorsCommand,

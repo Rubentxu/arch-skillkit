@@ -20,7 +20,6 @@ from archskillkit.application.models.conformance import MineConformanceCommand
 from archskillkit.application.models.replay import ReplayFixtureCommand
 from archskillkit.application.models.sensors import (
     DistillSensorsCommand,
-    PromoteSensorCommand,
     RejectSensorCommand,
 )
 from archskillkit.application.models.simulation import SimulationCommand

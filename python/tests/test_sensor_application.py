@@ -5,9 +5,6 @@ Tests the distill, promote, and reject sensor use cases through the application 
 
 from __future__ import annotations
 
-import pytest
-
-from archskillkit.application.commands.sensors import SensorApplicationService
 from archskillkit.application.models.sensors import (
     DistillSensorsCommand,
     PromoteSensorCommand,

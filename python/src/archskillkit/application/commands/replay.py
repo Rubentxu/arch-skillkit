@@ -5,15 +5,10 @@ Canonical application-layer implementation of the fixture replay workflow.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from archskillkit.application.models.replay import (
     ReplayFixtureCommand,
     ReplayResult,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class ReplayApplicationService:

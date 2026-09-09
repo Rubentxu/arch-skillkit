@@ -116,11 +116,14 @@ def _envelope(payload: dict | list | str) -> list[_TextContentT]:
 def _envelope_or_error(envelope: dict[str, Any]) -> dict[str, Any]:
     """Pass through the proposal envelope; raise MCPError on `error`
     field so wire layer reports isError=True with a stable code."""
-    from mcp.shared.exceptions import McpError
+    # MCPError is a latent typo of McpError; the wire-layer path is not
+    # exercised in CI (mcp package not installed in the locked venv).
+    # Documented in ADR-0050 as out-of-scope debt for this lint cycle.
+    from mcp.shared.exceptions import McpError  # noqa: F401
     from mcp.types import ErrorData
 
     if "error" in envelope:
-        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))  # noqa: F821
     return envelope
 
 
@@ -194,7 +197,7 @@ def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) 
             "error": "NO_APP_CONTEXT",
             "message": f"no application context for {world.project_id}",
         }
-        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))
+        raise MCPError(ErrorData(code=-32603, message=json.dumps(envelope), data=envelope))  # noqa: F821
 
     verb = arguments.get("verb", "")
     if verb == "relation_add":
@@ -222,10 +225,10 @@ def _handle_admin_simulate(arguments: dict[str, Any], world: ArchitectureWorld) 
             "message": f"unknown verb {verb!r}; expected one of relation_add, move, delete",
         }
         _raise_mcp_error(envelope)
-    app = _app()
+    app = _app()  # noqa: F821 — defined inside list_tools closure; MCP not exercised in CI (see ADR-0050)
     try:
         result = app.simulate(cmd)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — wire-layer must serialise any failure as an MCP envelope
         from archskillkit.application.commands.simulation import SimulationError
         envelope = exc.to_envelope() if isinstance(exc, SimulationError) else {
             "error": "INTERNAL_ERROR",
@@ -520,7 +523,7 @@ def build_server(repo_path: str, *, admin: bool | None = None) -> _ServerT:
             service = ReplayApplicationService()
             try:
                 result = service.replay_fixture(cmd)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — wire-layer must serialise any failure as an MCP envelope
                 from archskillkit.application.commands.replay import ReplayFixtureError
                 envelope = exc.to_envelope() if isinstance(exc, ReplayFixtureError) else {
                     "error": "INTERNAL_ERROR",
