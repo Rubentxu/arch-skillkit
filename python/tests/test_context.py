@@ -303,3 +303,52 @@ class TestRelevanceSignals:
         finally:
             index.close()
             world.close()
+
+
+class TestContextGroundingGate:
+    """Regression test for CTX-GROUNDING-001 (ADR-0051).
+
+    Locks the gate definition: every ContextPack must have
+    evidence_density >= 0.5 — i.e. at least half of the relations in
+    the served subgraph carry evidence_ids from scanner metadata.
+
+    Empty-relations exemption: packs with zero relations are valid and
+    not penalised (the metric defaults to 0.0 when there is nothing to
+    ground).
+    """
+
+    GATE_THRESHOLD = 0.5  # see ADR-0051 §"Why 0.5?"
+
+    def test_subject_narrow_meets_evidence_density_threshold(
+            self, promoted_world):
+        world, index = promoted_world
+        try:
+            compiler = ContextCompiler(world, index)
+            pack = compiler.compile(
+                goal="how does payment exposure work",
+                subject="getPayment")
+            ratio = pack.metrics["evidence_density"]
+            assert ratio >= self.GATE_THRESHOLD, (
+                f"evidence_density {ratio} < gate threshold "
+                f"{self.GATE_THRESHOLD} — check codeindex "
+                f"scanner metadata paths (ADR-0051)")
+            assert len(pack.architecture["relations"]) >= 1, (
+                "subject narrow must produce a non-empty relation "
+                "subgraph for the grounding gate to be meaningful")
+        finally:
+            index.close()
+            world.close()
+
+    def test_overview_pack_meets_evidence_density_threshold(
+            self, promoted_world):
+        world, index = promoted_world
+        try:
+            compiler = ContextCompiler(world, index)
+            pack = compiler.compile(goal="overview of demo architecture")
+            ratio = pack.metrics["evidence_density"]
+            assert ratio >= self.GATE_THRESHOLD, (
+                f"overview evidence_density {ratio} < "
+                f"{self.GATE_THRESHOLD}")
+        finally:
+            index.close()
+            world.close()
