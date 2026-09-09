@@ -140,7 +140,6 @@ class TestBootstrapIndexProperty:
 
     def test_index_returns_code_graph_sqlite_adapter_or_none(self):
         from archskillkit.bootstrap import ArchSkillKitApplication
-        from archskillkit.codegraph import CodeGraphSqliteAdapter
 
         # When there's no code.sqlite yet, app.index is None after open()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -166,9 +165,9 @@ class TestBootstrapIndexProperty:
                 app.close()
 
     def test_index_returns_adapter_when_code_sqlite_exists(self):
+
         from archskillkit.bootstrap import ArchSkillKitApplication
         from archskillkit.codegraph import CodeGraphSqliteAdapter
-        import json
 
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -220,6 +219,7 @@ class TestAppCoverageAfterM5:
                 "--contracts", "docs/v2/verification/architecture-contracts.json",
                 "--output", "/tmp/archsk-m5-test.json",
             ],
+            check=False,
             capture_output=True, text=True, cwd=str(repo_root),
         )
         assert result.returncode == 0, f"verifier exited {result.returncode}: {result.stderr}"
@@ -229,7 +229,7 @@ class TestAppCoverageAfterM5:
             data = json.load(f)
         for c in data["checks"]:
             if c["check_id"] == "arc_010":
-                violations = [
+                [
                     f"{f['path']}:{f['line']}" for f in c.get("findings", [])
                 ]
 
@@ -474,11 +474,7 @@ class TestCodeGraphQueryPortConformance:
                     assert isinstance(result, list)
                 elif method_name == "recent_delta_names":
                     assert isinstance(result, frozenset)
-                elif method_name == "symbols_in_file":
-                    assert isinstance(result, list)
-                elif method_name == "outgoing":
-                    assert isinstance(result, list)
-                elif method_name == "incoming":
+                elif method_name == "symbols_in_file" or method_name == "outgoing" or method_name == "incoming":
                     assert isinstance(result, list)
                 elif method_name == "neighborhood":
                     # CodeIndex.neighborhood() returns a dict with nodes/edges keys

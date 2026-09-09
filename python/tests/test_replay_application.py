@@ -5,9 +5,6 @@ Tests the replay_fixture use case through the application layer.
 
 from __future__ import annotations
 
-import pytest
-
-from archskillkit.application.commands.replay import ReplayApplicationService
 from archskillkit.application.models.replay import ReplayFixtureCommand, ReplayResult
 
 

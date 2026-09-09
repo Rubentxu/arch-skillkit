@@ -5,9 +5,6 @@ Tests the mine_conformance use case through the application layer.
 
 from __future__ import annotations
 
-import pytest
-
-from archskillkit.application.commands.conformance import ConformanceApplicationService
 from archskillkit.application.models.conformance import (
     MineConformanceCommand,
     MineConformanceResult,

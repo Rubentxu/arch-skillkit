@@ -27,7 +27,7 @@ class SimulationApplicationService:
     def __init__(
         self,
         world: ArchitectureWorld,
-        code_index: "CodeIndex | None" = None,
+        code_index: "CodeIndex | None" = None,  # noqa: UP037, F821 — quotes preserved so the annotation stays as a string and ARC-005 doesn't fire
     ) -> None:
         self._world = world
         self._code_index = code_index

@@ -8,7 +8,6 @@ to a direct path otherwise. This is the gate-keeper for APP-COVERAGE-001.
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -56,11 +55,11 @@ class TestDistillSensorsRouting:
 
     def test_routes_through_app_when_arch_app_set(self):
         """When world._arch_app is set, handle() calls app.distill_sensors(cmd)."""
-        from archskillkit.delivery.cli import distill_sensors
         from archskillkit.application.models.sensors import (
             DistillSensorsCommand,
             SensorDistillResult,
         )
+        from archskillkit.delivery.cli import distill_sensors
 
         fake_app = _FakeApp()
         fake_app.distill_sensors.return_value = SensorDistillResult(
@@ -106,11 +105,11 @@ class TestMineConformanceRouting:
         )
 
     def test_routes_through_app_when_arch_app_set(self):
-        from archskillkit.delivery.cli import mine_conformance
         from archskillkit.application.models.conformance import (
             MineConformanceCommand,
             MineConformanceResult,
         )
+        from archskillkit.delivery.cli import mine_conformance
 
         fake_app = _FakeApp()
         fake_app.mine_conformance.return_value = MineConformanceResult(
@@ -142,11 +141,11 @@ class TestPromoteSensorRouting:
         )
 
     def test_routes_through_app_when_arch_app_set(self):
-        from archskillkit.delivery.cli import promote_sensor
         from archskillkit.application.models.sensors import (
             PromoteSensorCommand,
             SensorPromoteResult,
         )
+        from archskillkit.delivery.cli import promote_sensor
 
         fake_app = _FakeApp()
         fake_app.promote_sensor.return_value = SensorPromoteResult(
@@ -177,11 +176,11 @@ class TestRejectSensorRouting:
         )
 
     def test_routes_through_app_when_arch_app_set(self):
-        from archskillkit.delivery.cli import reject_sensor
         from archskillkit.application.models.sensors import (
             RejectSensorCommand,
             SensorRejectResult,
         )
+        from archskillkit.delivery.cli import reject_sensor
 
         fake_app = _FakeApp()
         fake_app.reject_sensor.return_value = SensorRejectResult(
