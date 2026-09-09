@@ -38,6 +38,8 @@ DEFAULT_NODE_VERSION = "22.14.0"
 PLATFORMS = (
     ("linux", "x86_64"),
     ("linux", "aarch64"),
+    ("darwin", "x86_64"),
+    ("darwin", "aarch64"),
 )
 NODE_ARCH = {"x86_64": "x64", "aarch64": "arm64"}
 CPU_ARCH = {"x86_64": "x86_64", "aarch64": "aarch64"}

@@ -32,11 +32,6 @@ on:
         description: "Tag to smoke-test (e.g. v0.5.0). Must exist on origin with a published wheel + manifest."
         required: true
         type: string
-      include_macos:
-        description: "Include macOS in the matrix (off by default; manifest v0.5.0 only declares linux/x86_64 runtime artifacts). Set true once darwin/aarch64 artifacts are added to the manifest."
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -44,9 +39,7 @@ permissions:
 jobs:
   linux-smoke:
     name: Clean-room install + setup + doctor (linux)
-    if: >
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event.workflow_run.conclusion == 'success')
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
@@ -162,14 +155,11 @@ jobs:
 
   macos-smoke:
     name: Clean-room install + setup + doctor (macos)
-    # Only runs when the user opts in via workflow_dispatch (include_macos=true),
-    # or when the manifest declares darwin/aarch64 artifacts in a future tag.
-    # The check below guards the automatic post-release trigger; v0.5.0 only
-    # ships linux/x86_64 runtime artifacts, so macOS setup fails with
-    # PLATFORM_UNSUPPORTED — tracked separately from this workflow.
-    if: >
-      github.event_name == 'workflow_dispatch' &&
-      inputs.include_macos == 'true'
+    # Runs after every successful release workflow run (the manifest now
+    # declares darwin/x86_64 and darwin/aarch64 as of v0.5.1) and on
+    # every manual workflow_dispatch. Independent from linux-smoke so
+    # the two runners can be used in parallel.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' }}
     runs-on: macos-latest
     env:
       TAG: ${{ inputs.tag }}

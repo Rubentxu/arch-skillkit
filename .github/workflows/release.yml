@@ -58,20 +58,29 @@ jobs:
         run: mise run ci
 
   runtime-assets:
-    name: Runtime assets (${{ matrix.arch }})
+    name: Runtime assets (${{ matrix.os }}/${{ matrix.arch }})
     needs: validate
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - arch: x64
+          - os: linux
+            arch: x64
             runner: ubuntu-latest
-          - arch: arm64
+          - os: linux
+            arch: arm64
             runner: ubuntu-24.04-arm
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+          - os: darwin
+            arch: x64
+            runner: macos-13
     env:
       LIKEC4_VERSION: "1.59.2"
       SEMGREP_VERSION: "1.175.0"
       ARCH: ${{ matrix.arch }}
+      OS: ${{ matrix.os }}
     steps:
       - name: Prepare dist
         run: mkdir -p dist
@@ -86,7 +95,7 @@ jobs:
           mkdir bundle && cd bundle
           npm init -y >/dev/null
           npm install --omit=dev "likec4@${LIKEC4_VERSION}"
-          tar --dereference -czf "../dist/likec4-${LIKEC4_VERSION}-linux-${ARCH}.tar.gz" .
+          tar --dereference -czf "../dist/likec4-${LIKEC4_VERSION}-${OS}-${ARCH}.tar.gz" .
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -97,12 +106,12 @@ jobs:
         run: |
           python -m pip download "semgrep==${SEMGREP_VERSION}" \
             --only-binary :all: --dest wheelhouse
-          tar -czf "dist/semgrep-${SEMGREP_VERSION}-linux-${ARCH}.tar.gz" -C wheelhouse .
+          tar -czf "dist/semgrep-${SEMGREP_VERSION}-${OS}-${ARCH}.tar.gz" -C wheelhouse .
 
       - name: Upload runtime assets
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-assets-${{ matrix.arch }}
+          name: runtime-assets-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*.tar.gz
           if-no-files-found: error
 
