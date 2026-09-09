@@ -3,6 +3,10 @@
 Reads the Architecture World and surfaces relation-kind triples that appear
 with sufficient support as ``ArchitectureRuleCandidate`` objects.
 
+Delivery adapter (V2.5 M3): routes through ``app.mine_conformance()``
+(ADR-0057, M2 composition root). Falls back to direct ``mine()`` for
+direct CLI invocation without the bootstrap app.
+
 Schema: ``arch-skillkit/conformance-mining-v1``
 """
 
@@ -12,13 +16,30 @@ import argparse
 import json
 import sys
 
-from archskillkit.conformance_miner import mine
+from archskillkit.application.models.conformance import (
+    MineConformanceCommand,
+    MineConformanceResult,
+)
 from archskillkit.world import ArchitectureWorld
 
 NAME = "mine-conformance"
 NEEDS_WORLD = True
 
 OUTPUT_SCHEMA = "arch-skillkit/conformance-mining-v1"
+
+
+def _direct_mine(world, cmd: MineConformanceCommand):
+    """Fallback path: invoke mine() directly when composition root is absent."""
+    from archskillkit.conformance_miner import mine
+
+    with world:
+        candidates = mine(world, min_support=cmd.min_support)
+    return MineConformanceResult(
+        schema=OUTPUT_SCHEMA,
+        project_id=world.project_id,
+        min_support=cmd.min_support,
+        candidates=[c.model_dump() for c in candidates],
+    )
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -44,14 +65,14 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
         )
         return 1
 
-    with world:
-        candidates = mine(world, min_support=args.min_support)
+    app = getattr(world, "_arch_app", None)
+    cmd = MineConformanceCommand(min_support=args.min_support)
 
-    envelope = {
-        "schema": OUTPUT_SCHEMA,
-        "project_id": world.project_id,
-        "min_support": args.min_support,
-        "candidates": [c.model_dump() for c in candidates],
-    }
-    print(json.dumps(envelope, indent=2))
+    with world:
+        if app is not None:
+            result = app.mine_conformance(cmd)
+        else:
+            result = _direct_mine(world, cmd)
+
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
     return 0
