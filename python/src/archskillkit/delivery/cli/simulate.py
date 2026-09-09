@@ -431,11 +431,41 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
             file=sys.stderr,
         )
         return 1
-    try:
-        verb, verb_args = _verb_to_args(args.simulate_action, args)
-        result = run(world, verb, **verb_args)
-    except SimulationError as exc:
-        print(json.dumps(exc.to_envelope()), file=sys.stderr)
-        return 1
+    verb, verb_args = _verb_to_args(args.simulate_action, args)
+    # Route through Composition Root when app is available (app bootstrap path).
+    # Fall back to direct run() for direct CLI invocation without app.
+    app = getattr(world, "_arch_app", None)
+    if app is not None:
+        from archskillkit.application.models.simulation import SimulationCommand
+        if verb == "relation_add":
+            cmd = SimulationCommand(
+                verb=verb,
+                source=verb_args.get("source"),
+                target=verb_args.get("target"),
+                kind=verb_args.get("kind", "depends_on"),
+            )
+        elif verb == "move":
+            cmd = SimulationCommand(
+                verb=verb,
+                element=verb_args.get("element"),
+                to=verb_args.get("to"),
+            )
+        else:  # delete
+            cmd = SimulationCommand(
+                verb=verb,
+                element=verb_args.get("element"),
+            )
+        try:
+            result = app.simulate(cmd)
+        except SimulationError as exc:
+            print(json.dumps(exc.to_envelope()), file=sys.stderr)
+            return 1
+    else:
+        # Fallback for direct CLI invocation without app bootstrap
+        try:
+            result = run(world, verb, **verb_args)
+        except SimulationError as exc:
+            print(json.dumps(exc.to_envelope()), file=sys.stderr)
+            return 1
     print(json.dumps(result.model_dump(), indent=2))
     return 0

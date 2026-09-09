@@ -48,7 +48,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    " stdout")
 
 
+def _render(args, result, snapshot) -> str:
+    project = args.repo
+    if args.format == "json":
+        return render_json(result)
+    if args.format == "markdown":
+        return render_markdown(result, project=project)
+    return json.dumps(render_sarif(result, project=project), indent=2) \
+        + "\n"
+
+
 def _evaluate(args: argparse.Namespace, world: ArchitectureWorld):
+    """Fallback evaluator when app bootstrap is unavailable."""
     thresholds = FitnessThresholds(
         min_evidence_coverage=args.min_coverage,
         max_unknowns=args.max_unknowns,
@@ -69,27 +80,24 @@ def _evaluate(args: argparse.Namespace, world: ArchitectureWorld):
     return result, snapshot
 
 
-def _render(args, result, snapshot) -> str:
-    project = world_project_label(args)
-    if args.format == "json":
-        return render_json(result)
-    if args.format == "markdown":
-        return render_markdown(result, project=project)
-    return json.dumps(render_sarif(result, project=project), indent=2) \
-        + "\n"
-
-
-def world_project_label(args) -> str:
-    return args.repo
-
-
 def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
     if not world.db_path.exists():
         print(f"error: no Architecture World for {world.project_id} "
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    result, snapshot = _evaluate(args, world)
+    # Route through Composition Root when app is available.
+    # Fall back to _evaluate for direct CLI invocation without app.
+    app = getattr(world, "_arch_app", None)
+    if app is not None:
+        result, snapshot = app.gate(
+            min_coverage=args.min_coverage,
+            max_unknowns=args.max_unknowns,
+            max_findings=args.max_findings,
+            max_run_age_days=args.max_run_age_days,
+        )
+    else:
+        result, snapshot = _evaluate(args, world)
     rendered = _render(args, result, snapshot)
     if args.out:
         from pathlib import Path

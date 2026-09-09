@@ -1,7 +1,7 @@
 """`archskillkit status` — revisions + typed next actions as JSON.
 
 Delivery adapter: argument parsing, one application use case, output.
-No architecture logic here (ADR-0045); contract docs/v2/55 §2/§4/§5.
+No architecture logic here (ADR-0045); contract docs/v2.55 §2/§4/§5.
 """
 
 from __future__ import annotations
@@ -30,10 +30,14 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
-    app = getattr(world, "_arch_app", None)
-    index = app.index if app else None
+    # Open world before reading graph (RuntimeError "world is not open" otherwise).
     with world:
-        result = get_status(world, code_index=index)
+        # Route through Composition Root when app is available.
+        # Fall back to get_status for direct CLI invocation without app.
+        app = getattr(world, "_arch_app", None)
+        if app is not None:
+            result = app.status()
+        else:
+            result = get_status(world, code_index=None)
     print(json.dumps(result.model_dump(), indent=2))
     return 0

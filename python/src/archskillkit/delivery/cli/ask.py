@@ -1,5 +1,5 @@
 """`archskillkit ask <question>` — NL entry point over the typed
-queries (docs/v2/55 §3). Deterministic parsing, same JSON contract as
+queries (docs/v2.55 §3). Deterministic parsing, same JSON contract as
 the underlying use cases; the intent is echoed so callers can see how
 their question was routed.
 """
@@ -10,7 +10,6 @@ import argparse
 import json
 import sys
 
-from archskillkit.application.queries.ask import ask
 from archskillkit.world import ArchitectureWorld
 
 NAME = "ask"
@@ -31,15 +30,20 @@ def handle(args: argparse.Namespace, world: ArchitectureWorld) -> int:
               f"(run: archskillkit init --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    # Access app's index so lifecycle stays in Composition Root (M3 slice 3).
+    # Route through Composition Root when app is available.
+    # Fall back to direct ask for direct CLI invocation without app.
     app = getattr(world, "_arch_app", None)
-    if app is None or app.index is None:
+    index = app.index if app else None
+    if index is None:
         print(f"error: no code.sqlite for {world.project_id} "
               f"(run: archskillkit ingest-code --repo {world.root or '.'})",
               file=sys.stderr)
         return 1
-    with world:
-        intent, result = ask(world, app.index, args.question)
+    if app is not None:
+        intent, result = app.ask(args.question)
+    else:
+        from archskillkit.application.queries.ask import ask
+        intent, result = ask(world, index, args.question)
     print(json.dumps({
         "schema": "arch-skillkit/ask-result-v1",
         "intent": intent.model_dump(),
