@@ -59,6 +59,14 @@ class CodeGraphQueryPort(Protocol):
 
     def recent_delta_names(self) -> frozenset[str]: ...
 
+    def provenance(self, symbol_id: int | None = None) -> list[tuple[str, str, str | None]]:
+        """Return distinct (scanner, scan_run_id, ingested_at) tuples.
+
+        scanner is "ast-grep" for ast-grep scans or "semgrep" for semgrep
+        scans. ingested_at is the scan timestamp or None when unavailable.
+        When symbol_id is None, all known scan runs are returned.
+        """
+
     # -- lifecycle --------------------------------------------------------
 
     def close(self) -> None: ...
